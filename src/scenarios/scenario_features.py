@@ -1,4 +1,4 @@
-"""Target-lane interaction feature extraction for accepted merge candidates.
+"""Legacy single-frame interaction features for accepted merge candidates.
 
 Given an accepted ``MergeDiagnostic`` (see ``merge_detector.py``), this
 module identifies the target-lane Front/Rear vehicles at a chosen
@@ -15,6 +15,12 @@ state is built from (see project plan section 19):
     Delta v_r <- rear_relative_speed_mps
     TTC_f   <- front_ttc_s
     TTC_r   <- rear_ttc_s
+
+This matcher is suitable for producing online observation candidates, but its
+centre-point/one-frame result is not proof that a vehicle occupies the target
+lane and must not be used as a ground-truth merge label. Offline labels must
+pass :mod:`src.scenarios.physical_merge_validation`, which checks the bounding
+box, trajectory, heading, identity persistence, and motion class.
 
 This module does NOT build that final policy observation class (that
 is Phase 3's job) -- it only extracts these raw, physically
@@ -170,9 +176,11 @@ def _longitudinal_speed(
 def _compute_ttc(gap_m: float, closing_speed_mps: float) -> float:
     """TTC = gap / closing_speed, only when closing_speed > 0.
 
-    gap <= 0 (already overlapping) -> 0.0 (project plan section 17:
+    In this legacy feature path, gap <= 0 -> 0.0 (project plan section 17:
     "preferably 0 for already-overlapping/collision-state
-    interpretation"). Otherwise, non-closing (closing_speed <= 0) ->
+    interpretation"). This is only a 1-D centreline-projection result; it is
+    not evidence of physical overlap until both bounding boxes have passed the
+    target-lane validator. Otherwise, non-closing (closing_speed <= 0) ->
     inf. No maximum clipping is applied.
     """
 
@@ -198,7 +206,10 @@ def find_target_lane_front_rear(
     yaw: np.ndarray,
     config: AgentSelectionConfig,
 ):
-    """Finds the target-lane Front and Rear vehicle at one frame.
+    """Finds legacy Front/Rear *candidates* at one frame.
+
+    This intentionally preserves the frozen v1/v2 online feature contract.
+    Do not promote its output directly to a physical ground-truth label.
 
     Candidate surrounding vehicles are projected onto the TARGET lane
     (project plan section 13: never ego-local or global x/y) and must

@@ -176,7 +176,12 @@ def classify_v2_merge(
     min_longitudinal_progress_m: float = 0.1,
     min_cut_in_lateral_displacement_m: float = 1.0,
 ) -> V2MergeDiagnostic:
-    """Apply the v2 hard gates in fixed, auditable order."""
+    """Apply the frozen historical v2 hard gates in fixed order.
+
+    ``ACCEPT`` here means accepted under the v2 construction contract, not a
+    physically confirmed on-ramp merge. New audits and success artifacts must
+    additionally use :mod:`src.scenarios.physical_merge_validation`.
+    """
 
     def result(decision, reason, maneuver_type=None, interactive=False):
         return V2MergeDiagnostic(

@@ -62,6 +62,66 @@ gcloud storage cp \
 
 Raw WOMD shards are git-ignored (`data/*`) and must never be committed.
 
+### 20-second WOMD preparation (separate from the frozen merge runtime)
+
+Store new large scenario datasets and derived artifacts on Storage (E:),
+mounted as `/mnt/e`. Keep source code and the Conda environment in Ubuntu.
+The downloaded v1.3.1 source is
+`/mnt/e/Datasets/WOMD/v_1_3_1/scenario/training_20s` (1000 shards).
+Do not point the existing 91-frame `tf.Example` training config at these
+Scenario-protobuf files. The following standalone commands prepare and inspect
+the new data without modifying that runtime:
+
+```bash
+conda activate its-merge
+cd /home/autonav/2026-AD-Capstone
+
+# Full source index: TFRecord CRC, protobuf parsing and structural validation.
+# Repeating the command resumes shards whose size/mtime and index version match.
+python scripts/prepare_womd20.py index
+
+# Convert the first three scenarios, keeping every source frame and object.
+python scripts/prepare_womd20.py inspect
+
+# Replay all frames and render sampled frames as GIFs (default every 5th frame).
+python scripts/prepare_womd20.py replay
+```
+
+All outputs default to
+`/mnt/e/Datasets/WOMD/v_1_3_1/derived/training_20s/`:
+
+- `index/index.sqlite`: resumable per-shard index; only run one index writer.
+- `index/scenarios.csv`, `index/shards.csv`, `index/summary.json`: exported
+  metadata, errors and full-scan status. `full_scan_ok` requires all 1000 shards,
+  no missing sources, no failed shards/records, and no duplicate scenario IDs.
+- `inspect/report.json`: unbatched Waymax conversion reports.
+- `replay/report.json`: numeric replay checks. Each scene also has
+  `replay_frames.csv`, `replay.gif`, and `last_frame.png` in its own subdirectory.
+
+Use `index --limit-shards 1` for a pilot; a pilot's `full_scan_ok: false` is
+expected. Use `inspect --shard-index 1 --record-indices 0 1 2` (or the same flags
+with `replay`) for other scenes. `replay --render-stride 2` produces smoother
+GIFs; `--no-gif` runs numeric checks only. Every source frame is checked
+regardless of rendering stride. `--root` and `--output` override defaults.
+The CLI defaults JAX to CPU and disables TensorFlow GPU use for these tasks.
+
+The adapter uses the source's actual timestamps (rebased to relative int32
+microseconds), tracks, validity, dimensions, map vertices and per-lane signal
+states. It neither pads trajectories nor limits scenes to 64/128 objects.
+The original proto retains map topology. Driveways have geometry but use
+Waymax's UNKNOWN map type; SDC paths/routes are not loaded/reconstructed.
+Replay uses `update_state_by_log`, checks the final trajectory against the log,
+and checks signal state alignment and termination at the actual last frame.
+This verifies data loading and playback, not learned control, PD tracking,
+reactive traffic, fixed-shape training batches or train/validation split safety.
+Future logs remain simulator data, not a policy observation specification.
+
+Targeted verification:
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q tests/scenarios/test_womd20.py
+```
+
 ## 4. Environment Verification
 
 ```bash
