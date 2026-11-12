@@ -69,6 +69,9 @@ knot 양쪽도 포함한다. 0.002초보다 작은 간격이 필요하면 `UNRES
 재검사·재사용한다. 그 다음은 현재 상태에서 만든 제동 후보를 같은 검사로 확인하고,
 통과하지 못하면 비상 제동을 적용한다. 기존 경로의 나이는 갱신하지 않는다.
 비상 제동 역시 항상 충돌을 피한다는 보증은 아니다.
+제동 후보의 가속도 변화는 보간 후 jerk의 여유를 확보하도록 tick당 0.15m/s²로
+제한한다. 최종 경로의 공통 jerk 상한 20m/s³와 나머지 검사 기준은 그대로다.
+정지 전환·큰 초기 가속도 등에서는 이 후보도 거절될 수 있다.
 
 FOLLOW는 원래 대상 ID를 유지하고 간격을 검사한다. 대상 누락은 마지막 실제 관측으로
 최대 2 tick 추정하며, 3 tick째에는 `TASK_LOST`로 종료한다. 다른 차량으로 바꾸지 않는다.
@@ -88,22 +91,47 @@ export WOMD20_ROOT="<WOMD training_20s 디렉터리>"
 PYTHONPATH=. python scripts/smoke_womd_control.py \
   --shard "$WOMD20_ROOT/training_20s.tfrecord-00005-of-01000" \
   --record-index 44 --steps 5
+
+# 종료 또는 최대 200 tick까지 실행하는 도로 기반 제어 진단
+PYTHONPATH=. python scripts/smoke_womd_control.py \
+  --shard "$WOMD20_ROOT/training_20s.tfrecord-00005-of-01000" \
+  --record-index 44 --steps 200 --planner route_reference
 ```
 
 `--provider fixed_follow`로 고정 FOLLOW를 선택할 수 있다. 적합한 선행 차량이 없으면
-reset을 거절한다. smoke의 경로 생성기는 현재 속도·가속도를 연장하는 개발 입력이며,
-ASMC 이식이나 학습된 SAC가 아니다. 곡선·제동 상황에서는 경로 거절이 예상된다.
+reset을 거절한다. 기본 `--planner constant_acceleration`은 현재 속도·가속도를
+연장한다. `route_reference`는 현재 지도와 명령을 이용해 3초 뒤 경로 지점으로
+5차 다항식을 만들며, 현재 상태의 위치·속도·가속도를 앵커로 사용한다.
+FOLLOW에서는 동일 대상의 현재 관측과 간격으로 목표 속도를 제한한다.
+두 입력 모두 미래 로그를 읽지 않고 같은 검사를 받는 개발 도구이며,
+ASMC 이식이나 학습된 SAC가 아니다. 경로의 수락이나 충돌 회피를 보장하지 않는다.
 
 결과는 기본 `outputs/womd_control/`에 저장한다. source frame, tick, 실제 제어 입력,
 검사 사유, 실행 출처, 실제 종료 상태, 지도 feature ID와 시계 차이를 확인한다.
-`CONTROL_STEPS_EXECUTED`는 제어 루프를 실행했다는 뜻이며 정책 성공률이 아니다.
-reset 제외는 보고서를 남기고 exit code 2로 반환한다.
+보고서 schema 2는 매 tick 원자적으로 저장하고, 실행 오류에도 완료한 tick을 남긴다.
+파일명에는 record/provider/planner/요청 tick 수가 포함된다.
+`--progress-every 10`으로 진행을 출력하며 0이면 출력을 끈다.
+
+- `status`: `EPISODE_ENDED`, `STEP_LIMIT_REACHED`, `RESET_REJECTED`, `RUNTIME_ERROR`.
+- `outcome`: 목표 도달, 기록 끝, 시간 제한, 실패, 실행 상한, reset 제외, 실행 오류를 구분한다.
+  `--steps 200`은 상한이고 실제 종료가 먼저 발생하면 즉시 멈춘다.
+- `attempts`: 새 제안·재사용·제동 후보별 검사 결과와 운동 제한의 세부 원인.
+  `check`는 원래 새 제안의 결과이며 선택된 후보의 결과와 다를 수 있다.
+- `tracking_error`: 실제 step 후 상태와 **선택된 경로**의 같은 시각을 비교한 위치·속도·방향 오차.
+  재사용 경로는 원래 생성 시각을 유지한다. 비상 입력에는 경로가 없으므로 `null`이며
+  RMS에 0으로 넣지 않는다. 정지 상태의 방향 오차도 `null`이다.
+- `motion`: 실제 속도·yaw 차분과 입력 jerk/곡률 변화율. 최초 tick의 이전 제어가
+  없으면 입력 변화율은 `null`이다. `tracking_by_source`는 실행 출처별 표본 수와 RMS/max를 담는다.
+
+reset 제외는 exit code 2, 실행 예외는 비정상 exit로 반환한다. 정상적으로 보고서를
+완성하면 충돌 사례도 exit code 0이므로, 판정에는 반드시 `outcome`과 `terminal_reason`을 사용한다.
 
 ## 검증과 남은 범위
 
 ```bash
 JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
   tests/contracts tests/environment/test_womd_control.py \
+  tests/environment/test_womd_control_validation.py \
   tests/environment/test_behavior_action.py \
   tests/scenarios/test_womd20.py \
   tests/scenarios/test_physical_merge_validation.py \
@@ -113,8 +141,10 @@ JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
 회귀는 제어 자차/로그 주변차 분리, 미래 로그 차단, 실제 모델 대조, stale 요청,
 명령 ID·revision·heartbeat, 새 객체 크기, 경로 재사용 만료, 제동, 대상 소실,
 지도 제외, 손상 데이터, 사고 우선순위와 기록 끝까지의 진행을 다룬다.
+[장기 실행 검증 기록](../records/womd-control-validation.md)에 실제 장면의 성공·실패,
+제동 보완 전후 비교와 수치의 해석 범위를 기록했다.
 
 이 단계에는 PPO 후보 생성/호출 스케줄러, 학습 encoder/sampler, STOP/MERGE/AVOID의
 실행 상태 전이, reward/collector/replay, BC/SAC 학습이 없다. StepResult는 제어 검증용이고
-학습 reward·가짜 action을 생성하지 않는다. 합성 회귀와 짧은 실제 장면 실행은 전체
+학습 reward·가짜 action을 생성하지 않는다. 합성 회귀와 일부 실제 장면 실행은 전체
 G3/G4 수락, 전체 데이터 검증, GPU 실행 검증이나 정책 성능 평가를 대신하지 않는다.

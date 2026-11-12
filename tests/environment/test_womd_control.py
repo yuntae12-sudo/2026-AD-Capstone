@@ -23,10 +23,12 @@ from src.environment.womd_control.control import (
     Trajectory,
     advance,
     pd_control,
+    tracking_error,
 )
 from src.environment.womd_control.environment import (
     SACPlanningEnvironment,
     scripted_proposal,
+    route_reference_proposal,
 )
 from src.environment.womd_control.geometry import (
     ResetRejected,
@@ -209,6 +211,7 @@ def test_invalid_finite_path_brakes_and_consumes_one_tick(environment):
         and result.actual_control.acceleration_mps2 < 0
     )
     assert result.raw_proposal is not None and e.tick == 1
+    assert result.tracking_error is None  # protective input has no accepted reference
 
 
 def test_reuse_preserves_generation_tick_and_expires_after_two_ticks(environment):
@@ -224,9 +227,73 @@ def test_reuse_preserves_generation_tick_and_expires_after_two_ticks(environment
         result, _ = e.step_waypoints(e.proposal_from_world(xy, e.token), e.token)
         sources.append(result.source)
         assert e.old_plan.proposal.generated_tick == original_tick
+        assert result.tracking_error is not None
+        assert result.tracking_error.position_m < 0.01
+        assert result.tracking_error.reference_time_s == pytest.approx(e.tick * 0.1)
+        if result.source == Source.REUSED:
+            assert result.tracking_error.generated_tick == original_tick
+            assert not result.check_result.valid
+            assert result.attempts[-1].source == Source.REUSED
+            assert result.attempts[-1].check.valid
     assert sources[:2] == [Source.REUSED, Source.REUSED]
-    assert sources[2] in (Source.BRAKE, Source.EMERGENCY)
+    assert sources[2] == Source.BRAKE
+    assert result.attempts[-1].source == Source.BRAKE
+    assert result.attempts[-1].check.valid
     assert e.feedback.reconsider_event
+
+
+def test_brake_quintic_keeps_original_jerk_limit(environment):
+    e = environment
+    e.step_waypoints(scripted_proposal(e, e.token), e.token)
+    trajectory = e._braking_trajectory()
+    times = np.linspace(trajectory.start, trajectory.end, 3001)
+    v, a, j = [trajectory.evaluate(times, d) for d in (1, 2, 3)]
+    speed = np.linalg.norm(v, axis=1)
+    tangent_jerk = ((a * a).sum(axis=1) + (v * j).sum(axis=1)) / speed - (v * a).sum(
+        axis=1
+    ) ** 2 / speed**3
+    assert abs(tangent_jerk).max() <= 20 + 1e-6
+    assert np.linalg.norm(trajectory.evaluate(trajectory.end, 1)) < e.ego.speed
+    assert e._check(trajectory, e._check_objects()).valid
+
+
+@pytest.mark.parametrize("provider", ["fixed_keep", "fixed_follow"])
+def test_route_reference_uses_current_anchor_and_no_future_logs(provider):
+    e = SACPlanningEnvironment()
+    e.reset(scene(), provider_spec=provider)
+    proposal = route_reference_proposal(e, e.token)
+    log = e._state.log_trajectory
+    e._state = e._state.replace(
+        log_trajectory=log.replace(
+            x=log.x.at[:, e.frame + 1 :].set(9999),
+            vel_x=log.vel_x.at[:, e.frame + 1 :].set(-999),
+        )
+    )
+    np.testing.assert_array_equal(
+        route_reference_proposal(e, e.token).xy_world, proposal.xy_world
+    )
+    trajectory = Trajectory(proposal)
+    np.testing.assert_allclose(trajectory.evaluate(0), e.ego.position)
+    np.testing.assert_allclose(trajectory.evaluate(0, 1), e.ego.velocity)
+    np.testing.assert_allclose(trajectory.evaluate(0, 2), e.ego.acceleration)
+    np.testing.assert_allclose(proposal.xy_world[-1], e.ego.position + [30, 0])
+    assert e._check(trajectory, e._check_objects()).valid
+
+
+def test_tracking_error_uses_post_step_time_and_actual_pose(environment):
+    e = environment
+    trajectory = Trajectory(scripted_proposal(e, e.token))
+    actual = replace(
+        e.ego,
+        position=trajectory.evaluate(0.2) + [3, 4],
+        velocity=np.array([8.0, 0.0]),
+        yaw=np.pi / 6,
+    )
+    error = tracking_error(trajectory, actual, 0.2)
+    assert error.position_m == pytest.approx(5)
+    assert error.speed_mps == pytest.approx(2)
+    assert error.heading_deg == pytest.approx(30)
+    assert error.reference_time_s == 0.2
 
 
 def test_heartbeat_keeps_command_and_pd_memory(environment):
@@ -242,12 +309,10 @@ def test_heartbeat_keeps_command_and_pd_memory(environment):
 def test_record_end_terminates_once_without_advancing_past_log():
     proto = scene()
     proto.map_features[0].lane.speed_limit_mph = 6 / 0.44704
-    del proto.timestamps_seconds[54:]
     for track in proto.tracks:
-        del track.states[54:]
         for t, state in enumerate(track.states):
-            state.velocity_x = 5
-            state.center_x = (0 if track.id == 11 else 80) + 0.5 * t
+            state.velocity_x = 1
+            state.center_x = (0 if track.id == 11 else 80) + 0.1 * t
     e = SACPlanningEnvironment()
     boundary = e.reset(proto)
     while not (boundary.terminated or boundary.truncated):
@@ -255,7 +320,7 @@ def test_record_end_terminates_once_without_advancing_past_log():
             scripted_proposal(e, boundary.token), boundary.token
         )
     assert boundary.truncated and boundary.terminal_reason == TerminalReason.RECORD_END
-    assert e.frame == 53 and e.tick == 51 and not boundary.needs_sac_action
+    assert e.frame == 199 and e.tick == 197 and not boundary.needs_sac_action
     with pytest.raises(ContractError, match="already ended"):
         e.step_forced(boundary.token)
 

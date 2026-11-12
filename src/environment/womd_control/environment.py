@@ -46,6 +46,8 @@ from .control import (
     check_trajectory,
     emergency,
     pd_control,
+    TrackingError,
+    tracking_error,
 )
 from .geometry import ResetRejected, box, build_route, overlaps, project, wrap
 from .observation import build_observation
@@ -65,6 +67,14 @@ class Boundary:
 
 
 @dataclass(frozen=True)
+class ExecutionAttempt:
+    source: Source
+    proposal_id: str
+    generated_tick: int
+    check: CheckResult
+
+
+@dataclass(frozen=True)
 class StepResult:
     pre_token: ObservationToken
     post_tick: int
@@ -79,6 +89,8 @@ class StepResult:
     terminal_reason: TerminalReason | None
     sample_valid: bool
     next_boundary: Boundary
+    attempts: tuple[ExecutionAttempt, ...] = ()
+    tracking_error: TrackingError | None = None
     # No training reward/transition is invented before reward/collector gates.
 
 
@@ -568,6 +580,11 @@ class SACPlanningEnvironment:
         trajectory = Trajectory(proposal)
         objects = self._check_objects()
         check = self._check(trajectory, objects)
+        attempts = [
+            ExecutionAttempt(
+                Source.NEW, proposal.proposal_id, proposal.generated_tick, check
+            )
+        ]
         chosen, source = None, Source.EMERGENCY
         if check.valid:
             chosen, source = trajectory, Source.NEW
@@ -583,9 +600,28 @@ class SACPlanningEnvironment:
                     reused = self._check(self.old_plan, objects)
                     if reused.valid:
                         chosen, source = self.old_plan, Source.REUSED
+                else:
+                    reused = CheckResult(False, "OLD_PLAN_EXPIRED")
+                attempts.append(
+                    ExecutionAttempt(
+                        Source.REUSED,
+                        self.old_plan.proposal.proposal_id,
+                        self.old_plan.proposal.generated_tick,
+                        reused,
+                    )
+                )
                 if chosen is None:
                     braking = self._braking_trajectory()
-                    if self._check(braking, objects).valid:
+                    brake_check = self._check(braking, objects)
+                    attempts.append(
+                        ExecutionAttempt(
+                            Source.BRAKE,
+                            braking.proposal.proposal_id,
+                            braking.proposal.generated_tick,
+                            brake_check,
+                        )
+                    )
+                    if brake_check.valid:
                         chosen, source = braking, Source.BRAKE
         if chosen is None:
             control, new_memory = emergency(ego, self.memory, self.tick)
@@ -593,7 +629,9 @@ class SACPlanningEnvironment:
             control, new_memory = pd_control(
                 chosen, ego, self.memory, self.tick, source
             )
-        return self._advance(proposal, check, control, new_memory)
+        return self._advance(
+            proposal, check, control, new_memory, chosen, tuple(attempts)
+        )
 
     def _check(self, trajectory, objects):
         ego = self.ego
@@ -648,7 +686,12 @@ class SACPlanningEnvironment:
                 desired_k = last_kappa
             last_a = float(
                 np.clip(
-                    np.clip(-2.0, last_a - 2, last_a + 2),
+                    # A 20 m/s^3 step in generator controls overshoots that
+                    # limit after finite differences + quintic reconstruction.
+                    # Reserve interpolation headroom (1.5 m/s^3 here); interior
+                    # quintic jerk can reach 9 times the generator ramp. The shared
+                    # checker still enforces the original 20 m/s^3 limit.
+                    np.clip(-2.0, last_a - 0.15, last_a + 0.15),
                     max(-6.0, -virtual.speed / DT),
                     6.0,
                 )
@@ -664,7 +707,7 @@ class SACPlanningEnvironment:
             np.array(positions),
             self.token,
             sequence="brake",
-            model_version="checked-brake-v1",
+            model_version="checked-brake-v2",
         )
         return Trajectory(proposal)
 
@@ -673,7 +716,15 @@ class SACPlanningEnvironment:
         # No HOLD or forced lifecycle is activated in the initial KEEP/FOLLOW API.
         raise ContractError("needs_sac_action is true; forced tick is unavailable")
 
-    def _advance(self, proposal, check, control, new_memory):
+    def _advance(
+        self,
+        proposal,
+        check,
+        control,
+        new_memory,
+        executed_trajectory=None,
+        attempts=(),
+    ):
         before = self.token
         executed = self.command
         action = self._datatypes.Action(
@@ -770,6 +821,8 @@ class SACPlanningEnvironment:
                 self.terminal_reason,
                 self.terminal_reason != TerminalReason.DATA_CORRUPTION,
                 boundary,
+                attempts,
+                tracking_error(executed_trajectory, self.ego, self.tick * DT),
             ),
             boundary,
         )
@@ -789,4 +842,74 @@ def scripted_proposal(environment, token):
     )
     return environment.proposal_from_world(
         xy, token, model_version="constant-acceleration-development-v1"
+    )
+
+
+def route_reference_proposal(environment, token):
+    """Deterministic current-map quintic reference for control diagnostics.
+
+    This is a separate development input, not an ASMC implementation or learned
+    policy. It reads no future logs, performs no candidate search, and receives
+    exactly the same acceptance checks as every other proposal.
+    """
+    from .geometry import sample
+
+    e = environment
+    ego = e.planning_anchor(token)
+    route_s, _, _ = project(e.route.center, ego.position)
+    desired = min(
+        e.command.draft.desired_speed_mps, e.route.speed_limit(ego.position), 15.0
+    )
+    if e.command.draft.maneuver == Maneuver.FOLLOW and e.target_cache is not None:
+        target = e.target_cache
+        target_position = (
+            target.position + target.velocity * (e.tick - e.target_last_tick) * DT
+        )
+        gap = (
+            project(e.route.center, target_position)[0]
+            - route_s
+            - (ego.length + target.length) / 2
+        )
+        desired = max(
+            0.0,
+            min(
+                desired,
+                target.speed
+                + 0.5
+                * (
+                    gap
+                    - e.command.draft.minimum_gap_m
+                    - e.command.draft.time_gap_s * ego.speed
+                ),
+            ),
+        )
+    duration = 3.0
+    target_s = route_s + 0.5 * (ego.speed + desired) * duration
+    if target_s > e.route.length:
+        raise ContractError("development reference exceeds available route")
+    target_position = sample(e.route.center, target_s)
+    target_tangent = project(e.route.center, target_position)[2]
+    # Polynomial in normalized time, calculated relative to the actual anchor
+    # to avoid cancellation at large World coordinates.
+    coefficients = np.zeros((2, 6), np.float64)
+    coefficients[:, 1] = ego.velocity * duration
+    coefficients[:, 2] = ego.acceleration * duration**2 / 2
+    rhs = np.stack(
+        [
+            target_position - ego.position - coefficients[:, 1] - coefficients[:, 2],
+            desired * target_tangent * duration
+            - coefficients[:, 1]
+            - 2 * coefficients[:, 2],
+            -2 * coefficients[:, 2],
+        ],
+        axis=-1,
+    )
+    inverse = np.linalg.inv(np.array([[1, 1, 1], [3, 4, 5], [6, 12, 20]], float))
+    coefficients[:, 3:] = rhs @ inverse.T
+    z = np.arange(1, 31) * DT / duration
+    xy = ego.position + np.sum(
+        coefficients[None, :, :] * z[:, None, None] ** np.arange(6), axis=-1
+    )
+    return e.proposal_from_world(
+        xy, token, model_version="current-route-quintic-development-v1"
     )

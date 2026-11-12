@@ -47,6 +47,40 @@ class CheckResult:
     checked_samples: int = 0
     max_position_error_m: float = 0.0
     max_speed_error_mps: float = 0.0
+    violations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TrackingError:
+    """Measured post-step error against the trajectory actually executed."""
+
+    proposal_id: str
+    generated_tick: int
+    reference_time_s: float
+    position_m: float
+    speed_mps: float
+    heading_deg: float | None
+
+
+def tracking_error(trajectory, ego, time):
+    if (
+        trajectory is None
+        or not np.isfinite(np.r_[ego.position, ego.velocity, ego.yaw]).all()
+    ):
+        return None
+    reference_speed = float(np.linalg.norm(trajectory.evaluate(time, 1)))
+    return TrackingError(
+        trajectory.proposal.proposal_id,
+        trajectory.proposal.generated_tick,
+        time,
+        float(np.linalg.norm(ego.position - trajectory.evaluate(time))),
+        abs(ego.speed - reference_speed),
+        (
+            float(np.degrees(abs(wrap(ego.yaw - trajectory.yaw(time)))))
+            if min(ego.speed, reference_speed) >= 0.01
+            else None
+        ),
+    )
 
 
 class Trajectory:
@@ -282,23 +316,31 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
     krate = (
         v[:, 0] * j[:, 1] - v[:, 1] * j[:, 0]
     ) / denom**3 - 3 * cross_va * dot_va / denom**5
-    if (
-        np.any(np.abs(at[moving]) > 6 + 1e-6)
-        or np.any(np.abs(alat[moving]) > 4 + 1e-6)
-        or np.any(np.abs(kappa[moving]) > 0.3 + 1e-6)
-        or np.any(np.abs(jerk[moving]) > 20 + 1e-6)
-        or np.any(np.abs(krate[moving]) > 0.5 + 1e-6)
-        or np.any(np.linalg.norm(a[~moving], axis=1) > 6 + 1e-6)
-        or np.any(np.linalg.norm(j[~moving], axis=1) > 20 + 1e-6)
-    ):
-        return CheckResult(False, "KINEMATIC_LIMIT", len(times))
+    violations = tuple(
+        name
+        for name, values, limit in (
+            ("tangential_acceleration", np.abs(at[moving]), 6),
+            ("lateral_acceleration", np.abs(alat[moving]), 4),
+            ("curvature", np.abs(kappa[moving]), 0.3),
+            ("tangential_jerk", np.abs(jerk[moving]), 20),
+            ("curvature_rate", np.abs(krate[moving]), 0.5),
+            ("low_speed_vector_acceleration", np.linalg.norm(a[~moving], axis=1), 6),
+            ("low_speed_vector_jerk", np.linalg.norm(j[~moving], axis=1), 20),
+        )
+        if np.any(values > limit + 1e-6)
+    )
+    if violations:
+        return CheckResult(False, "KINEMATIC_LIMIT", len(times), violations=violations)
     for t, p, velocity, s in zip(times, position, v, speed):
         _, _, tangent = project(route.center, p)
-        if (
-            s > min(route.speed_limit(p), 15) + 1e-6
-            or np.dot(tangent, velocity) < -0.01
-        ):
-            return CheckResult(False, "KINEMATIC_LIMIT", len(times))
+        if s > min(route.speed_limit(p), 15) + 1e-6:
+            return CheckResult(
+                False, "KINEMATIC_LIMIT", len(times), violations=("speed_limit",)
+            )
+        if np.dot(tangent, velocity) < -0.01:
+            return CheckResult(
+                False, "KINEMATIC_LIMIT", len(times), violations=("reverse_velocity",)
+            )
         pose = replace(ego, position=p, velocity=velocity, yaw=trajectory.yaw(t))
         reason = _scene_check(pose, route, objects, t - now)
         if reason:
@@ -327,6 +369,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                 len(times),
                 max_position_error,
                 max_speed_error,
+                ("virtual_lateral_acceleration",),
             )
         for duration in np.linspace(0, DT, int(np.ceil(DT / interval)) + 1)[1:]:
             point = advance(
@@ -343,6 +386,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                     len(times),
                     max_position_error,
                     max_speed_error,
+                    ("virtual_speed_limit",),
                 )
             pe = float(np.linalg.norm(point.position - trajectory.evaluate(time)))
             ve = abs(point.speed - float(np.linalg.norm(trajectory.evaluate(time, 1))))
