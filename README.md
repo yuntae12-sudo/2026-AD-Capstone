@@ -91,6 +91,9 @@ Verified working environment:
 
 See [docs/HANDOFF.md](docs/HANDOFF.md) for full setup instructions.
 
+For branch, pull request, review, and validation rules, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## 5. Dataset
 
 The final MERGE Dataset is built from real WOMD logged scenes: 10 TRAIN
