@@ -30,4 +30,4 @@
 - [ ] Files changed를 검토했다. 팀 작업이면 관련 담당자의 리뷰를 받았다.
 - [ ] Ready 상태로 검토할 수 있다. 진행 중이라면 Draft를 유지한다.
 
-정책: [협업과 Git 규칙](https://github.com/yuntae12-sudo/ITS-Merge-Decision/blob/main/docs/onboarding/collaboration.md)
+정책: [협업과 Git 규칙](https://github.com/yuntae12-sudo/2026-AD-Capstone/blob/main/docs/onboarding/collaboration.md)
