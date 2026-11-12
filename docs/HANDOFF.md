@@ -124,6 +124,9 @@ JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q tests/scenarios/test_womd20.p
 
 ## 4. Environment Verification
 
+For the new fixed-provider 20-second control loop (separate from the existing
+PPO training commands), see [the WOMD control guide](architecture/womd-control.md).
+
 ```bash
 PYTHONPATH=. pytest tests/ -m "not slow"
 ```
