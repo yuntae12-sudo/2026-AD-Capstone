@@ -1,0 +1,505 @@
+{
+  "release": "1.2",
+  "status": "IMPLEMENTATION_BASELINE_OWNER_DECIDED",
+  "schema_version": 3,
+  "action_distribution_version": "correlated_xy_gaussian_accel_anchor_v2",
+  "scope": "Implementation contracts, not a safety certificate or completed training run",
+  "roles": {
+    "behavior_owner": "PPO developer: policy, candidate binding, ASMC behavior adapter",
+    "planner_owner": "SAC developer: sampler, waypoint generator, teacher adapter, SAC learner",
+    "integration_owner": "Project owner: shared data, execution, validation, PD, collectors, evaluation"
+  },
+  "coordinates": {
+    "external_frame": "WORLD",
+    "reference_point": "BOX_CENTER",
+    "internal_frame": "CURRENT_EGO_LOCAL",
+    "position_unit": "m",
+    "time_unit": "s",
+    "yaw_unit": "rad",
+    "curvature_unit": "1/m",
+    "yaw_range": "[-pi,pi)"
+  },
+  "time": {
+    "dt_s": 0.1,
+    "future_points": 30,
+    "horizon_s": 3.0,
+    "behavior_interval_ticks": 5,
+    "command_ttl_ticks": 10,
+    "reuse_max_age_ticks": 2,
+    "target_grace_ticks": 2,
+    "failure_reconsider_count": 3,
+    "prepare_timeout_ticks": 30,
+    "execution_timeout_ticks": 100,
+    "episode_max_ticks": 200,
+    "sim_tick_origin": "episode reset = 0; source_frame = episode_start_frame + sim_tick"
+  },
+  "enums": {
+    "maneuver": [
+      "KEEP",
+      "FOLLOW",
+      "MERGE",
+      "AVOID",
+      "STOP"
+    ],
+    "direction": [
+      "AUTO",
+      "LEFT",
+      "RIGHT"
+    ],
+    "stage": [
+      "IDLE",
+      "PREPARING",
+      "WAITING",
+      "READY",
+      "COMMITTED",
+      "EXECUTING",
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "HOLD"
+    ],
+    "source": [
+      "NONE",
+      "NEW",
+      "REUSED",
+      "BRAKE",
+      "PREPARE",
+      "EMERGENCY",
+      "HOLD"
+    ],
+    "execution_request": [
+      "PREPARE",
+      "EXECUTE",
+      "CANCEL"
+    ],
+    "rejection_reason": [
+      "STALE_OBSERVATION",
+      "SCHEMA_MISMATCH",
+      "UNSUPPORTED_MODE",
+      "MISSING_TARGET",
+      "INVALID_CORRIDOR",
+      "EXPIRED_COMMAND",
+      "SWITCH_LOCKED",
+      "INVALID_ACTION",
+      "NONFINITE_POLICY",
+      "ANCHOR_MISMATCH",
+      "KINEMATIC_LIMIT",
+      "PREDICTED_COLLISION",
+      "PREDICTED_OFFROAD",
+      "COMMAND_VIOLATION",
+      "TRACKING_FAILURE",
+      "OLD_PLAN_EXPIRED",
+      "UNRESOLVED_SWEEP",
+      "POLICY_ERROR",
+      "DUPLICATE_REQUEST_MISMATCH"
+    ],
+    "terminal_reason": [
+      "COLLISION",
+      "OFFROAD",
+      "CORRIDOR_VIOLATION",
+      "MAP_COVERAGE_EXIT",
+      "ROUTE_GOAL",
+      "TASK_LOST",
+      "RECORD_END",
+      "TIME_LIMIT",
+      "DATA_CORRUPTION",
+      "STOP_GOAL"
+    ],
+    "task_kind": [
+      "ROUTE",
+      "STOP_AT_POSE"
+    ]
+  },
+  "core_observation": {
+    "dtype": "float32",
+    "shapes": {
+      "task": [
+        3
+      ],
+      "ego": [
+        14
+      ],
+      "agents": [
+        3,
+        32,
+        17
+      ],
+      "lanes": [
+        16,
+        20,
+        7
+      ],
+      "boundaries": [
+        16,
+        20,
+        5
+      ],
+      "route": [
+        40,
+        4
+      ],
+      "signals": [
+        8,
+        12
+      ],
+      "command": [
+        19
+      ],
+      "execution": [
+        25
+      ],
+      "previous_plan": [
+        30,
+        6
+      ],
+      "controller_memory": [
+        6
+      ]
+    },
+    "field_masks": "bool array with same shape as each feature array",
+    "item_masks": {
+      "agents": [
+        3,
+        32
+      ],
+      "lanes": [
+        16,
+        20
+      ],
+      "boundaries": [
+        16,
+        20
+      ],
+      "route": [
+        40
+      ],
+      "signals": [
+        8
+      ],
+      "previous_plan": [
+        30
+      ]
+    },
+    "float_feature_count": 5975
+  },
+  "ppo_observation": {
+    "core": "core_observation",
+    "candidate_commands": {
+      "shape": [
+        5,
+        19
+      ],
+      "dtype": "float32"
+    },
+    "candidate_command_field_mask": {
+      "shape": [
+        5,
+        19
+      ],
+      "dtype": "bool"
+    },
+    "candidate_agent_slots": {
+      "shape": [
+        5,
+        3
+      ],
+      "dtype": "int32",
+      "invalid": -1,
+      "order": [
+        "primary",
+        "front",
+        "rear"
+      ]
+    },
+    "candidate_lane_slots": {
+      "shape": [
+        5
+      ],
+      "dtype": "int32",
+      "invalid": -1
+    },
+    "action_mask": {
+      "shape": [
+        5
+      ],
+      "dtype": "bool"
+    },
+    "candidate_tokens": {
+      "shape": [
+        5
+      ],
+      "dtype": "string",
+      "usage": "metadata only; not network inputs"
+    },
+    "network_binding": "gather agent/lane embeddings with valid slots; never normalize raw IDs"
+  },
+  "wire": {
+    "optional": "{value: T or null, valid: bool}; invalid must use null",
+    "token_fields": {
+      "episode_uid": "str",
+      "scene_id": "str",
+      "sim_tick": "int64",
+      "revision": "int64",
+      "schema_version": "int32"
+    },
+    "array_order": "C row-major; raw_u index = 2*i+axis; waypoint i is future tick i+1",
+    "invalid_tensor_value": 0,
+    "finite_required": true,
+    "ids": "int64 source IDs outside networks; -1 only for tensor slots"
+  },
+  "ownership": {
+    "command_id": "ExecutionManager monotonically assigns episode-local int64 on accepted semantic change",
+    "request_id": "provider-generated string, unique within episode",
+    "candidate_token": "CommandBuilder snapshot identity, bound to observation token",
+    "heartbeat": "CommandBuilder refreshes same ID; no rebinding on repeated same mode",
+    "execute_authority": "ExecutionManager only; CommandBuilder requests next-tick EXECUTE after READY",
+    "clock": "Environment only; submit_behavior never advances physics"
+  },
+  "api": {
+    "reset": "reset(scene_key, seed, provider_spec) -> Boundary",
+    "submit_behavior": "submit_behavior(CommandRequest, observation_token) -> Receipt + Boundary; 0 physics ticks",
+    "step_waypoints": "step_waypoints(WaypointProposal, observation_token) -> StepResult + Boundary; exactly 1 physics tick",
+    "step_forced": "step_forced(observation_token) -> StepResult + Boundary; exactly 1 physics tick; no fake policy action",
+    "behavior_candidate_builder": "build_candidates(SceneState, ExecutionContext) -> 5 CommandDrafts + masks + binding slots",
+    "ppo_policy": "select_mode(PPOObservation, key, deterministic) -> action_index int32 + selected_candidate_token",
+    "sac_policy": "propose(CoreObservation, active_command, anchor, key, deterministic) -> WaypointProposal"
+  },
+  "sampler": {
+    "mean_shape": [
+      30,
+      2
+    ],
+    "rho_shape": [
+      2
+    ],
+    "mu_activation": "linear",
+    "action_support": "R^60",
+    "base": "b_i=v0_local*tau_i+0.5*a0_local*tau_i^2",
+    "scale": "s_i=3*tau_i^2",
+    "B": "h^3*(i-j+1)*(i-j+2)/(2*s_i) for 1<=j<=i<=30, else 0",
+    "g": "clip((ego_speed_mps/2)^3,0.002,1)",
+    "sigma_min": 0.005,
+    "sigma_max": 0.03,
+    "sigma_reference": 0.02,
+    "rho_initial_bias": "log(1.5)",
+    "sample": "u[:,d]=mu[:,d]+g*B@(sigma[d]*epsilon[:,d])",
+    "entropy_log_density": "ell=30-0.5*sum(epsilon^2)-30*sum_d log(sigma[d]/0.02)",
+    "target_entropy": 0.0,
+    "sampling_dtype": "float64",
+    "parameter_dtype": "float32",
+    "replay_raw_u_dtype": "float64",
+    "proposal_raw_u_shape": [
+      30,
+      2
+    ],
+    "replay_raw_u_shape": [
+      60
+    ]
+  },
+  "control": {
+    "longitudinal_kp": 6.0,
+    "longitudinal_kd": 0.1,
+    "derivative_filter": 0.5,
+    "preview": "clip(2/max(speed,1),0.3,1.0)",
+    "L": "max(norm(p_ref-p_ego),1)",
+    "curvature": "e_y/L^2+0.5*e_heading/L+0.1*filtered_de_y/(max(speed,1)*L)",
+    "accel_limits": [
+      -6.0,
+      6.0
+    ],
+    "curvature_limits": [
+      -0.3,
+      0.3
+    ],
+    "jerk_limit": 20.0,
+    "curvature_rate_limit": 0.5,
+    "lateral_accel_limit": 4.0,
+    "tracking_max_position_m": 0.75,
+    "tracking_max_speed_mps": 2.0,
+    "tracking_max_heading_deg": 15.0,
+    "gate_position_rms_m": 0.3,
+    "gate_speed_rms_mps": 1.0
+  },
+  "learning": {
+    "gamma_per_physics_tick": 0.99,
+    "sac_target_tau": 0.005,
+    "sac_batch": 256,
+    "sac_lr": 0.0003,
+    "alpha_initial": 0.001,
+    "alpha_bounds": [
+      1e-06,
+      0.01
+    ],
+    "ppo_lr": 0.0003,
+    "ppo_clip": 0.2,
+    "ppo_gae_lambda_per_decision": 0.95,
+    "ppo_update_epochs": 10,
+    "ppo_minibatch": 64,
+    "ppo_rollout_decisions": 2048,
+    "ppo_entropy_coef": 0.01,
+    "ppo_value_coef": 0.5,
+    "ppo_grad_clip": 0.5,
+    "ppo_target_kl": 0.02,
+    "transition": "R=sum(gamma^k*r_k), discount=gamma^delta_ticks; no fabricated action for forced ticks",
+    "simultaneous_policy_training": false,
+    "initial_supported_modes": [
+      "KEEP",
+      "FOLLOW"
+    ],
+    "reward_version": "shared_tick_reward_v3",
+    "completion_reward_keys": {
+      "STOP": "no maneuver bonus; STOP_AT_POSE episode goal pays +10 once",
+      "MERGE": "target_lane_once",
+      "AVOID": "target_agent_once"
+    },
+    "stop_dense_cost": "-.1*clip(abs(route_distance_to_stop)/30,0,1)-.2*clip(speed/10,0,1); zero in HOLD; no potential shaping",
+    "reward_command": "accepted command snapshot used during that physics tick",
+    "episode_goal_reward": 10.0
+  },
+  "defaults": {
+    "preferred_speed_cap_mps": 10.0,
+    "odd_speed_cap_mps": 15.0,
+    "follow_min_gap_m": 3.0,
+    "follow_time_gap_s": 1.5,
+    "stop_comfort_decel_mps2": 2.0,
+    "stop_line_margin_m": 0.5,
+    "stop_position_tolerance_m": 1.0,
+    "stop_speed_tolerance_mps": 0.2,
+    "completion_dwell_ticks": 10,
+    "merge_completion_progress_m": 2.0,
+    "completion_heading_deg": 10.0,
+    "collision_prevention_margin_each_side_m": 0.3,
+    "road_prevention_margin_each_side_m": 0.1,
+    "effective_speed_preference": "min(active.desired_speed,current_valid_speed_limit,15)",
+    "stop_task_distance_bounds_m": [
+      5.0,
+      60.0
+    ],
+    "physical_numeric_tolerance": 1e-06,
+    "proposal_decode_tolerance_m": 1e-07
+  },
+  "release_policy": {
+    "team_approval_required_before_interface_implementation": false,
+    "owner_approval_for_contract_change": true,
+    "validation_thresholds_are_runtime_gates_not_negotiation_items": true,
+    "legacy_versions_reusable_without_migration": false,
+    "production_implementation_complete": false
+  },
+  "records": {
+    "CommandDraft": {
+      "maneuver": "Maneuver",
+      "route_id": "string",
+      "source_lane_id": "int64",
+      "target_lane_id": "Optional<int64>",
+      "target_agent_id": "Optional<int64>",
+      "target_pose_world": "Optional<float64[3]>",
+      "direction": "Direction",
+      "desired_speed_mps": "float64",
+      "time_gap_s": "Optional<float64>",
+      "minimum_gap_m": "Optional<float64>",
+      "preferred_front_id": "Optional<int64>",
+      "preferred_rear_id": "Optional<int64>",
+      "allowed_corridor_id": "string",
+      "binding_policy_version": "string"
+    },
+    "CommandRequest": {
+      "request_id": "string",
+      "candidate_token": "Optional<string>; mandatory for PPO, may be null for ASMC/fixed provider",
+      "command_draft": "CommandDraft",
+      "execution_request": "ExecutionRequest",
+      "provider_version": "string"
+    },
+    "BehaviorCommand": {
+      "command_id": "int64",
+      "draft": "CommandDraft",
+      "created_tick": "int64",
+      "valid_until_tick": "int64",
+      "schema_version": "int32",
+      "provider_version": "string"
+    },
+    "WaypointProposal": {
+      "observation_token": "ObservationToken",
+      "command_id": "int64",
+      "proposal_id": "string",
+      "generated_tick": "int64",
+      "anchor_world_xy": "float64[2]",
+      "anchor_yaw": "float64",
+      "anchor_velocity_world": "float64[2]",
+      "anchor_acceleration_world": "float64[2]",
+      "anchor_acceleration_valid": "bool",
+      "times": "float64[30]",
+      "xy_world": "float64[30,2]",
+      "raw_u": "float64[30,2]",
+      "reference_point": "BOX_CENTER",
+      "model_version": "string",
+      "action_distribution_version": "string"
+    },
+    "Receipt": {
+      "request_id": "string",
+      "accepted": "bool",
+      "reason": "Optional<RejectionReason>",
+      "active_command_id": "Optional<int64>",
+      "revision": "int64"
+    },
+    "ControlCommand": {
+      "sim_tick": "int64",
+      "acceleration_mps2": "float64",
+      "curvature_per_m": "float64",
+      "source": "Source",
+      "saturated": "bool",
+      "limit_override_reason": "Optional<string>"
+    },
+    "Boundary": {
+      "token": "ObservationToken",
+      "needs_ppo_action": "bool",
+      "needs_sac_action": "bool",
+      "ppo_observation": "Optional<PPOObservation>",
+      "sac_observation": "Optional<CoreObservation>",
+      "feedback": "ExecutionFeedback",
+      "terminated": "bool",
+      "truncated": "bool",
+      "terminal_reason": "Optional<TerminalReason>"
+    },
+    "DecisionTransition": {
+      "episode_uid": "string",
+      "obs": "PolicyObservation",
+      "action": "PolicyAction",
+      "R": "float64",
+      "delta_ticks": "int32",
+      "discount": "float64",
+      "next_obs": "PolicyObservation",
+      "bootstrap_mask": "bool",
+      "terminated": "bool",
+      "truncated": "bool",
+      "sample_valid": "bool",
+      "versions": "VersionBundle",
+      "behavior_log_prob": "Optional<float64>"
+    },
+    "TaskSpec": {
+      "kind": "TaskKind",
+      "goal_id": "string",
+      "route_goal_s": "float64",
+      "stop_pose_world": "Optional<float64[3]>"
+    },
+    "ObservationToken": {
+      "episode_uid": "str",
+      "scene_id": "str",
+      "sim_tick": "int64",
+      "revision": "int64",
+      "schema_version": "int32"
+    },
+    "ExecutionFeedback": {
+      "requested_id": "Optional<string>",
+      "active_command_id": "Optional<int64>",
+      "accepted": "bool",
+      "stage": "Stage",
+      "execute_authorized": "bool",
+      "proposal_valid": "bool",
+      "source": "Source",
+      "reason": "Optional<string>",
+      "reconsider_event": "bool",
+      "progress": "Optional<float64>",
+      "completed": "bool"
+    }
+  }
+}
