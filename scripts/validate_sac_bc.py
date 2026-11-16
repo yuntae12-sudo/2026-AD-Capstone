@@ -177,6 +177,9 @@ def main():
             report["deterministic_mean"] = mean_summary()
             write_report(args.output, report)
             print(json.dumps(episode), flush=True)
+        if any(e["outcome"] == "DATA_CORRUPTION" for e in report["episodes"]):
+            report.update(status="FAILED_DATA_INTEGRITY")
+            return 2
         if args.smoke or any(r["pass_rate"] < 0.9 for r in mean_summary().values()):
             report.update(status="SMOKE_COMPLETE" if args.smoke else "FAILED_MEAN")
             return 0 if args.smoke else 2

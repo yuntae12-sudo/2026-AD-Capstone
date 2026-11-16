@@ -259,7 +259,18 @@ class SACPlanningEnvironment:
             or np.linalg.norm(ego.acceleration) > 6
         ):
             raise ResetRejected("INITIAL_STATE_OUTSIDE_ODD")
+        if ego.speed >= 0.01:
+            cross = (
+                ego.velocity[0] * ego.acceleration[1]
+                - ego.velocity[1] * ego.acceleration[0]
+            )
+            if abs(cross / ego.speed) > 4 + 1e-6:
+                raise ResetRejected("INITIAL_LATERAL_ACCELERATION_LIMIT")
+            if abs(cross / ego.speed**3) > 0.3 + 1e-6:
+                raise ResetRejected("INITIAL_CURVATURE_LIMIT")
         self.route = build_route(scenario, ego, self.frame)
+        if np.dot(project(self.route.center, ego.position)[2], ego.velocity) < -0.01:
+            raise ResetRejected("INITIAL_REVERSE_VELOCITY")
         if ego.speed > min(15, self.route.speed_limit(ego.position)) + 1e-6:
             raise ResetRejected("INITIAL_SPEED_LIMIT")
         if len(self.route.lane_ids) > 16:
