@@ -96,6 +96,8 @@ For branch, pull request, review, and validation rules, see
 
 The new PPO–SAC–PD interface foundation is documented separately in
 [the schema 3 planning contract](docs/contracts/planning.md).
+Its initial fixed-provider control loop and smoke command are described in
+[the 20-second WOMD control guide](docs/architecture/womd-control.md).
 
 ## 5. Dataset
 
