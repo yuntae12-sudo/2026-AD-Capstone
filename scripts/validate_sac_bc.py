@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 
 os.environ.setdefault("JAX_ENABLE_X64", "true")
-os.environ.setdefault("JAX_PLATFORMS", "cpu")
+os.environ.setdefault("JAX_PLATFORMS", "cuda,cpu")
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -48,6 +48,8 @@ def main():
     from src.training.sac.replay import pack_observation
     from src.training.sac.runtime import selected_scenes, versions, write_report
 
+    cpu_device = jax.devices("cpu")[0]
+    inference_device = jax.devices()[0]
     version = versions(args.manifest)
     meta = json.loads((args.checkpoint / "manifest.json").read_text())
     run = meta["run_state"]
@@ -66,6 +68,7 @@ def main():
         initialize(tensor_observation(CoreObservation.empty()), run["seed"]),
         (args.checkpoint / "learner.msgpack").read_bytes(),
     )
+    state = jax.device_put(state, inference_device)
     if int(state.bc_updates) != run["bc_updates"] or int(state.updates) != 0:
         raise ValueError("BC learner counters mismatch")
     synthetic = json.loads(args.synthetic.read_text())
@@ -78,6 +81,7 @@ def main():
         checkpoint_sha256=file_hash(args.checkpoint / "manifest.json"),
         runner_sha256=file_hash(__file__),
         seed=run["seed"],
+        devices=dict(simulator=str(cpu_device), inference=str(inference_device)),
         synthetic_sha256=file_hash(args.synthetic),
         synthetic_cases=synthetic["cases"],
         probe_ticks=PROBE_TICKS,
@@ -86,7 +90,29 @@ def main():
         passed=False,
         group_status="scenario_fallback_overlap_unverified",
     )
-    policy = Policy(state.actor, seed=run["seed"], deterministic=True)
+    with jax.default_device(inference_device):
+        policy = Policy(state.actor, seed=run["seed"], deterministic=True)
+
+    def propose(e, token):
+        with jax.default_device(inference_device):
+            return policy.propose(e, token)
+
+    def reset(row, path):
+        with jax.default_device(cpu_device):
+            e = SACPlanningEnvironment()
+            b = e.reset(
+                parse_scenario(path.read_bytes()),
+                seed=run["seed"],
+                provider_spec=row["provider"],
+            )
+        if e._state.sim_trajectory.x.device != cpu_device:
+            raise AssertionError("gate simulator left CPU")
+        return e, b
+
+    def collect(e, boundary):
+        with jax.default_device(cpu_device):
+            return collect_step(e, boundary, propose)
+
     candidates = selected_scenes(args.manifest, "validation")
     # Smoke keeps both behaviors but never qualifies a gate.
     if args.smoke:
@@ -119,12 +145,7 @@ def main():
     write_report(args.output, report)
     try:
         for row, path in candidates:
-            e = SACPlanningEnvironment()
-            boundary = e.reset(
-                parse_scenario(path.read_bytes()),
-                seed=run["seed"],
-                provider_spec=row["provider"],
-            )
+            e, boundary = reset(row, path)
             episode = dict(
                 scene_id=row["scene_id"],
                 provider=row["provider"],
@@ -147,7 +168,7 @@ def main():
                     episode["probe_observations"][str(e.tick)] = fingerprint(
                         boundary.sac_observation
                     )
-                collected = collect_step(e, boundary, policy.propose)
+                collected = collect(e, boundary)
                 result, boundary = collected.result, collected.boundary
                 episode["ticks"] += 1
                 episode["accepted"] += int(result.check_result.valid)
@@ -192,12 +213,7 @@ def main():
         for index, ((row, path), episode) in enumerate(
             zip(candidates, report["episodes"])
         ):
-            e = SACPlanningEnvironment()
-            boundary = e.reset(
-                parse_scenario(path.read_bytes()),
-                seed=run["seed"],
-                provider_spec=row["provider"],
-            )
+            e, boundary = reset(row, path)
             while e.tick <= max(PROBE_TICKS):
                 if e.tick in PROBE_TICKS:
                     if fingerprint(boundary.sac_observation) != episode[
@@ -206,16 +222,17 @@ def main():
                         raise ValueError(
                             "validation replay state differs from mean rollout"
                         )
-                    key = jax.random.fold_in(
-                        jax.random.PRNGKey(run["seed"]), index * 1000 + e.tick
-                    )
-                    report["states"].append(
-                        probe_boundary(e, boundary, state.actor, key)
-                    )
+                    with jax.default_device(inference_device):
+                        key = jax.random.fold_in(
+                            jax.random.PRNGKey(run["seed"]), index * 1000 + e.tick
+                        )
+                        report["states"].append(
+                            probe_boundary(e, boundary, state.actor, key)
+                        )
                     write_report(args.output, report)
                 if e.tick == max(PROBE_TICKS):
                     break
-                collected = collect_step(e, boundary, policy.propose)
+                collected = collect(e, boundary)
                 boundary = collected.boundary
                 if collected.result.terminated or collected.result.truncated:
                     break

@@ -11,11 +11,12 @@
 | 1. 환경·PD·속도 | 손상 truncation, coverage 분류, 적용 입력·동시 사건 기록, 고정 경로·검사 동등성 검증 | 장면별 긴 rollout과 실제 사건 지속 점검 |
 | 2. 학습 경험 생성 | 기존 Frenet 다항식 연결, 실제 보상·raw action·next_obs replay, train 분리 수집 실행 | 20,000전이 수집 및 실제 수집 처리량 |
 | 3. SAC·BC | 규약 encoder/sampler/twin-Q/BC/SAC/alpha/target/checkpoint 구현 및 CPU/GPU 검증 | 본 BC 5,000 minibatch, 충분한 데이터와 3 seed 실행 |
-| 4. 수락·학습·비교 | 행동별 gate 집계와 read-only 실제 상태 확률 probe 구현 | 합성·실제 validation gate 실행, 온라인 학습·비교 평가 실행기 |
+| 4. 수락·학습·비교 | 행동별 gate 집계와 read-only 실제 상태 확률 probe 구현 | 합성·실제 validation gate 실행, 온라인 학습·복구·비교 완료 검증 |
 
 **전체 학습은 미완료다.** 현재 checkpoint는 연결 시험용 BC 2회 업데이트이며 `qualified=false`다.
 SAC 1회 GPU 수식 연결 시험도 5,000 replay 기준 미달을 명시하고 본학습으로 집계하지 않았다.
-아래 후속 실행기는 20k 수집 → BC5000 → validation gate까지 연결한다. 온라인 SAC 실행기는 아직 남아 있다.
+사전학습 실행기는 20k 수집 → BC5000 → validation gate를 연결하고, 후속 실험 감독 실행기는
+gate 통과 후 온라인 SAC와 비교 평가까지 연결한다. 실제 장시간 실행 완료는 아직 남아 있다.
 실행 상태는 로컬 job/report를 확인하며, 완료 전 결과를 선반영하지 않는다.
 
 ## 자가 검토에서 발견하고 처리한 문제
@@ -119,8 +120,8 @@ validation의 모든 scene/provider에서 결정적 mean rollout을 평가하고
 그룹의 주행 구간 독립성은 미확인이다.
 
 이 실행기는 gate 결과를 판정하고 실패 이유를 저장한다. 백그라운드 프로세스가 스스로
-소스 코드를 수정하는 기능은 아니며, gate 통과 후 온라인 SAC·기준 정책·BC 대비 비교 평가
-실행기를 연결하는 작업은 남아 있다. 학습 성능은 보장하지 않는다.
+소스 코드를 수정하는 기능은 아니며, 후속 온라인 SAC·기준 정책·BC 대비 비교 평가는
+아래 실험 감독 실행기로 연결한다. 실제 학습 성능은 검증 전이며 보장하지 않는다.
 
 
 ## 초기 ODD 재점검 (2026-11-16 후속 작업)
@@ -142,3 +143,55 @@ curvature0.3/m, route velocity -0.01m/s 한계를 reset에도 적용했다. 측�
 해당 데이터는 수정된 런타임과 버전이 다르므로 본 BC/SAC에 재사용하지 않는다.
 새 manifest는 원본과 같은 inventory 디렉터리에 별도 파일로 쓰며 원본 체크섬·제외 이유를
 유지한다. 추가 회귀를 포함한 관련 테스트98개 통과(45.76초).
+
+
+## 온라인 SAC·비교 실험 실행기
+
+`run_sac_online.py`는 같은 runtime/manifest의 qualified BC5000 checkpoint와 실제
+validation gate를 요구한다. gate의 모든 scene/provider·도달 가능한 tick0/10/30 probe,
+행동별 mean90%·stochastic90%·합성95%를 확인한다. smoke BC로 시작하려는 실제 CLI
+실행은 output 생성 전에 거절됐다.
+
+- CPU Waymax / GPU 정책·learner를 명시적으로 분리한다. 실제 validation의 GPU 정책·CPU
+  시뮬레이터 연결 시험을 수행했으며 결과에 `TFRT_CPU_0`를 기록한다. 연결 시험은 학습 성능이 아니다.
+- 실제 유효 전이마다 batch256 업데이트1회. 손상 전이는 업데이트하지 않는다. validation
+  전이는 replay에 넣지 않으며 actor의 결정적 mean으로 평가한다.
+- 온라인 전이5000마다 평가, 10000을 지난 첫 episode 경계에 실험 checkpoint.
+  추가로 약1000전이마다 episode 경계 복구본2세대를 보존한다. 학습기·replay·장면순서 RNG·
+  정책 RNG·trace 위치·runner hash를 저장하며 미확정 trace를 별도 보존한다.
+- 처음은 seed0/1/2 각각10000전이의 초기 실험이다. budget 도달 뒤 진행 중 episode는 끝낸다.
+  장기 수렴이나 성능 향상을 보장하는 예산이 아니다.
+- 동일 validation 전체에서 BC·SAC를 평가하고 teacher·정지 제안·제동 제안·항상 거절되는
+  제안·충돌 방향 제안을 기준 정책으로 비교한다. 모든 제안은 같은 공통 검사를 거친다.
+  고정 FOLLOW 대상의 로그 유효성은 정책이 바꿀 수 없어 대상 ID 제거를 정책 행동으로
+  가장하지 않는다. 실제 TASK_LOST 결과와 기존 dropout/종료 회귀를 확인한다.
+- 성공·충돌·offroad·거절·제동·정지 비중·return·episode 길이·추종 오차를 함께 보고한다.
+  비교는 seed별 paired delta와 평균·표본 표준편차를 JSON/Markdown으로 남긴다.
+
+`run_sac_full_experiment.py`는 수집과 함께 기준 정책 평가를 먼저 수행한다. 사전학습
+gate 통과 뒤 수집 편중 감사, BC 평가, 온라인 SAC, SAC 평가, 최종 비교를 연결한다. 의존 작업 실패·버전 불일치·
+평가 실패 시 증거를 보존하고 중단한다. 백그라운드 실행기가 스스로 코드를 수정하지는 않는다.
+새 실행기 전체의 장시간 학습·복구·비교 완료는 실제 qualified BC가 나온 뒤 검증해야 하며,
+함수/연결 시험을 그 결과로 대신하지 않는다.
+
+정지 편중을 줄이려는 별도 출발 경로 후보는 일부 실제 상태에서 curvature_rate 검사에
+실패했다. 실패 후보는 `stationary_launch_probe.json`에 보존하고 teacher에는 적용하지 않았다.
+실제 BC 결과를 보고 데이터 편중·근사 오차·경로 검사 실패를 구분해 후속 수정한다.
+
+
+후속 연결 검증: 기준 정책5개×KEEP/FOLLOW 각각2tick 및 GPU BC 정책×2행동 각각2tick을
+실제로 실행했다. 모두 smoke이며 정책 성능을 판정하지 않는다. GPU teacher mean probe의
+256개 표본은 공통 CPU 검사에서256개 통과했고, 실제 environment token/memory/observation이
+변하지 않는 것을 확인했다. 이는 단일 상태의 probe 구현 검증이며 BC gate 통과가 아니다.
+실제 BC gate와 온라인 정책이 같은 GPU/CPU 배치를 쓰도록 기기를 기록하고 진입 시 대조한다.
+
+초기 ODD 보완 후 수집은 `outputs/sac_pretraining_reset_v2_20261116/`에서 진행한다.
+새 manifest의 후보126개는 train59개 고유 장면과 validation8개 고유 장면의 KEEP/FOLLOW
+쌍이며, FOLLOW가 없는 train 장면은 KEEP만 포함한다. 합성73,728표본 검사는 다시 통과했다.
+source·data·모델 의미를 변경하지 않는 실행기 확장은 동일 runtime hash의 episode 경계
+복구본에서 재개할 수 있다. script/runner revision은 별도로 기록한다.
+
+GPU 정책 → CPU Waymax → 실제 train 전이 replay → GPU 업데이트 연결 시험에서도
+loss/gradient/alpha가 유한했다. replay23개·batch256·업데이트1회이며 test-only entry를
+사용했다. production의 replay5000 및 BC gate 요건을 우회한 학습으로 집계하지 않는다.
+본 온라인 CLI에는 이 우회 옵션이 없다.

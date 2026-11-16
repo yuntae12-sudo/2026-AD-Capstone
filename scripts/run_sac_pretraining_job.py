@@ -89,6 +89,15 @@ def main():
 
     def wait(name, child):
         while child.poll() is None:
+            for phase_name, phase in status["phases"].items():
+                process = next(p for p in children if p.pid == phase["pid"])
+                code = process.poll()
+                if code is not None:
+                    phase.update(
+                        exit_code=code, status="COMPLETE" if code == 0 else "FAILED"
+                    )
+                    if code:
+                        raise RuntimeError(f"{phase_name} failed with exit {code}")
             save()
             time.sleep(10)
         code = child.returncode
@@ -167,6 +176,7 @@ def main():
                         "--output",
                         gate,
                     ],
+                    "cuda,cpu",
                 ),
             )
             if not json.loads(gate.read_text()).get("passed"):
