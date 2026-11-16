@@ -143,6 +143,8 @@ JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
 지도 제외, 손상 데이터, 사고 우선순위와 기록 끝까지의 진행을 다룬다.
 [장기 실행 검증 기록](../records/womd-control-validation.md)에 실제 장면의 성공·실패,
 제동 보완 전후 비교와 수치의 해석 범위를 기록했다.
+[SAC 착수 점검](../records/sac-readiness-20261116.md)은 규약 누락, 실행 병목,
+개발용 train/validation 장면의 실제 reset 수락 여부를 정리한다.
 
 이 단계에는 PPO 후보 생성/호출 스케줄러, 학습 encoder/sampler, STOP/MERGE/AVOID의
 실행 상태 전이, reward/collector/replay, BC/SAC 학습이 없다. StepResult는 제어 검증용이고
