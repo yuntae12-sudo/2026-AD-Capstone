@@ -333,9 +333,10 @@ def test_corrupt_new_object_is_diagnostic_not_a_training_transition(track_index)
     e.reset(proto)
     result, boundary = e.step_waypoints(scripted_proposal(e, e.token), e.token)
     assert (
-        boundary.terminated
+        boundary.truncated
         and boundary.terminal_reason == TerminalReason.DATA_CORRUPTION
     )
+    assert not boundary.terminated
     assert not result.sample_valid and not boundary.needs_sac_action
 
 

@@ -158,6 +158,14 @@ class Trajectory:
                 return float(np.arctan2(v[1], v[0]))
         return self.proposal.anchor_yaw
 
+    def yaws(self, times):
+        velocity = self.evaluate(times, 1)
+        moving = np.linalg.norm(velocity, axis=-1) > 1e-9
+        result = np.arctan2(velocity[:, 1], velocity[:, 0])
+        for i in np.flatnonzero(~moving):
+            result[i] = self.yaw(float(times[i]))
+        return result
+
 
 def advance(ego, acceleration, curvature, duration=DT):
     distance = ego.speed * duration + 0.5 * acceleration * duration**2
@@ -238,24 +246,71 @@ def emergency(ego, memory, tick):
     )
 
 
+class SceneObjects:
+    """One immutable snapshot for all sweep samples of a candidate."""
+
+    def __init__(self, objects):
+        self.positions = np.array([o.position for o in objects], np.float64).reshape(
+            -1, 2
+        )
+        self.velocities = np.array([o.velocity for o in objects], np.float64).reshape(
+            -1, 2
+        )
+        self.diagonals = np.array([np.hypot(o.length, o.width) for o in objects])
+        self.corners = np.array(
+            [box(np.zeros(2), o.yaw, o.length, o.width) for o in objects]
+        ).reshape(-1, 4, 2)
+        self.max_speed = max((o.speed for o in objects), default=0.0)
+
+
 def _scene_check(ego, route, objects, elapsed):
     if not route.contains(ego.position, ego.yaw, ego.length, ego.width, 0.1):
         return "PREDICTED_OFFROAD"
     ego_box = box(ego.position, ego.yaw, ego.length, ego.width, 0.3)
-    for other in objects:
-        position = other.position + other.velocity * elapsed
-        radius = 0.5 * (
-            np.hypot(ego.length + 0.6, ego.width + 0.6)
-            + np.hypot(other.length, other.width)
-        )
-        if np.linalg.norm(position - ego.position) <= radius and overlaps(
-            ego_box, box(position, other.yaw, other.length, other.width)
+    if not isinstance(objects, SceneObjects):
+        objects = SceneObjects(objects)
+    positions = objects.positions + objects.velocities * elapsed
+    radii = 0.5 * (np.hypot(ego.length + 0.6, ego.width + 0.6) + objects.diagonals)
+    # Broad phase may admit extra near-boundary pairs; the original scalar norm
+    # is still authoritative, avoiding a reduction-order change at contact.
+    padding = 32 * np.finfo(np.float64).eps * np.maximum(radii, 1)
+    close = np.flatnonzero(
+        np.linalg.norm(positions - ego.position, axis=1) <= radii + padding
+    )
+    for index in close:
+        if np.linalg.norm(positions[index] - ego.position) <= radii[index] and overlaps(
+            ego_box, positions[index] + objects.corners[index]
         ):
             return "PREDICTED_COLLISION"
     return None
 
 
+def _scene_checks(poses, route, objects, elapsed):
+    """Batch identical discrete samples; no interpolation or sample removal."""
+    rectangles = np.array(
+        [box(p.position, p.yaw, p.length, p.width, 0.1) for p in poses]
+    )
+    contained = route.contains_many(rectangles)
+    reasons = [None if good else "PREDICTED_OFFROAD" for good in contained]
+    for i in np.flatnonzero(contained):
+        p = poses[i]
+        ego_box = box(p.position, p.yaw, p.length, p.width, 0.3)
+        positions = objects.positions + objects.velocities * elapsed[i]
+        radii = 0.5 * (np.hypot(p.length + 0.6, p.width + 0.6) + objects.diagonals)
+        padding = 32 * np.finfo(np.float64).eps * np.maximum(radii, 1)
+        for j in np.flatnonzero(
+            np.linalg.norm(positions - p.position, axis=1) <= radii + padding
+        ):
+            if np.linalg.norm(positions[j] - p.position) <= radii[j] and overlaps(
+                ego_box, positions[j] + objects.corners[j]
+            ):
+                reasons[i] = "PREDICTED_COLLISION"
+                break
+    return reasons
+
+
 def check_trajectory(trajectory, ego, route, objects, memory, tick):
+    objects = SceneObjects(objects)
     now = tick * DT
     if now + DT > trajectory.end + 1e-9:
         return CheckResult(False, "OLD_PLAN_EXPIRED")
@@ -280,7 +335,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
     max_speed = max(
         15.0, float(np.linalg.norm(trajectory.evaluate(probe, 1), axis=-1).max())
     )
-    max_other = max((o.speed for o in objects), default=0.0)
+    max_other = objects.max_speed
     interval = min(
         0.02,
         0.1 / max(max_speed + max_other, 1),
@@ -331,18 +386,23 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
     )
     if violations:
         return CheckResult(False, "KINEMATIC_LIMIT", len(times), violations=violations)
-    for t, p, velocity, s in zip(times, position, v, speed):
-        _, _, tangent = project(route.center, p)
-        if s > min(route.speed_limit(p), 15) + 1e-6:
+    route_s, _, tangents = route.project_many(position)
+    limits = route.speed_limits_at(route_s)
+    poses = [
+        replace(ego, position=p, velocity=velocity, yaw=float(yaw))
+        for p, velocity, yaw in zip(position, v, trajectory.yaws(times))
+    ]
+    reasons = _scene_checks(poses, route, objects, times - now)
+    for index, (velocity, s) in enumerate(zip(v, speed)):
+        if s > min(limits[index], 15) + 1e-6:
             return CheckResult(
                 False, "KINEMATIC_LIMIT", len(times), violations=("speed_limit",)
             )
-        if np.dot(tangent, velocity) < -0.01:
+        if np.dot(tangents[index], velocity) < -0.01:
             return CheckResult(
                 False, "KINEMATIC_LIMIT", len(times), violations=("reverse_velocity",)
             )
-        pose = replace(ego, position=p, velocity=velocity, yaw=trajectory.yaw(t))
-        reason = _scene_check(pose, route, objects, t - now)
+        reason = reasons[index]
         if reason:
             return CheckResult(False, reason, len(times))
     # Virtual PD uses private memory and the same discrete dynamics as Waymax.
@@ -371,15 +431,22 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                 max_speed_error,
                 ("virtual_lateral_acceleration",),
             )
-        for duration in np.linspace(0, DT, int(np.ceil(DT / interval)) + 1)[1:]:
-            point = advance(
-                virtual,
-                control.acceleration_mps2,
-                control.curvature_per_m,
-                float(duration),
+        durations = np.linspace(0, DT, int(np.ceil(DT / interval)) + 1)[1:]
+        points = [
+            advance(
+                virtual, control.acceleration_mps2, control.curvature_per_m, float(d)
             )
-            time = now + step * DT + duration
-            if point.speed > min(15.0, route.speed_limit(point.position)) + 1e-6:
+            for d in durations
+        ]
+        sample_times = now + step * DT + durations
+        reference_positions = trajectory.evaluate(sample_times)
+        reference_velocities = trajectory.evaluate(sample_times, 1)
+        reference_yaws = trajectory.yaws(sample_times)
+        route_s, _, _ = route.project_many(np.array([p.position for p in points]))
+        limits = route.speed_limits_at(route_s)
+        reasons = _scene_checks(points, route, objects, sample_times - now)
+        for index, point in enumerate(points):
+            if point.speed > min(15.0, limits[index]) + 1e-6:
                 return CheckResult(
                     False,
                     "KINEMATIC_LIMIT",
@@ -388,8 +455,8 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                     max_speed_error,
                     ("virtual_speed_limit",),
                 )
-            pe = float(np.linalg.norm(point.position - trajectory.evaluate(time)))
-            ve = abs(point.speed - float(np.linalg.norm(trajectory.evaluate(time, 1))))
+            pe = float(np.linalg.norm(point.position - reference_positions[index]))
+            ve = abs(point.speed - float(np.linalg.norm(reference_velocities[index])))
             max_position_error, max_speed_error = max(max_position_error, pe), max(
                 max_speed_error, ve
             )
@@ -398,7 +465,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                 or ve > 2 + 1e-6
                 or (
                     point.speed >= 0.01
-                    and abs(wrap(point.yaw - trajectory.yaw(time))) > np.pi / 12 + 1e-6
+                    and abs(wrap(point.yaw - reference_yaws[index])) > np.pi / 12 + 1e-6
                 )
             ):
                 return CheckResult(
@@ -408,7 +475,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
                     max_position_error,
                     max_speed_error,
                 )
-            reason = _scene_check(point, route, objects, time - now)
+            reason = reasons[index]
             if reason:
                 return CheckResult(
                     False, reason, len(times), max_position_error, max_speed_error

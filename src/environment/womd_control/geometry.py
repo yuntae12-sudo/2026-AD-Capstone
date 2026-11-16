@@ -5,6 +5,7 @@ the scene. Geometry stays in float64; no future ego trajectory defines a route.
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 
@@ -70,35 +71,75 @@ def _crossings(a, b, c, d):
 
 
 def inside(polygon, points):
+    return _inside_prepared(points, _prepare_polygon(polygon))
+
+
+def _prepare_polygon(polygon):
     a, b = polygon, np.roll(polygon, -1, axis=0)
-    results = []
-    for p in points:
-        crossing_y = (a[:, 1] > p[1]) != (b[:, 1] > p[1])
-        denom = b[:, 1] - a[:, 1]
-        x = a[:, 0] + (p[1] - a[:, 1]) * np.divide(
-            b[:, 0] - a[:, 0], denom, out=np.zeros_like(denom), where=denom != 0
-        )
-        ray = bool(np.count_nonzero(crossing_y & (p[0] < x)) % 2)
-        edge = b - a
+    edge = b - a
+    denom = edge[:, 1]
+    slope = np.divide(edge[:, 0], denom, out=np.zeros_like(denom), where=denom != 0)
+    norm2 = np.maximum(np.sum(edge * edge, axis=1), 1e-12)
+    pad = 1e-8 + 32 * np.finfo(np.float64).eps * np.maximum(
+        np.maximum(np.abs(a), np.abs(b)), 1
+    )
+    return a, b, edge, slope, norm2, np.minimum(a, b) - pad, np.maximum(a, b) + pad
+
+
+def _inside_prepared(points, prepared):
+    # Same ray / boundary tolerances and arithmetic as the scalar reference.
+    a, b, edge, slope, norm2, low, high = prepared
+    p = np.asarray(points)[:, None, :]
+    crossing_y = (a[:, 1] > p[..., 1]) != (b[:, 1] > p[..., 1])
+    x = a[:, 0] + (p[..., 1] - a[:, 1]) * slope
+    ray = np.count_nonzero(crossing_y & (p[..., 0] < x), axis=1) % 2 != 0
+    # Only points near an edge's bounding box can satisfy the original 1e-8
+    # distance test. Padding makes this broad phase conservative; the final
+    # distance/tolerance calculation itself is unchanged.
+    rows, columns = np.nonzero(((p >= low) & (p <= high)).all(axis=-1))
+    on_edge = np.zeros(len(p), bool)
+    if len(rows):
+        selected = p[rows, 0]
         f = np.clip(
-            np.sum((p - a) * edge, axis=1)
-            / np.maximum(np.sum(edge * edge, axis=1), 1e-12),
+            np.sum((selected - a[columns]) * edge[columns], axis=-1) / norm2[columns],
             0,
             1,
         )
-        on_edge = np.min(np.linalg.norm(p - (a + f[:, None] * edge), axis=1)) <= 1e-8
-        results.append(ray or on_edge)
-    return np.asarray(results)
+        distance = np.linalg.norm(
+            selected - (a[columns] + f[:, None] * edge[columns]), axis=-1
+        )
+        on_edge[rows[distance <= 1e-8]] = True
+    return ray | on_edge
 
 
 def contains_box(polygon, rectangle):
-    if not inside(polygon, rectangle).all():
+    return _contains_box_prepared(rectangle, _prepare_polygon(polygon))
+
+
+def _contains_box_prepared(rectangle, prepared):
+    if not _inside_prepared(rectangle, prepared).all():
         return False
     # Corners alone are insufficient for a concave corridor.
-    for a, b in zip(rectangle, np.roll(rectangle, -1, axis=0)):
-        if _crossings(a, b, polygon, np.roll(polygon, -1, axis=0)).any():
-            return False
-    return True
+    a, b = prepared[:2]
+    return not _crossings(
+        rectangle[:, None, :], np.roll(rectangle, -1, axis=0)[:, None, :], a, b
+    ).any()
+
+
+def _rectangle_crossings(rectangles, prepared):
+    a, b = prepared[:2]
+    c, d = rectangles, np.roll(rectangles, -1, axis=1)
+    low, high = prepared[5:]
+    possible = (
+        (np.maximum(c, d)[:, :, None, :] >= low)
+        & (np.minimum(c, d)[:, :, None, :] <= high)
+    ).all(axis=-1)
+    rows, edges, columns = np.nonzero(possible)
+    result = np.zeros(len(rectangles), bool)
+    if len(rows):
+        hit = _crossings(c[rows, edges], d[rows, edges], a[columns], b[columns])
+        result[rows[hit]] = True
+    return result
 
 
 def _clean(xy):
@@ -169,17 +210,98 @@ class Route:
     goal_s: float
     boundary_ids: tuple[int, ...]
 
+    def __post_init__(self):
+        # Caches must never outlive a mutation of their source geometry.
+        for name in ("center", "left", "right", "polygon", "speeds"):
+            value = np.array(getattr(self, name), dtype=np.float64, copy=True)
+            value.setflags(write=False)
+            object.__setattr__(self, name, value)
+
+    @cached_property
+    def _arc(self):
+        return arc(self.center)
+
+    @cached_property
+    def _segments(self):
+        delta = np.diff(self.center, axis=0)
+        norm2 = np.sum(delta * delta, axis=1)
+        return delta, norm2, np.sqrt(norm2)
+
+    @cached_property
+    def _polygon(self):
+        return _prepare_polygon(self.polygon)
+
+    def project(self, position):
+        d, norm2, lengths = self._segments
+        f = np.clip(np.sum((position - self.center[:-1]) * d, axis=1) / norm2, 0, 1)
+        positions = self.center[:-1] + f[:, None] * d
+        i = int(np.argmin(np.sum((positions - position) ** 2, axis=1)))
+        return float(self._arc[i] + f[i] * lengths[i]), positions[i], d[i] / lengths[i]
+
+    def project_many(self, positions):
+        d, norm2, lengths = self._segments
+        output = []
+        for first in range(0, len(positions), 64):
+            points = np.asarray(positions[first : first + 64])[:, None, :]
+            f = np.clip(np.sum((points - self.center[:-1]) * d, axis=-1) / norm2, 0, 1)
+            closest = self.center[:-1] + f[..., None] * d
+            i = np.argmin(np.sum((closest - points) ** 2, axis=-1), axis=1)
+            row = np.arange(len(points))
+            output.append(
+                (
+                    self._arc[i] + f[row, i] * lengths[i],
+                    closest[row, i],
+                    d[i] / lengths[i, None],
+                )
+            )
+        return tuple(np.concatenate([row[j] for row in output]) for j in range(3))
+
+    def speed_limits_at(self, distances):
+        i = np.minimum(np.searchsorted(self._arc, distances), len(self.speeds) - 1)
+        return np.minimum(self.speeds[np.maximum(i - 1, 0)], self.speeds[i])
+
+    def contains_many(self, rectangles):
+        results = []
+        a, b = self._polygon[:2]
+        for first in range(0, len(rectangles), 64):
+            rect = np.asarray(rectangles[first : first + 64])
+            corners = (
+                _inside_prepared(rect.reshape(-1, 2), self._polygon)
+                .reshape(-1, 4)
+                .all(axis=1)
+            )
+            crossing = _rectangle_crossings(rect, self._polygon)
+            results.append(corners & ~crossing)
+        return np.concatenate(results)
+
     @property
     def length(self):
-        return float(arc(self.center)[-1])
+        return float(self._arc[-1])
 
     def speed_limit(self, position):
-        s, _, _ = project(self.center, position)
-        index = min(int(np.searchsorted(arc(self.center), s)), len(self.speeds) - 1)
+        s, _, _ = self.project(position)
+        index = min(int(np.searchsorted(self._arc, s)), len(self.speeds) - 1)
         return float(min(self.speeds[max(index - 1, 0) : index + 1]))
 
     def contains(self, position, yaw, length, width, margin=0.0):
-        return contains_box(self.polygon, box(position, yaw, length, width, margin))
+        return _contains_box_prepared(
+            box(position, yaw, length, width, margin), self._polygon
+        )
+
+    def coverage_exited(self, rectangle):
+        """Longitudinal exit of the constructed contiguous route-map coverage.
+
+        Called only after corridor containment fails. Lateral exits remain
+        corridor violations; nearby curved segments must not trigger an end cap.
+        """
+        for point in rectangle:
+            s, nearest, tangent = self.project(point)
+            beyond = float(np.dot(point - nearest, tangent))
+            if (s <= 1e-9 and beyond < -1e-6) or (
+                s >= self.length - 1e-9 and beyond > 1e-6
+            ):
+                return True
+        return False
 
 
 def build_route(scenario, ego, frame):

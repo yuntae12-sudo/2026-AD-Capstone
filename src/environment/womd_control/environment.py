@@ -91,7 +91,7 @@ class StepResult:
     next_boundary: Boundary
     attempts: tuple[ExecutionAttempt, ...] = ()
     tracking_error: TrackingError | None = None
-    # No training reward/transition is invented before reward/collector gates.
+    event_flags: tuple[str, ...] = ()
 
 
 class SACPlanningEnvironment:
@@ -119,8 +119,19 @@ class SACPlanningEnvironment:
     def ego(self):
         return self.ego_at(self.frame)
 
-    def ego_at(self, frame):
+    @property
+    def _host_trajectory(self):
+        """One device transfer per immutable sim snapshot, never policy state."""
         trajectory = self._state.sim_trajectory
+        if getattr(self, "_host_source", None) is not trajectory:
+            import jax
+
+            self._host_values = jax.device_get(trajectory)
+            self._host_source = trajectory
+        return self._host_values
+
+    def ego_at(self, frame):
+        trajectory = self._host_trajectory
         i = self.ego_index
         v = np.array(
             [trajectory.vel_x[i, frame], trajectory.vel_y[i, frame]], np.float64
@@ -145,7 +156,7 @@ class SACPlanningEnvironment:
         )
 
     def _objects(self):
-        trajectory = self._state.sim_trajectory
+        trajectory = self._host_trajectory
         result = {}
         for i in range(trajectory.num_objects):
             if i == self.ego_index or not bool(trajectory.valid[i, self.frame]):
@@ -505,6 +516,7 @@ class SACPlanningEnvironment:
     def _actual_failure(self):
         import jax
 
+        self._actual_events = ()
         ego = self.ego
         if (
             not np.isfinite(
@@ -545,13 +557,18 @@ class SACPlanningEnvironment:
         self.metrics_valid = bool(np.asarray(metric.valid)[self.ego_index])
         if not self.metrics_valid:
             return TerminalReason.DATA_CORRUPTION
+        events = []
         if collision:
-            return TerminalReason.COLLISION
+            events.append(TerminalReason.COLLISION)
         if self.waymax_offroad:
-            return TerminalReason.OFFROAD
+            events.append(TerminalReason.OFFROAD)
         if not self.route.contains(ego.position, ego.yaw, ego.length, ego.width):
-            return TerminalReason.CORRIDOR_VIOLATION
-        return None
+            if self.route.coverage_exited(rectangle):
+                events.append(TerminalReason.MAP_COVERAGE_EXIT)
+            else:
+                events.append(TerminalReason.CORRIDOR_VIOLATION)
+        self._actual_events = tuple(event.value for event in events)
+        return events[0] if events else None
 
     def step_waypoints(self, proposal, token):
         if not isinstance(proposal, WaypointProposal) or not isinstance(
@@ -727,9 +744,22 @@ class SACPlanningEnvironment:
     ):
         before = self.token
         executed = self.command
+        applied = np.asarray(
+            [control.acceleration_mps2, control.curvature_per_m], np.float32
+        )
+        control = replace(
+            control,
+            acceleration_mps2=float(applied[0]),
+            curvature_per_m=float(applied[1]),
+        )
+        new_memory = replace(
+            new_memory,
+            last_a=control.acceleration_mps2,
+            last_kappa=control.curvature_per_m,
+        )
         action = self._datatypes.Action(
             data=self._jnp.asarray(
-                [control.acceleration_mps2, control.curvature_per_m],
+                applied,
                 dtype=self._jnp.float32,
             ),
             valid=self._jnp.asarray([True]),
@@ -769,9 +799,16 @@ class SACPlanningEnvironment:
             if failure != TerminalReason.DATA_CORRUPTION
             else False
         )
-        s = project(self.route.center, self.ego.position)[0]
+        s = (
+            self.route.start_s + (self.feedback.progress or 0.0)
+            if failure == TerminalReason.DATA_CORRUPTION
+            else project(self.route.center, self.ego.position)[0]
+        )
         self.goal_satisfied = bool(s >= self.route.goal_s and failure is None)
-        if failure is not None:
+        if failure == TerminalReason.DATA_CORRUPTION:
+            self.truncated = True
+            self.terminal_reason = failure
+        elif failure is not None:
             self.terminated = True
             self.terminal_reason = failure
         elif not target_valid:
@@ -795,7 +832,11 @@ class SACPlanningEnvironment:
             (
                 Stage.COMPLETED
                 if self.goal_satisfied
-                else Stage.FAILED if self.terminated else Stage.EXECUTING
+                else (
+                    Stage.FAILED
+                    if failure is not None or self.terminated
+                    else Stage.EXECUTING
+                )
             ),
             not (self.terminated or self.truncated),
             check.valid,
@@ -823,6 +864,7 @@ class SACPlanningEnvironment:
                 boundary,
                 attempts,
                 tracking_error(executed_trajectory, self.ego, self.tick * DT),
+                self._actual_events,
             ),
             boundary,
         )

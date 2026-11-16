@@ -56,7 +56,7 @@ def build_observation(environment):
         [True] * 4 + [ego.acceleration_valid] * 2 + [True] * 8,
         [30, 30, 30, 1, 6, 6, 10, 10, 100, 1, 1, 100, 20, 20],
     )
-    trajectory = e._state.sim_trajectory
+    trajectory = e._host_trajectory
     ids = np.asarray(e._state.object_metadata.ids)
     current_valid = np.asarray(trajectory.valid[:, e.frame])
     current_xy = np.stack(

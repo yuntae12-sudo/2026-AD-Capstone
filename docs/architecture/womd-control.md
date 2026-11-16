@@ -78,7 +78,11 @@ FOLLOW는 원래 대상 ID를 유지하고 간격을 검사한다. 대상 누락
 실제 충돌·offroad·corridor 위반은 목표 성공보다 먼저 처리한다. Waymax의 원본 overlap과
 offroad도 기록하며, 실제 사건 판정은 0.1초 단위다.
 source 기록 끝 또는 200 tick에서 truncation하고 장면을 자동 연결하지 않는다.
-손상된 현재 객체 geometry는 `DATA_CORRUPTION`과 `sample_valid=false`로 처리한다.
+손상된 현재 객체 geometry는 `DATA_CORRUPTION`, `truncated=true`, `sample_valid=false`로 처리한다.
+유한한 빈 final observation을 반환하며 reset observation을 붙이지 않는다.
+측방 corridor 이탈과 route 종방향 지도 coverage 이탈을 구분하고, 동시 실패 사건을 flags로 기록한다.
+최종 Waymax float32 입력과 controller memory의 기록값은 일치한다.
+[SAC 연결 전 환경 검증](../records/sac-environment-gate-20261116.md)에 고정 경로·검사 동등성·실행 속도 결과를 기록했다.
 
 ## 실행
 
