@@ -50,3 +50,14 @@ def test_missing_or_smoke_evidence_never_enables_sac():
     )
     with pytest.raises(ValueError, match="synthetic"):
         require_training_gate(report, {"v": 1}, "abc")
+    report["synthetic_cases"] = [
+        dict(case=f"case{i}", sigma=sigma, samples=4096, accepted=4096, mean_valid=True)
+        for i in range(9)
+        for sigma in (0.02, 0.03)
+    ]
+    require_training_gate(report, {"v": 1}, "abc")
+    # High acceptance around an invalid synthetic mean does not certify the
+    # prescribed valid-mean exploration experiment.
+    report["synthetic_cases"][0]["mean_valid"] = False
+    with pytest.raises(ValueError, match="synthetic"):
+        require_training_gate(report, {"v": 1}, "abc")

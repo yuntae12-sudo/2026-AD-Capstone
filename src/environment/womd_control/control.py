@@ -149,21 +149,31 @@ class Trajectory:
         )
 
     def yaw(self, time):
-        velocity = self.evaluate(time, 1)
-        if np.linalg.norm(velocity) > 1e-9:
-            return float(np.arctan2(velocity[1], velocity[0]))
-        for t in np.arange(time, self.start - 1e-9, -DT):
-            v = self.evaluate(max(t, self.start), 1)
-            if np.linalg.norm(v) > 1e-9:
-                return float(np.arctan2(v[1], v[0]))
-        return self.proposal.anchor_yaw
+        return float(self.yaws(np.array([time], np.float64))[0])
 
     def yaws(self, times):
+        times = np.asarray(times, np.float64)
         velocity = self.evaluate(times, 1)
-        moving = np.linalg.norm(velocity, axis=-1) > 1e-9
+        # Body heading is independent of the measured vx/vy anchor. Below the
+        # contract's moving-heading threshold, tiny drift must not rotate the
+        # vehicle OBB. Preserve the velocity/acceleration vectors unmodified;
+        # only heading carries the last valid heading (or actual anchor yaw).
+        moving = np.linalg.norm(velocity, axis=-1) >= 0.01
         result = np.arctan2(velocity[:, 1], velocity[:, 0])
-        for i in np.flatnonzero(~moving):
-            result[i] = self.yaw(float(times[i]))
+        indices = np.flatnonzero(~moving)
+        if len(indices):
+            previous = times[indices, None] - np.arange(1, 32) * DT
+            past_velocity = self.evaluate(np.maximum(previous, self.start), 1)
+            valid = (previous >= self.start - 1e-9) & (
+                np.linalg.norm(past_velocity, axis=-1) >= 0.01
+            )
+            most_recent = np.argmax(valid, axis=1)
+            chosen = past_velocity[np.arange(len(indices)), most_recent]
+            result[indices] = np.where(
+                valid.any(axis=1),
+                np.arctan2(chosen[:, 1], chosen[:, 0]),
+                self.proposal.anchor_yaw,
+            )
         return result
 
 
@@ -309,8 +319,25 @@ def _scene_checks(poses, route, objects, elapsed):
     return reasons
 
 
-def check_trajectory(trajectory, ego, route, objects, memory, tick):
-    objects = SceneObjects(objects)
+def _following_order(poses, route, target, elapsed):
+    """Keep the ego's physical front behind the bound target's physical rear.
+
+    Desired time-gap is a reward target, not a hard acceptance threshold.
+    Project actual OBB corners so lateral offset/yaw cannot conceal passing.
+    The common collision test independently retains its preventive margin.
+    """
+    ego_boxes = np.array([box(p.position, p.yaw, p.length, p.width) for p in poses])
+    target_boxes = (
+        box(target.position, target.yaw, target.length, target.width)[None]
+        + np.asarray(elapsed)[:, None, None] * target.velocity
+    )
+    ego_s = route.project_many(ego_boxes.reshape(-1, 2))[0].reshape(-1, 4)
+    target_s = route.project_many(target_boxes.reshape(-1, 2))[0].reshape(-1, 4)
+    return np.min(target_s, axis=1) >= np.max(ego_s, axis=1)
+
+
+def _reference_kinematics(trajectory, tick, max_other_speed=0.0):
+    """Shared production sampling/extrema/kinematics, also used by sampler gates."""
     now = tick * DT
     if now + DT > trajectory.end + 1e-9:
         return CheckResult(False, "OLD_PLAN_EXPIRED")
@@ -335,7 +362,7 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
     max_speed = max(
         15.0, float(np.linalg.norm(trajectory.evaluate(probe, 1), axis=-1).max())
     )
-    max_other = objects.max_speed
+    max_other = max_other_speed
     interval = min(
         0.02,
         0.1 / max(max_speed + max_other, 1),
@@ -386,6 +413,16 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
     )
     if violations:
         return CheckResult(False, "KINEMATIC_LIMIT", len(times), violations=violations)
+    return times, interval, position, v, speed
+
+
+def check_trajectory(trajectory, ego, route, objects, memory, tick, follow_target=None):
+    objects = SceneObjects(objects)
+    reference = _reference_kinematics(trajectory, tick, objects.max_speed)
+    if isinstance(reference, CheckResult):
+        return reference
+    times, interval, position, v, speed = reference
+    now = tick * DT
     route_s, _, tangents = route.project_many(position)
     limits = route.speed_limits_at(route_s)
     poses = [
@@ -393,6 +430,11 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
         for p, velocity, yaw in zip(position, v, trajectory.yaws(times))
     ]
     reasons = _scene_checks(poses, route, objects, times - now)
+    following = (
+        _following_order(poses, route, follow_target, times - now)
+        if follow_target is not None
+        else None
+    )
     for index, (velocity, s) in enumerate(zip(v, speed)):
         if s > min(limits[index], 15) + 1e-6:
             return CheckResult(
@@ -405,6 +447,13 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
         reason = reasons[index]
         if reason:
             return CheckResult(False, reason, len(times))
+        if following is not None and not following[index]:
+            return CheckResult(
+                False,
+                "COMMAND_VIOLATION",
+                len(times),
+                violations=("follow_overtaking",),
+            )
     # Virtual PD uses private memory and the same discrete dynamics as Waymax.
     virtual, virtual_memory = ego, memory
     max_position_error = max_speed_error = 0.0
@@ -445,6 +494,11 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
         route_s, _, _ = route.project_many(np.array([p.position for p in points]))
         limits = route.speed_limits_at(route_s)
         reasons = _scene_checks(points, route, objects, sample_times - now)
+        following = (
+            _following_order(points, route, follow_target, sample_times - now)
+            if follow_target is not None
+            else None
+        )
         for index, point in enumerate(points):
             if point.speed > min(15.0, limits[index]) + 1e-6:
                 return CheckResult(
@@ -479,6 +533,15 @@ def check_trajectory(trajectory, ego, route, objects, memory, tick):
             if reason:
                 return CheckResult(
                     False, reason, len(times), max_position_error, max_speed_error
+                )
+            if following is not None and not following[index]:
+                return CheckResult(
+                    False,
+                    "COMMAND_VIOLATION",
+                    len(times),
+                    max_position_error,
+                    max_speed_error,
+                    ("virtual_follow_overtaking",),
                 )
         virtual = advance(virtual, control.acceleration_mps2, control.curvature_per_m)
     return CheckResult(True, "OK", len(times), max_position_error, max_speed_error)

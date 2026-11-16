@@ -5,7 +5,7 @@ its velocities/accelerations, goes through the common production boundary.
 Only that boundary decides BC eligibility. This is not the original ASMC.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import numpy as np
 
 from src.contracts.planning import ContractError, Maneuver
@@ -144,7 +144,7 @@ class FrenetTeacher:
     polygon and all acceptance checks remain authoritative. No output repair.
     """
 
-    version = "frenet-vector-anchor-c2-map-comfort-v3"
+    version = "frenet-vector-anchor-c2-map-low-speed-v4"
 
     def __init__(self):
         self._route = None
@@ -240,6 +240,18 @@ class FrenetTeacher:
             if draft.maneuver == Maneuver.KEEP
             else generate_follow_or_merge_candidate
         )
+        # Centering a lateral offset at near-zero speed can demand unbounded
+        # curvature. Keep the current within-lane offset while below 2 m/s.
+        # A near-stationary teacher can hold; KEEP/FOLLOW command identity and
+        # desired-speed/gap reward remain unchanged. This is not goal success.
+        lateral_offset = anchor.d if ego.speed < 2.0 else 0.0
+        stationary_hold = (
+            ego.speed <= 0.001 and np.linalg.norm(ego.acceleration) <= 0.01
+        )
+        if lateral_offset:
+            anchor = replace(anchor, d=0.0)
+        if stationary_hold:
+            desired = 0.0
         # Central knot derivatives amplify the original polynomial's jerk.
         # A conservative *teacher generation* limit avoids an abrupt cruise
         # speed jump; the common acceptance limits remain 6 m/s² / 20 m/s³.
@@ -254,7 +266,7 @@ class FrenetTeacher:
                 "teacher candidate exceeds measured route; no extrapolation"
             )
         r, _, _, n, _, _ = self.frame(path.s)
-        xy = r + path.d[:, None] * n
+        xy = r + (path.d + lateral_offset)[:, None] * n
         proposal = e.proposal_from_world(xy[1:], token, model_version=self.version)
         from dataclasses import asdict
 
@@ -266,6 +278,8 @@ class FrenetTeacher:
                 initial_frenet=asdict(anchor),
                 terminal_speed=asdict(terminal),
                 generation_acceleration_limit=generation_acceleration,
+                low_speed_lateral_offset=lateral_offset,
+                stationary_hold_candidate=bool(stationary_hold),
                 anchor_position_error_m=float(np.linalg.norm(xy[0] - ego.position)),
                 reference="C2 interpolant of current map; unchanged measured corridor",
             ),

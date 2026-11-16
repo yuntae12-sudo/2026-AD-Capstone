@@ -6,10 +6,11 @@ import importlib.metadata
 import json
 import platform
 import resource
+import shutil
 from pathlib import Path
 import time
 import numpy as np
-from .checkpoint import file_hash, save_checkpoint
+from .checkpoint import file_hash, save_checkpoint, load_checkpoint
 from .collector import collect_step
 from .learner import initialize, bc_update
 from .policy import tensor_observation
@@ -48,6 +49,7 @@ def versions(manifest):
     return dict(
         schema=3,
         basis="1.2",
+        follow_gap_semantics="reward_target_with_hard_physical_obb_order_v1",
         basis_sha256="10b2a882e5dfb3f31b4b300793a67a3d10aa19886421a3782e7b9a58394b4a64",
         python=platform.python_version(),
         dependencies={
@@ -99,14 +101,77 @@ def selected_scenes(manifest, split):
     return selected
 
 
-def collect_teacher(manifest, output, seed=0, target=20000, smoke=False):
+def save_collection_boundary(output, replay, report, rng, order, next_index, cycles):
+    """Atomically retain two episode-boundary recovery points."""
+    path = output / "recovery" / f"boundary-{len(report['episodes']):06d}"
+    trace = output / "ticks.jsonl"
+    state = dict(
+        phase="TEACHER_COLLECTION",
+        report=report,
+        rng=rng.bit_generator.state,
+        order=order,
+        next_index=next_index,
+        cycles=cycles,
+        trace_bytes=trace.stat().st_size if trace.exists() else 0,
+    )
+    save_checkpoint(path, {}, replay, replay.versions, state, episode_boundary=True)
+    write_report(
+        output / "latest_recovery.json", dict(path=str(path.relative_to(output)))
+    )
+    for old in sorted(path.parent.glob("boundary-*"))[:-2]:
+        shutil.rmtree(old)
+
+
+def restore_collection_boundary(output, version):
+    pointer = json.loads((output / "latest_recovery.json").read_text())
+    path = (output / pointer["path"]).resolve()
+    if not path.is_relative_to((output / "recovery").resolve()):
+        raise ValueError("invalid recovery path")
+    _, replay, state = load_checkpoint(path, {}, version)
+    if state["phase"] != "TEACHER_COLLECTION":
+        raise ValueError("not a collection recovery point")
+    trace = output / "ticks.jsonl"
+    committed = state["trace_bytes"]
+    if trace.exists():
+        if trace.stat().st_size < committed:
+            raise ValueError("committed trace is incomplete")
+        if trace.stat().st_size > committed:
+            # Preserve interrupted work for diagnosis, but keep the main trace
+            # aligned with the replay that is actually resumed.
+            archive = output / f"uncheckpointed-{time.time_ns()}.jsonl"
+            with trace.open("rb") as source, archive.open("wb") as destination:
+                source.seek(committed)
+                shutil.copyfileobj(source, destination)
+            with trace.open("r+b") as stream:
+                stream.truncate(committed)
+    elif committed:
+        raise ValueError("committed trace is missing")
+    rng = np.random.default_rng()
+    rng.bit_generator.state = state["rng"]
+    return replay, state, rng
+
+
+def collect_teacher(manifest, output, seed=0, target=20000, smoke=False, resume=False):
     if not 0 < target <= 50000:
         raise ValueError("target must fit replay capacity")
     output = Path(output)
-    if output.exists():
+    if output.exists() and not resume:
         raise FileExistsError("fresh output required; no accidental overwrite")
-    output.mkdir(parents=True)
+    if resume and smoke:
+        raise ValueError("smoke batch boundaries are not resumable episode checkpoints")
+    output.mkdir(parents=True, exist_ok=resume)
     version = versions(manifest)
+    if resume and (output / "report.json").exists():
+        finished = json.loads((output / "report.json").read_text())
+        if finished.get("status") == "COMPLETE" and finished.get("qualified"):
+            if (
+                finished["versions"] != version
+                or finished["target"] != target
+                or finished["seed"] != seed
+                or file_hash(output / "replay.npz") != finished["replay_sha256"]
+            ):
+                raise ValueError("completed collection provenance mismatch")
+            return finished
     replay = Replay(50000, seed=seed, versions=version)
     candidates = selected_scenes(manifest, "train")
     rng = np.random.default_rng(seed)
@@ -125,10 +190,28 @@ def collect_teacher(manifest, output, seed=0, target=20000, smoke=False):
     started = time.perf_counter()
     teacher = FrenetTeacher()
     cycles = 0
+    order = None
+    next_index = 0
+    elapsed_before = 0.0
+    if resume:
+        replay, state, rng = restore_collection_boundary(output, version)
+        report = state["report"]
+        if report["seed"] != seed or report["target"] != target:
+            raise ValueError("resume seed/target mismatch")
+        cycles, order, next_index = state["cycles"], state["order"], state["next_index"]
+        elapsed_before = report.get("elapsed_s", 0.0)
+        report.update(status="RUNNING", qualified=False)
+    checkpoint_at = replay.size + 1000
+    write_report(output / "report.json", report)
     try:
         while replay.size < target:
             cycle_start = replay.size
-            for index in rng.permutation(len(candidates)):
+            if order is None:
+                order = rng.permutation(len(candidates)).tolist()
+                next_index = 0
+            from_cycle_start = next_index == 0
+            for position in range(next_index, len(order)):
+                index = order[position]
                 row, path = candidates[index]
                 episode = dict(
                     scene_id=row["scene_id"],
@@ -217,7 +300,7 @@ def collect_teacher(manifest, output, seed=0, target=20000, smoke=False):
                     accepted_teacher=int(
                         replay.arrays["teacher_accepted"][: replay.size].sum()
                     ),
-                    elapsed_s=time.perf_counter() - started,
+                    elapsed_s=elapsed_before + time.perf_counter() - started,
                 )
                 write_report(output / "report.json", report)
                 print(
@@ -230,12 +313,24 @@ def collect_teacher(manifest, output, seed=0, target=20000, smoke=False):
                     ),
                     flush=True,
                 )
+                next_index = position + 1
+                if not smoke and (
+                    not (output / "latest_recovery.json").exists()
+                    or replay.size >= checkpoint_at
+                    or replay.size >= target
+                ):
+                    save_collection_boundary(
+                        output, replay, report, rng, order, next_index, cycles
+                    )
+                    checkpoint_at = replay.size + 1000
                 if replay.size >= target:
                     break
                 if smoke and len(report["episodes"]) >= 4:
                     break
             cycles += 1
-            if smoke or replay.size == cycle_start:
+            order = None
+            next_index = 0
+            if smoke or (replay.size == cycle_start and from_cycle_start):
                 break
             if report["accepted_teacher"] == 0:
                 raise RuntimeError("no accepted teacher paths after a full train pass")
@@ -256,7 +351,7 @@ def collect_teacher(manifest, output, seed=0, target=20000, smoke=False):
         )
         raise
     finally:
-        report["elapsed_s"] = time.perf_counter() - started
+        report["elapsed_s"] = elapsed_before + time.perf_counter() - started
         write_report(output / "report.json", report)
     return report
 

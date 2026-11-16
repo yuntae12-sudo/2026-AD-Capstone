@@ -20,6 +20,11 @@ def main():
     parser.add_argument("--data", type=Path)
     parser.add_argument("--seed", type=int, choices=(0, 1, 2), default=0)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="resume collection at its last saved episode boundary",
+    )
     args = parser.parse_args()
     import tensorflow as tf
 
@@ -33,8 +38,11 @@ def main():
             args.seed,
             target=20 if args.smoke else 20000,
             smoke=args.smoke,
+            resume=args.resume,
         )
     else:
+        if args.resume:
+            parser.error("--resume is supported only for collect")
         if args.data is None:
             parser.error("bc requires --data collection directory")
         train_bc(

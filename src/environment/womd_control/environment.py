@@ -48,6 +48,7 @@ from .control import (
     pd_control,
     TrackingError,
     tracking_error,
+    _following_order,
 )
 from .geometry import ResetRejected, box, build_route, overlaps, project, wrap
 from .observation import build_observation
@@ -652,11 +653,9 @@ class SACPlanningEnvironment:
 
     def _check(self, trajectory, objects):
         ego = self.ego
-        check = check_trajectory(
-            trajectory, ego, self.route, objects, self.memory, self.tick
-        )
         # FOLLOW must respect its original target; the target is never rebound.
-        if check.valid and self.command.draft.maneuver == Maneuver.FOLLOW:
+        target = None
+        if self.command.draft.maneuver == Maneuver.FOLLOW:
             target = self._objects().get(self.command.draft.target_agent_id)
             if target is None and self.target_estimated:
                 target = replace(
@@ -667,23 +666,16 @@ class SACPlanningEnvironment:
                     * DT,
                 )
             if target is None:
-                check = CheckResult(False, "MISSING_TARGET")
-            else:
-                for tau in np.arange(0, trajectory.end - self.tick * DT + 1e-8, 0.1):
-                    position = trajectory.evaluate(self.tick * DT + tau)
-                    s = project(self.route.center, position)[0]
-                    target_s = project(
-                        self.route.center, target.position + target.velocity * tau
-                    )[0]
-                    speed = np.linalg.norm(trajectory.evaluate(self.tick * DT + tau, 1))
-                    if (
-                        target_s - s - (ego.length + target.length) / 2
-                        < self.command.draft.minimum_gap_m
-                        + self.command.draft.time_gap_s * speed
-                    ):
-                        check = CheckResult(False, "COMMAND_VIOLATION")
-                        break
-        return check
+                return CheckResult(False, "MISSING_TARGET")
+        return check_trajectory(
+            trajectory,
+            ego,
+            self.route,
+            objects,
+            self.memory,
+            self.tick,
+            follow_target=target,
+        )
 
     def _braking_trajectory(self):
         # New candidate from current actual state. The old plan's age is never
@@ -799,6 +791,18 @@ class SACPlanningEnvironment:
             if failure != TerminalReason.DATA_CORRUPTION
             else False
         )
+        if (
+            failure != TerminalReason.DATA_CORRUPTION
+            and executed.draft.maneuver == Maneuver.FOLLOW
+        ):
+            measured_target = self._objects().get(executed.draft.target_agent_id)
+            if (
+                measured_target is not None
+                and not _following_order(
+                    [self.ego], self.route, measured_target, np.array([0.0])
+                )[0]
+            ):
+                self._actual_events += ("FOLLOW_OVERTAKING",)
         s = (
             self.route.start_s + (self.feedback.progress or 0.0)
             if failure == TerminalReason.DATA_CORRUPTION

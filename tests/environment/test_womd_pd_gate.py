@@ -67,3 +67,25 @@ def test_endpoint_only_stop_reversal_is_not_a_valid_reference():
     trajectory = Trajectory(e.proposal_from_world(xy, e.token))
     assert trajectory.evaluate(3.0, 1)[0] < -0.01
     assert not e._check(trajectory, e._check_objects()).valid
+
+
+def test_near_stationary_drift_does_not_replace_measured_body_heading():
+    proto = scene()
+    for state in proto.tracks[0].states:
+        state.center_x = 2.0
+        state.velocity_x = 0.0003
+        state.velocity_y = 0.0002
+        state.heading = 0.0
+    e = SACPlanningEnvironment()
+    e.reset(proto)
+    proposal = e.proposal_from_world(
+        np.repeat(e.ego.position[None], 30, axis=0), e.token
+    )
+    trajectory = Trajectory(proposal)
+    # Initial drift is retained, not clipped to zero or aligned to yaw.
+    np.testing.assert_array_equal(trajectory.evaluate(0.0, 1), e.ego.velocity)
+    np.testing.assert_array_equal(
+        trajectory.yaws(np.array([0.0, 0.02, 0.1, 1.0, 3.0])), np.zeros(5)
+    )
+    check = e._check(trajectory, e._check_objects())
+    assert check.valid, check

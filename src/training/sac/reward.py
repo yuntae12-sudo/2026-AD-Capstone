@@ -166,5 +166,6 @@ def reward_after_step(environment, result, before, previous, before_progress):
         source=result.source,
         terminal_reason=result.terminal_reason,
         flags=getattr(result, "event_flags", ()),
-        command_violation=result.check_result.reason == "COMMAND_VIOLATION",
+        command_violation=result.check_result.reason == "COMMAND_VIOLATION"
+        or "FOLLOW_OVERTAKING" in result.event_flags,
     )

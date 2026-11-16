@@ -50,4 +50,5 @@ JAX_PLATFORMS=cpu python scripts/validate_pd_fixed_paths.py \
 학습 연결 회귀의 집계는 해당 학습 기능 브랜치에 별도로 남긴다.
 
 FOLLOW의 목표 간격을 hard rejection으로 사용할지에 관한 해석은 이번 보완에서 바꾸지 않았다.
-이 미확정 사항은 학습 수락 gate에 영향을 준다.
+이후 학습 기능 브랜치에서는 사용자가 목표 간격은 보상, 충돌·추월은 hard 검사로 승인했다.
+후속 구현과 검증은 [SAC 진행 기록](sac-development-progress.md)에 누적한다.

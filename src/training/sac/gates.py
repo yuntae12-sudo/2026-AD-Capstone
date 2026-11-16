@@ -105,6 +105,7 @@ def require_training_gate(report, versions, checkpoint_sha256):
         raise ValueError("missing initial/max-sigma synthetic cases")
     if any(
         r["samples"] != 4096
+        or not r.get("mean_valid", False)
         or not 0 <= r["accepted"] <= 4096
         or r["accepted"] / r["samples"] < 0.95
         for r in synthetic
