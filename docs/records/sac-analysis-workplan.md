@@ -8,7 +8,7 @@
    - 제안 경로의 거절 이유, 선택된 제어 경로, 제동 시점과 종료 상태를 구분한다.
    - 같은 장면·행동·초기 상태의 Rule-based / 순수 SAC를 나란히 비교한다.
    - 학습 전 checkpoint는 UNTRAINED로 표시한다. 성공 장면만 골라 성능 증거로 삼지 않는다.
-2. **실패 분석 보고서 — 다음 작업**
+2. **실패 분석 보고서 — 초기 버전 완료, 실제 로그 적용 완료**
    - 충돌 전 연속 거절·제동 이력과 충돌 객체의 상대 위치로 원인을 구분한다.
    - KEEP/FOLLOW·초기 속도 구간별 결과를 집계한다.
    - 보상 상승과 함께 정지 비중이 늘어나는지 확인한다.
@@ -61,3 +61,48 @@ EMERGENCY 제동에는 추종 경로가 없으므로 황색 경로를 만들어 
   `outputs/waymax_gif_20261117/{keep-initial,follow-initial}/`에 보존한다.
   최초 FOLLOW 캡처 프로세스는 SIGTERM(exit143)으로 종료되어 중단 자료를 별도 보존했고,
   재실행으로 두 정책의 전체 기록과 GIF 생성을 완료했다. 학습 프로세스는 계속 실행됐다.
+
+## 실패 분석 실행
+
+```bash
+python scripts/analyze_sac_failures.py \
+  --run <experiment/online-seed0> \
+  --manifest <inventory/eligible_manifest_reset_v2.json> \
+  --output <new-report-directory> --replay-collisions 2
+```
+
+이 명령은 요청할 때 현재 로그를 동결해 분석한다. 진행 중인 학습 감독 실행기에 자동 연결하지
+않았으며, 이후 결과 갱신 시 새 출력 디렉터리로 실행한다. `--replay-collisions 0`은 전체 통계와
+평가 추이만 만들고 상대 차량 판정을 생략한다. 전체 통계는 정상 종료한 모든 episode를 포함하고,
+재현 사례는 행동별 최초 충돌, 새 행동·초기속도 구간, 시간순으로 사전 지정한 규칙에 따라 고른다.
+
+출력은 `report.md`, `analysis.json`, `metrics.png`, 재현 시 `collision-timelines.png`,
+동결한 `trace.snapshot.jsonl`과 `run.snapshot.json`이다. 원본 로그의 완전한 줄만 고정하며
+진행 중 episode와 손상 episode를 성능 분모에 넣지 않는다. 그 수는 별도로 보고한다.
+현재 온라인 trace에는 terminal 직후 상태가 없으므로 다음 tick의 측정 앵커와 대조 가능한
+episode 집계로 정지 비중을 계산하고, 빠진 상태는 관측 커버리지에 표시한다.
+
+재현에는 저장된 raw 경로를 사용한다. 제어·경로 검사·종료 사건·보상과 다음 tick 앵커를 대조하고,
+실패하면 상대 차량 판정을 거절한다. 충돌 상대는 마지막 상태에서 실제 차량 OBB 중첩으로
+찾는다. 상대 종/횡방향 위치, 차량 속도, 상대 종방향 속도와 접근 방향을 기록한다.
+이는 충돌 전 과정의 관측이며 인과관계·책임·회피 불가능성을 판정하지 않는다.
+
+학습 중 탐색 보상의 시계열을 정책 성능 추이로 쓰지 않는다. 동일 seed/runtime·장면 집합의
+완료된 결정적 validation 평가가2개 이상 있을 때만 KEEP/FOLLOW별 보상 증가와 정지 비중
+동시 증가를 표시한다. 이 표시는 검토 신호이며 자동으로 reward hacking을 판정하지 않는다.
+
+### 2026-11-17 첫 실제 보고서
+
+- `outputs/sac_failure_report_20261117/report.md`: 업데이트0인 WARMUP 스냅샷.
+  유효 전이2,827개, 완료30episode/진행 중1episode, 완료 episode의27개 고유 장면.
+- 완료30개 결과: COLLISION19, ROUTE_GOAL2, RECORD_END8, TASK_LOST1.
+  경로 거절34.42%, BRAKE/EMERGENCY32.33%, 실제 post-step 정지75.28%.
+  이 수치는 학습 전 탐색 결과이며 최종 SAC/validation 성능이 아니다.
+- KEEP 최초 충돌29tick, FOLLOW 최초 충돌63tick을 실제 CPU Waymax로 재현했다.
+  모든 제어·검사·사건·보상과 각각28/62개의 후속 앵커를 대조했다.
+  두 사례 모두 제동 후 정지한 자차에 뒤쪽 로그 차량이 접근해 접촉했다.
+  상대 차량 속도는 종료 시 각각3.30m/s,7.52m/s였다. 전체19개 충돌로 일반화하지 않는다.
+- 완료된 validation 평가가 아직2개 없어 보상/정지 변화 판단은 보류했다.
+- 회귀7개 통과: live partial-line 스냅샷, 실제 post-state 분모·커버리지, 미완료/손상 제외,
+  속도·warmup 경계, 사례 선정, trace 연속성, validation 짝 대조, 저장 경로 실제 재현과
+  제어 불일치 거절을 확인했다. 두 그래프를 직접 열어 확인했다.

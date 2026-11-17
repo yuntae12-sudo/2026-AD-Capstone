@@ -9,6 +9,8 @@
 학습 중 병행할 [시각화 → 실패 분석 → 평가 기준 정리 작업 목록](sac-analysis-workplan.md)을
 별도 기록한다. 시각화는 저장된 checkpoint로 독립적인 CPU Waymax rollout을 만들며,
 실행 중인 고정 학습 worktree와 replay를 수정하지 않는다.
+실패 분석 보고서의 초기 버전도 실제 WARMUP 로그에 적용했고, KEEP/FOLLOW 대표 충돌을
+저장 경로로 재현해 확인했다. 세부 수치·실행 명령·판정 한계는 위 작업 목록에 기록한다.
 
 ## 2026-11-17 실험 변경 시점의 상태
 
