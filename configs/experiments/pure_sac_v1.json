@@ -1,0 +1,21 @@
+{
+  "id": "rule_based_vs_pure_sac_v1",
+  "approved_date": "2026-11-17",
+  "comparison": ["teacher", "PURE_SAC"],
+  "rule_based_implementation": "FrenetTeacher",
+  "initialization": "fresh_actor_and_critics",
+  "bc_updates": 0,
+  "teacher_replay_transitions": 0,
+  "warmup_transitions": 5000,
+  "warmup_policy": "untrained_actor_stochastic_samples",
+  "updates_per_post_warmup_transition": 1,
+  "initial_total_transitions_per_seed": 15000,
+  "seeds": [0, 1, 2],
+  "prelearning_gate": "synthetic_kinematics_18_pairs_4096_each_95_percent",
+  "bc_acceptance_gate_required": false,
+  "execution_checker": "unchanged",
+  "controller": "shared_PD",
+  "evaluation_policy": "deterministic_mean",
+  "evaluation_split": "validation",
+  "test_split": "held_out"
+}

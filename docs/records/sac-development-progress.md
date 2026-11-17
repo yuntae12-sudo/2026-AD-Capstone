@@ -1,10 +1,28 @@
 # SAC 개발 진행 기록
 
-사용자 요청 범위: 환경 보완 → teacher/보상/collector/replay → 규약 SAC/BC → gate 통과 후 학습·비교 평가.
+현재 사용자 요청 범위: **Rule-based 경로 생성 vs 순수 SAC 경로 생성 비교**.
+2026-11-17 결정에 따른 [실험 개정](../architecture/rule-based-vs-pure-sac.md)이
+아래 과거 기록의 BC 필수 선행 조건보다 우선한다. 기존 BC 산출물은 보조 실험으로 보존한다.
 기준은 v1.2/schema3이며 원본 해시는 [착수 점검](sac-readiness-20261116.md)에 기록되어 있다.
 구현·규약 대조·회귀·실제 실행·실패 분석을 반복하며, loss 감소를 정책 성공으로 판정하지 않는다.
 
-## 현재 상태
+## 2026-11-17 실험 변경 시점의 상태
+
+- 이전 teacher 수집20,082전이, accepted16,113개, BC seed0 5,000회 학습까지 완료했다.
+- BC validation 평균 경로 통과율은 KEEP14.87%, FOLLOW29.98%로 gate 실패했다.
+  BC seed1/2 및 BC 기반 온라인 SAC는 시작하지 않았다.
+- Rule-based validation16episode는 목표7·충돌8·TASK_LOST1이었다. 기록된 코드·manifest가
+  같은 경우만 순수 SAC 주 실험의 baseline으로 재사용한다.
+- 순수 SAC 실행기는 빈 replay/새 learner에서 시작하고 BC 자료를 불러오지 않는다.
+  warmup5,000개 뒤 업데이트를 시작하며, 비교 보고서는 Rule-based vs PURE_SAC를 요구한다.
+  코드 구현·검증과 장시간 학습 완료를 구별한다. 실제 상태는 각 job/report를 확인한다.
+- 전환 검증: 관련 CPU 테스트25개 통과, 추가 보완을 포함한 순수 SAC 규약 테스트8개를
+  GPU 환경에서도 통과했다. 초기 actor의 유한 SAC 업데이트를 확인했으나 작은 합성 batch의
+  test-only 수식 검증이며 실제5,000전이 이후의 본학습을 대신하지 않는다.
+  기존 합성73,728표본 및 Rule-based16episode의 runtime·manifest·전체 coverage를 대조했고
+  현재 core code hash가 같음을 확인했다. 물리 검사/PD/학습 수식 소스는 이번 전환에서 바꾸지 않았다.
+
+## 이전 개발 착수 시점의 기록
 
 | 단계 | 현재 증거 | 남은 작업 |
 |---|---|---|

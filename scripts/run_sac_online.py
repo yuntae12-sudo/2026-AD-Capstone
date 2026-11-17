@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed BC-to-SAC experiment: one update per actual valid transition.
+"""SAC experiment with explicit pure-SAC or auxiliary BC-SAC initialization.
 
 CPU Waymax and GPU learner coexist with explicit device contexts. Validation
 never enters replay. Recovery saves only at episode boundaries, every ~1000
@@ -24,14 +24,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("manifest", "bc", "gate", "synthetic", "output"):
+    for name in ("manifest", "synthetic", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--mode", choices=("pure-sac", "bc-sac"), default="pure-sac")
+    for name in ("bc", "gate"):
+        parser.add_argument("--" + name, type=Path)
     parser.add_argument("--seed", type=int, choices=(0, 1, 2), required=True)
-    parser.add_argument("--transitions", type=int, default=10000)
+    parser.add_argument("--transitions", type=int)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
-    if args.transitions < 10000 or args.transitions % 5000:
-        parser.error("experiment budget must be >=10000 and a multiple of5000")
+    pure = args.mode == "pure-sac"
+    if pure and (args.bc is not None or args.gate is not None):
+        parser.error("pure SAC forbids BC checkpoint and BC gate inputs")
+    if not pure and (args.bc is None or args.gate is None):
+        parser.error("auxiliary BC-SAC requires --bc and --gate")
+    minimum = 15000 if pure else 10000
+    if args.transitions is None:
+        args.transitions = minimum
+    if args.transitions < minimum or args.transitions % 5000:
+        parser.error(f"experiment budget must be >={minimum} and a multiple of5000")
     import tensorflow as tf
 
     tf.config.set_visible_devices([], "GPU")
@@ -45,6 +56,14 @@ def main():
     from src.training.sac.checkpoint import save_checkpoint, load_checkpoint, file_hash
     from src.training.sac.collector import collect_step
     from src.training.sac.learner import update
+    from scripts.pure_sac_protocol import (
+        WARMUP,
+        expected_updates,
+        protocol_metadata,
+        require_synthetic_report,
+        validate_pure_state,
+        pure_update,
+    )
     from scripts.sac_experiment_runtime import (
         require_bc_checkpoint,
         load_model,
@@ -55,9 +74,17 @@ def main():
         checkpoint_metadata,
     )
 
-    version, bc_meta = require_bc_checkpoint(
-        args.bc, args.gate, args.synthetic, args.manifest, args.seed
-    )
+    if pure:
+        version = versions(args.manifest)
+        require_synthetic_report(
+            json.loads(args.synthetic.read_text()),
+            version,
+            file_hash(Path(__file__).with_name("validate_sac_exploration.py")),
+        )
+    else:
+        version, _ = require_bc_checkpoint(
+            args.bc, args.gate, args.synthetic, args.manifest, args.seed
+        )
     runner = runner_hash()
     if args.output.exists() and not args.resume:
         raise FileExistsError(args.output)
@@ -68,25 +95,41 @@ def main():
     learner_device = jax.devices()[0]
     if learner_device.platform != "gpu":
         raise ValueError("online experiment requires GPU learner and CPU simulator")
-    gate_devices = json.loads(args.gate.read_text()).get("devices", {})
-    if gate_devices != dict(simulator=str(cpu), inference=str(learner_device)):
-        raise ValueError("BC gate and online execution must use the same devices")
+    if not pure:
+        gate_devices = json.loads(args.gate.read_text()).get("devices", {})
+        if gate_devices != dict(simulator=str(cpu), inference=str(learner_device)):
+            raise ValueError("BC gate and online execution must use the same devices")
     trace = args.output / "ticks.jsonl"
     metrics_trace = args.output / "updates.jsonl"
     candidates = selected_scenes(args.manifest, "train")
     rng = np.random.default_rng(args.seed)
     order, cursor, cycles = None, 0, 0
     with jax.default_device(learner_device):
-        state, _ = load_model(args.bc, version, args.seed)
-        # Loading replay is required for online SAC; inference-only runs avoid it.
-        state, replay, _ = load_checkpoint(args.bc, state, version)
+        if pure:
+            from src.contracts.observation import CoreObservation
+            from src.training.sac.policy import tensor_observation
+            from src.training.sac.learner import initialize
+            from src.training.sac.replay import Replay
+
+            state = initialize(tensor_observation(CoreObservation.empty()), args.seed)
+            replay = Replay(seed=args.seed, versions=version)
+            validate_pure_state(state, replay, 0)
+        else:
+            state, _ = load_model(args.bc, version, args.seed)
+            state, replay, _ = load_checkpoint(args.bc, state, version)
         state = jax.device_put(state, learner_device)
-    if int(state.updates) != 0 or int(state.bc_updates) < 5000 or replay.size < 20000:
+    if not pure and (
+        int(state.updates) != 0 or int(state.bc_updates) < 5000 or replay.size < 20000
+    ):
         raise ValueError("BC checkpoint counters/replay invalid")
     policy, proposer = model_proposer(state.actor, args.seed, False, learner_device)
     report = dict(
         status="RUNNING",
         phase="ONLINE_SAC",
+        training_mode=args.mode,
+        protocol=protocol_metadata() if pure else None,
+        initial_replay_size=replay.size,
+        warmup_transitions=WARMUP if pure else 0,
         seed=args.seed,
         versions=version,
         runner_sha256=runner,
@@ -96,8 +139,9 @@ def main():
         alpha_bound_updates=0,
         episodes=[],
         evaluations=[],
-        bc_checkpoint_sha256=file_hash(args.bc / "manifest.json"),
-        gate_sha256=file_hash(args.gate),
+        bc_checkpoint_sha256=file_hash(args.bc / "manifest.json") if args.bc else None,
+        gate_sha256=file_hash(args.gate) if args.gate else None,
+        synthetic_sha256=file_hash(args.synthetic),
         elapsed_s=0.0,
         group_status="scenario_fallback_overlap_unverified",
         devices=dict(simulator=str(cpu), learner=str(learner_device)),
@@ -109,7 +153,7 @@ def main():
         if not checkpoint.is_relative_to(args.output.resolve()):
             raise ValueError("invalid recovery path")
         checkpoint_metadata(checkpoint, version)
-        # Free the BC replay before restoring the populated online replay.
+        # Free the initial replay before restoring the populated online replay.
         del replay
         with jax.default_device(learner_device):
             state, replay, run = load_checkpoint(checkpoint, state, version)
@@ -121,15 +165,23 @@ def main():
             "seed",
             "bc_checkpoint_sha256",
             "gate_sha256",
+            "training_mode",
+            "protocol",
+            "initial_replay_size",
+            "warmup_transitions",
+            "synthetic_sha256",
         ):
             if old_report[key] != report[key]:
                 raise ValueError(f"online resume mismatch: {key}")
-        if (
-            run["phase"] != "ONLINE_SAC"
-            or int(state.updates) != old_report["valid_online_transitions"]
+        if run["phase"] != "ONLINE_SAC" or int(state.updates) != (
+            expected_updates(old_report["valid_online_transitions"])
+            if pure
+            else old_report["valid_online_transitions"]
         ):
             raise ValueError("online recovery update/transition mismatch")
         report = old_report
+        if pure:
+            validate_pure_state(state, replay, report["valid_online_transitions"])
         rng.bit_generator.state = run["scene_rng"]
         order, cursor, cycles = run["order"], run["cursor"], run["cycles"]
         next_eval, next_checkpoint, next_recovery = (
@@ -149,6 +201,8 @@ def main():
     def save_boundary(path):
         if versions(args.manifest) != version or runner_hash() != runner:
             raise RuntimeError("runtime changed during online experiment")
+        if pure:
+            validate_pure_state(state, replay, report["valid_online_transitions"])
         report["elapsed_s"] = elapsed_before + time.monotonic() - started
         report["updates"] = int(state.updates)
         run = dict(
@@ -199,6 +253,9 @@ def main():
                     ticks=0,
                     valid_transitions=0,
                     accepted=0,
+                    stationary_ticks=0,
+                    reasons={},
+                    sources={},
                     return_training=0.0,
                     outcome=None,
                 )
@@ -210,6 +267,14 @@ def main():
                     r, b = step.result, step.boundary
                     episode["ticks"] += 1
                     episode["accepted"] += int(r.check_result.valid)
+                    episode["stationary_ticks"] += int(
+                        r.sample_valid and e.ego.speed < 0.1
+                    )
+                    for key, value in (
+                        ("reasons", r.check_result.reason),
+                        ("sources", r.source.value),
+                    ):
+                        episode[key][value] = episode[key].get(value, 0) + 1
                     episode["return_training"] += step.reward.training
                     with trace.open("a") as stream:
                         stream.write(
@@ -241,24 +306,32 @@ def main():
                             + "\n"
                         )
                     if step.transition is not None:
-                        with jax.default_device(learner_device):
-                            state, metrics = update(
-                                state, replay.sample(256), replay.size
-                            )
                         report["valid_online_transitions"] += 1
                         episode["valid_transitions"] += 1
-                        report["alpha_bound_updates"] += int(metrics["alpha_at_bound"])
-                        with metrics_trace.open("a") as stream:
-                            stream.write(
-                                json.dumps(
-                                    dict(
-                                        step=report["valid_online_transitions"],
-                                        **{k: float(v) for k, v in metrics.items()},
-                                    ),
-                                    allow_nan=False,
+                        with jax.default_device(learner_device):
+                            if pure:
+                                state, metrics = pure_update(
+                                    state, replay, report["valid_online_transitions"]
                                 )
-                                + "\n"
+                            else:
+                                state, metrics = update(
+                                    state, replay.sample(256), replay.size
+                                )
+                        if metrics is not None:
+                            report["alpha_bound_updates"] += int(
+                                metrics["alpha_at_bound"]
                             )
+                            with metrics_trace.open("a") as stream:
+                                stream.write(
+                                    json.dumps(
+                                        dict(
+                                            step=report["valid_online_transitions"],
+                                            **{k: float(v) for k, v in metrics.items()},
+                                        ),
+                                        allow_nan=False,
+                                    )
+                                    + "\n"
+                                )
                         if report["valid_online_transitions"] == next_eval:
                             _, deterministic = model_proposer(
                                 state.actor, args.seed, True, learner_device
@@ -276,7 +349,7 @@ def main():
                             result = evaluate(
                                 args.manifest,
                                 destination,
-                                f"SAC-{next_eval}",
+                                f"{'PURE_SAC' if pure else 'SAC'}-{next_eval}",
                                 deterministic,
                                 args.seed,
                                 cpu,
@@ -301,13 +374,14 @@ def main():
                 report.update(
                     updates=int(state.updates),
                     elapsed_s=elapsed_before + time.monotonic() - started,
-                    alpha_bound_fraction=report["alpha_bound_updates"] / max(count, 1),
+                    alpha_bound_fraction=report["alpha_bound_updates"]
+                    / max(int(state.updates), 1),
                     peak_process_rss_bytes=resource.getrusage(
                         resource.RUSAGE_SELF
                     ).ru_maxrss
                     * 1024,
                 )
-                if int(state.updates) != count:
+                if int(state.updates) != (expected_updates(count) if pure else count):
                     raise AssertionError("one-update-per-transition contract violated")
                 if count >= next_checkpoint or count >= args.transitions:
                     while next_checkpoint <= count:

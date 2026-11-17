@@ -19,8 +19,10 @@ def runner_hash():
         "sac_experiment_runtime.py",
         "run_sac_online.py",
         "evaluate_sac_models.py",
+        "pure_sac_protocol.py",
     ):
         digest.update(name.encode() + b"\0" + (root / name).read_bytes())
+    digest.update((root.parent / "configs/experiments/pure_sac_v1.json").read_bytes())
     return digest.hexdigest()
 
 
@@ -249,6 +251,7 @@ def evaluate(
     smoke=False,
     expected_version=None,
     checkpoint_sha256=None,
+    training_evidence=None,
 ):
     """All validation scene/provider pairs; inference never populates training replay."""
     import jax
@@ -271,6 +274,7 @@ def evaluate(
         policy=name,
         policy_sha256=policy_sha256,
         checkpoint_sha256=checkpoint_sha256,
+        training_evidence=training_evidence,
         seed=seed,
         episodes=[],
         group_status="scenario_fallback_overlap_unverified",

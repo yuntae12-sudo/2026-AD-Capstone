@@ -218,6 +218,8 @@ def main():
                 )
             if not completed:
                 params = [
+                    "--mode",
+                    "bc-sac",
                     "--manifest",
                     args.manifest,
                     "--bc",
