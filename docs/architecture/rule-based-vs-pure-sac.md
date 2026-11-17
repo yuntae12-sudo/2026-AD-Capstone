@@ -5,6 +5,10 @@
 명시적 실험 개정이다. 원본 기준서와 기존 BC 결과는 보존한다.
 기계 판독 설정은 [pure_sac_v1.json](../../configs/experiments/pure_sac_v1.json)이다.
 
+같은 날 Q 발산으로 [critic 안정화 개정](../records/sac-stability-20261117.md)을 추가했다.
+critic head LayerNorm, float64 gradient norm 계산, 전체 학습 상태 유한성 검사를 사용한다.
+기존 ReLU-only 실험과 구분하며 발산한 가중치를 새 실험에 가져오지 않는다.
+
 ## 비교 대상과 공통 조건
 
 | 항목 | Rule-based | 순수 SAC |

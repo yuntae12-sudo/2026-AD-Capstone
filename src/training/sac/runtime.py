@@ -49,6 +49,7 @@ def versions(manifest):
     return dict(
         schema=3,
         basis="1.2",
+        learner_stability="critic_head_layer_norm_float64_gradient_norm_v1",
         follow_gap_semantics="reward_target_with_hard_physical_obb_order_v1",
         basis_sha256="10b2a882e5dfb3f31b4b300793a67a3d10aa19886421a3782e7b9a58394b4a64",
         python=platform.python_version(),

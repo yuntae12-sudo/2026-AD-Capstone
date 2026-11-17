@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -21,6 +22,11 @@ def main():
         p.add_argument("--" + name, type=Path, required=True)
     p.add_argument("--transitions", type=int, default=15000)
     p.add_argument("--resume", action="store_true")
+    p.add_argument(
+        "--warmup-fork",
+        type=Path,
+        help="Explicit seed0 self-collected pre-update fork prepared by fork_sac_warmup.py",
+    )
     p.add_argument(
         "--baseline-report",
         type=Path,
@@ -54,6 +60,11 @@ def main():
         protocol=protocol_metadata(),
         budget_per_seed=args.transitions,
         phases={},
+        warmup_fork_sha256=(
+            hashlib.sha256((args.warmup_fork / "report.json").read_bytes()).hexdigest()
+            if args.warmup_fork
+            else None
+        ),
         baseline_report=(
             str(args.baseline_report.resolve()) if args.baseline_report else None
         ),
@@ -78,6 +89,7 @@ def main():
             "budget_per_seed",
             "baseline_report",
             "baseline_sha256",
+            "warmup_fork_sha256",
         ):
             if prior[key] != state[key]:
                 raise ValueError(f"pure experiment resume mismatch: {key}")
@@ -206,6 +218,8 @@ def main():
             reports = [evaluated("rule-based", "teacher", 0)]
         for seed in (0, 1, 2):
             online = args.output / f"online-seed{seed}"
+            if seed == 0 and args.warmup_fork and not online.exists():
+                shutil.copytree(args.warmup_fork, online)
             prior = (
                 json.loads((online / "report.json").read_text())
                 if (online / "report.json").exists()

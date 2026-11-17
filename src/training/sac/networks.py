@@ -98,6 +98,9 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
+    # Explicit stability amendment: normalize hidden critic features, not actions.
+    layer_norm: bool = True
+
     @nn.compact
     def __call__(self, observation, raw_u):
         x = Encoder()(observation)
@@ -105,7 +108,10 @@ class Critic(nn.Module):
         u = raw_u.astype(jnp.float32).reshape((*raw_u.shape[:-2], 60))
         x = jnp.concatenate([x, u], axis=-1)
         for _ in range(2):
-            x = nn.relu(nn.Dense(256, dtype=jnp.float32, param_dtype=jnp.float32)(x))
+            x = nn.Dense(256, dtype=jnp.float32, param_dtype=jnp.float32)(x)
+            if self.layer_norm:
+                x = nn.LayerNorm(dtype=jnp.float32, param_dtype=jnp.float32)(x)
+            x = nn.relu(x)
         return nn.Dense(1, dtype=jnp.float32, param_dtype=jnp.float32)(x)[..., 0]
 
 

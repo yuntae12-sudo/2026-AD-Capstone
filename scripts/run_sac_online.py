@@ -318,6 +318,7 @@ def main():
                                     state, replay.sample(256), replay.size
                                 )
                         if metrics is not None:
+                            report["updates"] = int(state.updates)
                             report["alpha_bound_updates"] += int(
                                 metrics["alpha_at_bound"]
                             )
@@ -418,7 +419,18 @@ def main():
         report.update(status="COMPLETE", qualified=True)
     except BaseException as exc:
         report.update(
-            status="ERROR", qualified=False, error=f"{type(exc).__name__}: {exc}"
+            status="ERROR",
+            qualified=False,
+            error=f"{type(exc).__name__}: {exc}",
+            updates=int(state.updates),
+            pending_update=(
+                int(state.updates)
+                < (
+                    expected_updates(report["valid_online_transitions"])
+                    if pure
+                    else report["valid_online_transitions"]
+                )
+            ),
         )
         raise
     finally:

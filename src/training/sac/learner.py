@@ -23,8 +23,33 @@ class LearnerState:
     bc_updates: int = 0
 
 
+def gradient_norm(tree):
+    """Accumulate squared float32 gradients in float64 before clipping."""
+    return jnp.sqrt(
+        sum(
+            jnp.sum(jnp.square(x.astype(jnp.float64)))
+            for x in jax.tree_util.tree_leaves(tree)
+        )
+    )
+
+
+def clip_gradients(max_norm=10.0):
+    def transform(updates, state, params=None):
+        del params
+        norm = gradient_norm(updates)
+        scale = jnp.minimum(1.0, max_norm / jnp.maximum(norm, 1e-300))
+        return (
+            jax.tree_util.tree_map(
+                lambda x: (x.astype(jnp.float64) * scale).astype(x.dtype), updates
+            ),
+            state,
+        )
+
+    return optax.GradientTransformation(optax.init_empty_state, transform)
+
+
 def optimizer():
-    return optax.chain(optax.clip_by_global_norm(10.0), optax.adam(3e-4))
+    return optax.chain(clip_gradients(10.0), optax.adam(3e-4))
 
 
 def initialize(observation, seed=0):
@@ -97,11 +122,16 @@ def _update(state, observation, raw_u, target, actor_key, next_rng):
         # Differentiate only actor params, while preserving dQ/du.
         qa = q1.apply_fn({"params": q1.params}, observation, u)
         qb = q2.apply_fn({"params": q2.params}, observation, u)
-        return jnp.mean(jnp.exp(state.log_alpha) * ell - jnp.minimum(qa, qb)), ell
+        return jnp.mean(jnp.exp(state.log_alpha) * ell - jnp.minimum(qa, qb)), (
+            ell,
+            jnp.max(jnp.abs(u)),
+            jnp.max(jnp.abs(qa)),
+            jnp.max(jnp.abs(qb)),
+        )
 
-    (actor_loss_value, ell), ga = jax.value_and_grad(actor_loss, has_aux=True)(
-        state.actor.params
-    )
+    (actor_loss_value, (ell, action_max, q1_max, q2_max)), ga = jax.value_and_grad(
+        actor_loss, has_aux=True
+    )(state.actor.params)
     actor = state.actor.apply_gradients(grads=ga)
     alpha_grad = -jnp.mean(jax.lax.stop_gradient(ell)).astype(jnp.float32)
     alpha_updates, alpha_optimizer = optimizer().update(
@@ -128,9 +158,18 @@ def _update(state, observation, raw_u, target, actor_key, next_rng):
         ell=jnp.mean(ell),
         alpha=jnp.exp(log_alpha),
         alpha_at_bound=(unbounded <= jnp.log(1e-6)) | (unbounded >= jnp.log(0.01)),
-        actor_grad_norm=optax.global_norm(ga),
-        q1_grad_norm=optax.global_norm(g1),
-        q2_grad_norm=optax.global_norm(g2),
+        actor_grad_norm=gradient_norm(ga),
+        q1_grad_norm=gradient_norm(g1),
+        q2_grad_norm=gradient_norm(g2),
+        actor_action_abs_max=action_max,
+        actor_q1_abs_max=q1_max,
+        actor_q2_abs_max=q2_max,
+        target_abs_max=jnp.max(jnp.abs(target)),
+        state_finite=jnp.all(
+            jnp.stack(
+                [jnp.all(jnp.isfinite(x)) for x in jax.tree_util.tree_leaves(updated)]
+            )
+        ),
     )
     return updated, metrics
 
@@ -156,8 +195,17 @@ def update_checked(state, batch):
     updated, metrics = _update(
         state, batch["observation"], batch["raw_u"], target, actor_key, rng
     )
-    if not all(np.isfinite(np.asarray(x)).all() for x in metrics.values()):
-        raise FloatingPointError("nonfinite SAC update; old state retained")
+    if not bool(metrics["state_finite"]) or not all(
+        np.isfinite(np.asarray(x)).all() for x in metrics.values()
+    ):
+        invalid = [
+            name
+            for name, value in metrics.items()
+            if not np.isfinite(np.asarray(value)).all()
+        ]
+        raise FloatingPointError(
+            f"nonfinite SAC update; old state retained; invalid_metrics={invalid}; state_finite={bool(metrics['state_finite'])}"
+        )
     return updated, metrics
 
 
@@ -170,7 +218,7 @@ def _bc_update(state, observation, raw_u):
     value, grad = jax.value_and_grad(loss)(state.actor.params)
     return state.replace(
         actor=state.actor.apply_gradients(grads=grad), bc_updates=state.bc_updates + 1
-    ), (value, optax.global_norm(grad))
+    ), (value, gradient_norm(grad))
 
 
 def bc_update(state, batch):
