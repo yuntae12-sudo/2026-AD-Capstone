@@ -6,6 +6,10 @@
 기준은 v1.2/schema3이며 원본 해시는 [착수 점검](sac-readiness-20261116.md)에 기록되어 있다.
 구현·규약 대조·회귀·실제 실행·실패 분석을 반복하며, loss 감소를 정책 성공으로 판정하지 않는다.
 
+학습 중 병행할 [시각화 → 실패 분석 → 평가 기준 정리 작업 목록](sac-analysis-workplan.md)을
+별도 기록한다. 시각화는 저장된 checkpoint로 독립적인 CPU Waymax rollout을 만들며,
+실행 중인 고정 학습 worktree와 replay를 수정하지 않는다.
+
 ## 2026-11-17 실험 변경 시점의 상태
 
 - 이전 teacher 수집20,082전이, accepted16,113개, BC seed0 5,000회 학습까지 완료했다.
