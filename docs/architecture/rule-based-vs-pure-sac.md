@@ -64,6 +64,21 @@ python scripts/run_pure_sac_experiment.py \
 seed0/1/2 학습·평가 → 비교 보고서를 순서대로 수행한다. 오류가 나면 증거를 남기고
 중단하며 실행기 자체가 소스를 고치지는 않는다.
 
+진행 상황은 Python 표준 라이브러리만 사용하는 별도 모니터로 확인한다.
+현재 실험의 기본 경로는 `outputs/pure_sac_stable_20261117`이다.
+
+```bash
+python scripts/monitor_sac_training.py
+# 다른 실험 또는 한 번만 출력:
+python scripts/monitor_sac_training.py --output <experiment-directory> --once
+```
+
+5초마다 전체 수집 목표와 seed별 막대·퍼센트, SAC 업데이트 수, 중간/최종 평가 상태를
+갱신한다. seed가 바뀌어도 명령을 다시 실행할 필요가 없다. 수집량은 episode 경계 보고서와
+완전히 기록된 최신 업데이트 로그를 사용한다. warmup 중에는 episode가 끝날 때 수치가 바뀐다.
+초과 수집은 전체 목표에서 seed별100%까지만 반영한다. 이 퍼센트는 평가 시간을 포함한
+시간 진행률이 아니다. 최종 비교 완료/오류 중단까지 관찰하며 `Ctrl+C`는 모니터만 종료한다.
+
 성공률·충돌률·도로 이탈률·경로 거절률·제동 개입률·정지 비중·보상·episode 길이를
 함께 비교하고, 개별 평가의 추종 RMS도 확인한다. 결정적 Rule-based 한 결과에 대해
 SAC seed별 차이와 그 평균·표본 표준편차를 보고한다. BC-only/BC+SAC는 보조 실험으로만 남긴다.
