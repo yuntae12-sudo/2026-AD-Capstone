@@ -75,6 +75,10 @@ class Encoder(nn.Module):
 
 
 class Actor(nn.Module):
+    # Explicit diagnostic option: a full-rank linear gain, never action clipping
+    # or temporal smoothing. Defaults retain the previous production actor.
+    mean_gain: float = 1.0
+
     @nn.compact
     def __call__(self, observation):
         x = Encoder()(observation)
@@ -94,12 +98,15 @@ class Actor(nn.Module):
             name="rho",
             dtype=jnp.float32,
         )(x)
-        return mu.reshape((*mu.shape[:-1], 30, 2)), rho
+        if self.mean_gain <= 0:
+            raise ValueError("mean_gain must be positive")
+        return (mu * self.mean_gain).reshape((*mu.shape[:-1], 30, 2)), rho
 
 
 class Critic(nn.Module):
     # Explicit stability amendment: normalize hidden critic features, not actions.
     layer_norm: bool = True
+    zero_output: bool = False
 
     @nn.compact
     def __call__(self, observation, raw_u):
@@ -112,7 +119,12 @@ class Critic(nn.Module):
             if self.layer_norm:
                 x = nn.LayerNorm(dtype=jnp.float32, param_dtype=jnp.float32)(x)
             x = nn.relu(x)
-        return nn.Dense(1, dtype=jnp.float32, param_dtype=jnp.float32)(x)[..., 0]
+        output_options = (
+            {"kernel_init": nn.initializers.zeros_init()} if self.zero_output else {}
+        )
+        return nn.Dense(
+            1, dtype=jnp.float32, param_dtype=jnp.float32, **output_options
+        )(x)[..., 0]
 
 
 def correlation_matrix():

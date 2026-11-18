@@ -52,9 +52,10 @@ def optimizer():
     return optax.chain(clip_gradients(10.0), optax.adam(3e-4))
 
 
-def initialize(observation, seed=0):
+def initialize(observation, seed=0, *, actor=None, critic=None):
     require_x64()
-    actor, critic = Actor(), Critic()
+    actor = Actor() if actor is None else actor
+    critic = Critic() if critic is None else critic
     keys = jax.random.split(jax.random.PRNGKey(seed), 4)
     mu = actor.init(keys[0], observation)["params"]
     action = jnp.zeros((*observation["features"]["ego"].shape[:-1], 30, 2), jnp.float64)
