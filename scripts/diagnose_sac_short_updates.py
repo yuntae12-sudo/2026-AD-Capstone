@@ -40,6 +40,7 @@ def main():
     p.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(VARIANTS))
     p.add_argument("--updates", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--mean-coordinate-scale", choices=("raw", "entropy"), default="raw")
     p.add_argument(
         "--critic-action-coordinates", choices=("raw", "whitened"), default="raw"
     )
@@ -169,7 +170,12 @@ def main():
             state = initialize(
                 tensor_observation(CoreObservation.empty()),
                 args.seed,
-                actor=Actor(mean_gain=gain, mean_basis=basis, head_layer_norm=norm),
+                actor=Actor(
+                    mean_gain=gain,
+                    mean_basis=basis,
+                    head_layer_norm=norm,
+                    mean_coordinate_scale=args.mean_coordinate_scale,
+                ),
                 critic=Critic(
                     zero_output=zero, action_coordinates=args.critic_action_coordinates
                 ),
@@ -181,6 +187,7 @@ def main():
             mean_gain=gain,
             zero_q=zero,
             mean_basis=basis,
+            mean_coordinate_scale=args.mean_coordinate_scale,
             actor_head_layer_norm=norm,
             critic_action_coordinates=args.critic_action_coordinates,
             milestones=[],

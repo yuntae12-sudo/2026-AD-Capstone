@@ -81,6 +81,7 @@ class Actor(nn.Module):
     # Opt-in research amendment approved on 2026-11-18, not production defaults.
     mean_basis: str = "direct"
     head_layer_norm: bool = False
+    mean_coordinate_scale: str = "raw"
 
     @nn.compact
     def __call__(self, observation):
@@ -115,6 +116,14 @@ class Actor(nn.Module):
             )
         elif self.mean_basis != "direct":
             raise ValueError("unknown mean basis")
+        if self.mean_coordinate_scale == "entropy":
+            if self.mean_basis != "integrated":
+                raise ValueError("entropy mean coordinates require integrated basis")
+            g = jnp.clip((observation_speed(observation) / 2.0) ** 3, 0.002, 1.0)
+            scale = (g * (0.02 * math.sqrt(2 * math.pi * math.e))).astype(jnp.float32)
+            mu = mu * scale[..., None, None]
+        elif self.mean_coordinate_scale != "raw":
+            raise ValueError("unknown mean coordinate scale")
         return mu, rho
 
 

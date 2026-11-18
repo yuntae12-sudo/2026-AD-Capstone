@@ -93,3 +93,49 @@ def test_unknown_critic_coordinates_are_rejected():
         Critic(action_coordinates="wrong").init(
             jax.random.PRNGKey(0), observation(), jnp.zeros((2, 30, 2))
         )
+
+
+def test_entropy_mean_coordinates_recover_head_output_across_speeds():
+    obs = observation(3)
+    speed = np.array([0.0, 1.0, 10.0])
+    obs["features"]["ego"][:, 2] = speed / 30
+    obs["field_masks"]["ego"][:, 2] = True
+    actor = Actor(mean_basis="integrated", mean_coordinate_scale="entropy")
+    variables = actor.init(jax.random.PRNGKey(1), obs)
+    bias = jnp.linspace(-1, 1, 60, dtype=jnp.float32)
+    variables["params"]["mu"]["bias"] = bias
+    mu, rho = actor.apply(variables, obs)
+    recovered = normalized_action(mu, speed)
+    # f32 mean storage introduces cancellation when B is inverted in f64.
+    np.testing.assert_allclose(
+        recovered, np.tile(bias.reshape(1, 30, 2), (3, 1, 1)), rtol=3e-3, atol=3e-4
+    )
+    assert mu.dtype == jnp.float32
+    plain = Actor(mean_basis="integrated")
+    np.testing.assert_array_equal(rho, plain.apply(variables, obs)[1])
+    variables["params"]["mu"]["bias"] = bias * 1e8
+    large, _ = actor.apply(variables, obs)
+    assert float(jnp.max(jnp.abs(large[0]))) > 1
+
+
+def test_entropy_mean_gradient_preserves_all_coordinates_at_stationary_state():
+    obs = observation(1)
+    actor = Actor(mean_basis="integrated", mean_coordinate_scale="entropy")
+    params = actor.init(jax.random.PRNGKey(1), obs)["params"]
+
+    def forward(bias):
+        changed = {**params, "mu": {**params["mu"], "bias": bias}}
+        return normalized_action(
+            actor.apply({"params": changed}, obs)[0], jnp.zeros(1)
+        )[0].reshape(-1)
+
+    jac = jax.jacfwd(forward)(jnp.zeros(60, jnp.float32))
+    np.testing.assert_allclose(jac, np.eye(60), rtol=1e-3, atol=5e-4)
+    assert np.linalg.matrix_rank(np.asarray(jac, np.float64)) == 60
+
+
+def test_entropy_mean_requires_the_explicit_basis_amendment():
+    with pytest.raises(ValueError, match="integrated"):
+        Actor(mean_coordinate_scale="entropy").init(
+            jax.random.PRNGKey(1), observation()
+        )

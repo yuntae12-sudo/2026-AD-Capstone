@@ -69,6 +69,7 @@ def main():
                 mean_gain=arm["mean_gain"],
                 mean_basis=arm.get("mean_basis", "direct"),
                 head_layer_norm=arm.get("actor_head_layer_norm", False),
+                mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
             ),
             critic=Critic(
                 zero_output=arm["zero_q"],
@@ -102,6 +103,7 @@ def main():
         mean_gain=arm["mean_gain"],
         zero_q=arm["zero_q"],
         mean_basis=arm.get("mean_basis", "direct"),
+        mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
         actor_head_layer_norm=arm.get("actor_head_layer_norm", False),
         critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
         selected_pairs=[(r["scene_id"], r["provider"]) for r, _ in selected],

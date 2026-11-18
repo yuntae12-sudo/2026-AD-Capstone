@@ -138,6 +138,7 @@ def main():
                 mean_gain=arm["mean_gain"],
                 mean_basis=arm["mean_basis"],
                 head_layer_norm=arm["actor_head_layer_norm"],
+                mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
             ),
             critic=Critic(
                 zero_output=arm["zero_q"],

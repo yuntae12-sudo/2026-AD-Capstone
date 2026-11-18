@@ -41,6 +41,12 @@ network parameter와 mean은float32, sampler·밀도 계산은float64다.
   `w=(g*B)^(-1)u/c` 좌표를 Q 입력에 사용하는 비교다.
   §5의 `Q_w(s,w)=Q_u(s,u(s,w))`에 해당하며 새로운 entropy 목적함수를 추가하지 않는다.
   학습 가능한 함수의 좌표가 달라지므로 초기화 이후 학습 결과가 같다고 주장하지 않는다.
+- `Actor.mean_coordinate_scale`: `raw` 기본값 또는 `entropy`.
+  `integrated` basis의 별도 비교 안에서만 허용한다. 후자는
+  `mu = g(state) * c * B @ (gain * h(state))`로 평균을 생성한다.
+  즉 승인된 `mu=Bz`에서 `z=g*c*gain*h`로 좌표를 정하는 추가 비교다.
+  g의 최솟값0.002와 c는 양수이므로 매 상태에서60개 자유도·무제한 출력을 유지한다.
+  기존 주 실험의 직접 평균 출력 규칙을 만족한다고 주장하거나 자동 채택하지 않는다.
 
 Q 초기화나 actor LayerNorm도 표본과 실행 규칙을 변경하지 않는다. BC, teacher replay,
 보상 변경, 미래 로그 기반 검사, 물리 한계 완화는 추가하지 않는다.
@@ -56,6 +62,14 @@ raw u RMS는0.000374, 위 w 좌표 RMS는0.242였다. 해당 Q의 raw action을0
 Q 변화 RMS는0.000413이었고, actor 평균의 상태 간 표준편차 RMS는2.28e-7이었다.
 이는 짧은 학습에서 행동 구분과 상태 의존성이 약했던 관측이며, 입력 좌표 변경이
 이를 해결한다는 증명은 아니다. 같은 replay·seed·학습 예산의 대조와 실제 주행으로 검증한다.
+
+Q만 w 입력으로 바꾼100회 후보에서도 실제 주행 회귀가 발생했다.512개 자체 warmup
+관측의 한 고정 난수 sample에서 mean head에 전달되는 Q gradient를 분리했다.
+정지337개/이동154개의 평균 norm은0.07696/0.01048이었다(중간 저속21개는 별도).
+이는 parameter 전체 gradient의 합이나 원인의 확정이 아니라 출력 좌표별 국소 측정이다.
+Q 입력에는1/g가 있는데 평균 출력에는 g가 없는 비대칭을 다음 비교에서 점검한다.
+actor도 w 평균을 정하면 이 좌표 변환의 g 요인이 상쇄된다. 실제 Gaussian covariance,
+rho/sigma, ell, raw 저장, 실행 검사는 그대로이며 float32 평균의 반올림 오차는 남는다.
 
 ## 비교와 결과 보존
 

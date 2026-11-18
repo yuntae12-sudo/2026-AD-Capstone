@@ -87,6 +87,7 @@ def main():
                 mean_gain=variant["mean_gain"],
                 mean_basis=variant["mean_basis"],
                 head_layer_norm=variant["actor_head_layer_norm"],
+                mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
             ),
             critic=Critic(
                 zero_output=variant["zero_q"],
@@ -204,6 +205,7 @@ def main():
             status="COMPLETE",
             mean_gain=variant["mean_gain"],
             mean_basis=variant["mean_basis"],
+            mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
             actor_head_layer_norm=variant["actor_head_layer_norm"],
             zero_q=variant["zero_q"],
             critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),
