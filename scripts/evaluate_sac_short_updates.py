@@ -23,9 +23,17 @@ def main():
         p.add_argument("--" + name, type=Path, required=True)
     p.add_argument("--variant", required=True)
     p.add_argument(
+        "--labels",
+        nargs="+",
+        choices=("untrained", "updated"),
+        default=["untrained", "updated"],
+    )
+    p.add_argument(
         "--scenes", nargs="+", help="Explicit validation scene IDs; omit for all"
     )
     args = p.parse_args()
+    if len(set(args.labels)) != len(args.labels):
+        p.error("evaluation labels must be unique")
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -79,7 +87,11 @@ def main():
     args.output.mkdir(parents=True)
     report = dict(
         status="RUNNING",
-        scope="DIAGNOSTIC_PAIRED_CLOSED_LOOP",
+        scope=(
+            "DIAGNOSTIC_PAIRED_CLOSED_LOOP"
+            if len(args.labels) == 2
+            else "DIAGNOSTIC_SINGLE_MODEL_CLOSED_LOOP"
+        ),
         qualified=False,
         versions=version,
         diagnostic_sha256=file_hash(args.diagnostic / "report.json"),
@@ -93,11 +105,14 @@ def main():
         actor_head_layer_norm=arm.get("actor_head_layer_norm", False),
         critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
         selected_pairs=[(r["scene_id"], r["provider"]) for r, _ in selected],
-        note="Paired untrained and short-update deterministic mean, CPU Waymax/GPU inference. Selected scenes are not independent test. No teacher or BC.",
+        selected_labels=args.labels,
+        note="Selected labels use deterministic means, CPU Waymax/GPU inference. A single-label report is not a paired comparison by itself. Selected scenes are not independent test. No teacher or BC.",
         episodes=[],
     )
     write_report(args.output / "report.json", report)
-    for label, state in (("untrained", initial), ("updated", trained)):
+    states = {"untrained": initial, "updated": trained}
+    for label in args.labels:
+        state = states[label]
         _, proposer = model_proposer(state.actor, seed, True, gpu)
         for row, path in selected:
             with jax.default_device(cpu):
