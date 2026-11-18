@@ -22,6 +22,11 @@ def main():
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
     parser.add_argument(
+        "--zero-critic-action-init",
+        action="store_true",
+        help="Separate initialization trial: zero action rows of both critics' first layer",
+    )
+    parser.add_argument(
         "--mean-gain",
         type=float,
         help="Explicit diagnostic override of the approved linear mean gain",
@@ -62,6 +67,8 @@ def main():
     config = json.loads((args.configuration / "report.json").read_text())
     variant = dict(config["arms"][args.variant])
     overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
+    if args.zero_critic_action_init:
+        overrides["critic_action_kernel_init"] = "zero"
     variant.update(overrides)
     version = versions(args.manifest)
     if config["versions"] != version or variant["status"] != "COMPLETE":
@@ -111,6 +118,19 @@ def main():
                 action_coordinates=variant.get("critic_action_coordinates", "raw"),
             ),
         )
+        init_mode = variant.get("critic_action_kernel_init", "standard")
+        initialization_hash = None
+        if init_mode == "zero":
+            from scripts.sac_critic_initialization import (
+                zero_critic_action_initialization,
+            )
+
+            state = zero_critic_action_initialization(state)
+            initialization_hash = file_hash(
+                Path(__file__).with_name("sac_critic_initialization.py")
+            )
+        elif init_mode != "standard":
+            raise ValueError("unknown critic action initialization")
     policy, proposer = model_proposer(state.actor, seed, False, gpu)
     report = dict(
         status="RUNNING",
@@ -123,6 +143,8 @@ def main():
         configuration_sha256=file_hash(args.configuration / "report.json"),
         configuration_overrides=overrides,
         script_sha256=file_hash(__file__),
+        critic_action_kernel_init=init_mode,
+        initialization_script_sha256=initialization_hash,
         inherited_self_warmup=5000,
         new_transitions=0,
         updates=0,
@@ -227,6 +249,7 @@ def main():
             actor_head_layer_norm=variant["actor_head_layer_norm"],
             zero_q=variant["zero_q"],
             critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),
+            critic_action_kernel_init=init_mode,
             updates=int(state.updates),
             learner_sha256=file_hash(weights),
         )
