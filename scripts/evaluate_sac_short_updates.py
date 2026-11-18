@@ -62,7 +62,10 @@ def main():
                 mean_basis=arm.get("mean_basis", "direct"),
                 head_layer_norm=arm.get("actor_head_layer_norm", False),
             ),
-            critic=Critic(zero_output=arm["zero_q"]),
+            critic=Critic(
+                zero_output=arm["zero_q"],
+                action_coordinates=arm.get("critic_action_coordinates", "raw"),
+            ),
         )
         trained = serialization.from_bytes(initial, weights.read_bytes())
         trained = jax.device_put(trained, gpu)
@@ -88,6 +91,7 @@ def main():
         zero_q=arm["zero_q"],
         mean_basis=arm.get("mean_basis", "direct"),
         actor_head_layer_norm=arm.get("actor_head_layer_norm", False),
+        critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
         selected_pairs=[(r["scene_id"], r["provider"]) for r, _ in selected],
         note="Paired untrained and short-update deterministic mean, CPU Waymax/GPU inference. Selected scenes are not independent test. No teacher or BC.",
         episodes=[],

@@ -36,9 +36,26 @@ network parameter와 mean은float32, sampler·밀도 계산은float64다.
 - `Critic.zero_output`: 최종 Q head kernel을0으로 초기화하는 선택 사항, 기본false.
 - `Actor.head_layer_norm`: mean/rho 앞의 두256차원 hidden layer에 LayerNorm을 넣는
   별도 선택 사항, 기본false. 기준서의 원래 ReLU-only head와 구분해 기록한다.
+- `Critic.action_coordinates`: `raw` 기본값 또는 `whitened`.
+  기준서 §5에 이미 정의된 `c=0.02*sqrt(2*pi*e)`,
+  `w=(g*B)^(-1)u/c` 좌표를 Q 입력에 사용하는 비교다.
+  §5의 `Q_w(s,w)=Q_u(s,u(s,w))`에 해당하며 새로운 entropy 목적함수를 추가하지 않는다.
+  학습 가능한 함수의 좌표가 달라지므로 초기화 이후 학습 결과가 같다고 주장하지 않는다.
 
 Q 초기화나 actor LayerNorm도 표본과 실행 규칙을 변경하지 않는다. BC, teacher replay,
 보상 변경, 미래 로그 기반 검사, 물리 한계 완화는 추가하지 않는다.
+
+`whitened` 입력은 raw float64 u에서 B의 삼각 연립방정식을 float64로 풀고,
+g와 고정 c로 나눈 뒤 critic 입력 사본만 float32로 바꾼다. 학습된 sigma로 나누지 않고,
+action을 clip하거나 gradient를 끊지 않는다. replay/decoder/검사/PD에는 원래 raw u를
+사용하며 actor·target·temperature의 기존 ell 식도 유지한다. Q1/Q2와 target들은
+동일 좌표 설정을 공유한다. 복원 시에도 저장된 설정으로 모듈을 구성해야 한다.
+
+2026-11-18 선행 점검에서 온라인100회 후보의512개 자체 warmup 관측을 조사했다.
+raw u RMS는0.000374, 위 w 좌표 RMS는0.242였다. 해당 Q의 raw action을0으로 바꿀 때
+Q 변화 RMS는0.000413이었고, actor 평균의 상태 간 표준편차 RMS는2.28e-7이었다.
+이는 짧은 학습에서 행동 구분과 상태 의존성이 약했던 관측이며, 입력 좌표 변경이
+이를 해결한다는 증명은 아니다. 같은 replay·seed·학습 예산의 대조와 실제 주행으로 검증한다.
 
 ## 비교와 결과 보존
 

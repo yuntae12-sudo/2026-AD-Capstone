@@ -122,12 +122,20 @@ class Critic(nn.Module):
     # Explicit stability amendment: normalize hidden critic features, not actions.
     layer_norm: bool = True
     zero_output: bool = False
+    # Section 5 entropy coordinates, opt-in; replay/execution remain raw u.
+    action_coordinates: str = "raw"
 
     @nn.compact
     def __call__(self, observation, raw_u):
         x = Encoder()(observation)
         # This cast retains the differentiable actor path; replay still stores f64.
-        u = raw_u.astype(jnp.float32).reshape((*raw_u.shape[:-2], 60))
+        if self.action_coordinates == "raw":
+            action = raw_u
+        elif self.action_coordinates == "whitened":
+            action = normalized_action(raw_u, observation_speed(observation))
+        else:
+            raise ValueError("unknown critic action coordinates")
+        u = action.astype(jnp.float32).reshape((*raw_u.shape[:-2], 60))
         x = jnp.concatenate([x, u], axis=-1)
         for _ in range(2):
             x = nn.Dense(256, dtype=jnp.float32, param_dtype=jnp.float32)(x)
@@ -149,6 +157,27 @@ def correlation_matrix():
     return jnp.where(
         j <= i, 0.1**3 * (i - j + 1) * (i - j + 2) / (2 * 3 * (i * 0.1) ** 2), 0.0
     )
+
+
+def normalized_action(raw_u, speed):
+    """Invert section-5 u = g B c w in f64 before critic's f32 input cast.
+
+    No action repair, clipping, covariance inverse, or stop_gradient. c is the
+    contract's entropy-coordinate scale, not the learned sigma.
+    """
+    require_x64()
+    from jax.scipy.linalg import solve_triangular
+
+    u = jnp.asarray(raw_u, jnp.float64)
+    if u.shape[-2:] != (30, 2):
+        raise ValueError("raw action must end in [30,2]")
+    b = correlation_matrix()
+    solved = jax.vmap(lambda a: solve_triangular(b, a, lower=True))(
+        u.reshape((-1, 30, 2))
+    ).reshape(u.shape)
+    g = jnp.clip((jnp.asarray(speed, jnp.float64) / 2.0) ** 3, 0.002, 1.0)
+    c = 0.02 * jnp.sqrt(2 * jnp.pi * jnp.e)
+    return solved / (g[..., None, None] * c)
 
 
 def sample_action(mu, rho, speed, key, epsilon=None):

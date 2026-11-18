@@ -41,6 +41,9 @@ def main():
     p.add_argument("--updates", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument(
+        "--critic-action-coordinates", choices=("raw", "whitened"), default="raw"
+    )
+    p.add_argument(
         "--mean-gain",
         type=float,
         help="Explicit gain override for one selected variant",
@@ -167,7 +170,9 @@ def main():
                 tensor_observation(CoreObservation.empty()),
                 args.seed,
                 actor=Actor(mean_gain=gain, mean_basis=basis, head_layer_norm=norm),
-                critic=Critic(zero_output=zero),
+                critic=Critic(
+                    zero_output=zero, action_coordinates=args.critic_action_coordinates
+                ),
             )
             forward = jax.jit(state.actor.apply_fn)
             critic1, critic2 = jax.jit(state.q1.apply_fn), jax.jit(state.q2.apply_fn)
@@ -177,6 +182,7 @@ def main():
             zero_q=zero,
             mean_basis=basis,
             actor_head_layer_norm=norm,
+            critic_action_coordinates=args.critic_action_coordinates,
             milestones=[],
             updates=0,
         )

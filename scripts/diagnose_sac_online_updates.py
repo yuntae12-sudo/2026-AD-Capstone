@@ -88,7 +88,10 @@ def main():
                 mean_basis=variant["mean_basis"],
                 head_layer_norm=variant["actor_head_layer_norm"],
             ),
-            critic=Critic(zero_output=variant["zero_q"]),
+            critic=Critic(
+                zero_output=variant["zero_q"],
+                action_coordinates=variant.get("critic_action_coordinates", "raw"),
+            ),
         )
     policy, proposer = model_proposer(state.actor, seed, False, gpu)
     report = dict(
@@ -203,6 +206,7 @@ def main():
             mean_basis=variant["mean_basis"],
             actor_head_layer_norm=variant["actor_head_layer_norm"],
             zero_q=variant["zero_q"],
+            critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),
             updates=int(state.updates),
             learner_sha256=file_hash(weights),
         )

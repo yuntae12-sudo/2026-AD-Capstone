@@ -139,7 +139,10 @@ def main():
                 mean_basis=arm["mean_basis"],
                 head_layer_norm=arm["actor_head_layer_norm"],
             ),
-            critic=Critic(zero_output=arm["zero_q"]),
+            critic=Critic(
+                zero_output=arm["zero_q"],
+                action_coordinates=arm.get("critic_action_coordinates", "raw"),
+            ),
         )
         trained = jax.device_put(
             serialization.from_bytes(initial, weights.read_bytes()), gpu
