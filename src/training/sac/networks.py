@@ -78,12 +78,18 @@ class Actor(nn.Module):
     # Explicit diagnostic option: a full-rank linear gain, never action clipping
     # or temporal smoothing. Defaults retain the previous production actor.
     mean_gain: float = 1.0
+    # Opt-in research amendment approved on 2026-11-18, not production defaults.
+    mean_basis: str = "direct"
+    head_layer_norm: bool = False
 
     @nn.compact
     def __call__(self, observation):
         x = Encoder()(observation)
         for _ in range(2):
-            x = nn.relu(nn.Dense(256, dtype=jnp.float32, param_dtype=jnp.float32)(x))
+            x = nn.Dense(256, dtype=jnp.float32, param_dtype=jnp.float32)(x)
+            if self.head_layer_norm:
+                x = nn.LayerNorm(dtype=jnp.float32, param_dtype=jnp.float32)(x)
+            x = nn.relu(x)
         mu = nn.Dense(
             60,
             kernel_init=nn.initializers.zeros_init(),
@@ -98,9 +104,18 @@ class Actor(nn.Module):
             name="rho",
             dtype=jnp.float32,
         )(x)
-        if self.mean_gain <= 0:
+        if not math.isfinite(self.mean_gain) or self.mean_gain <= 0:
             raise ValueError("mean_gain must be positive")
-        return (mu * self.mean_gain).reshape((*mu.shape[:-1], 30, 2)), rho
+        mu = (mu * self.mean_gain).reshape((*mu.shape[:-1], 30, 2))
+        if self.mean_basis == "integrated":
+            # Reparameterize the mean before the unchanged Gaussian sampler.
+            # B is full rank, preserving all 60 unbounded degrees of freedom.
+            mu = jnp.einsum(
+                "ij,...jd->...id", correlation_matrix().astype(jnp.float32), mu
+            )
+        elif self.mean_basis != "direct":
+            raise ValueError("unknown mean basis")
+        return mu, rho
 
 
 class Critic(nn.Module):

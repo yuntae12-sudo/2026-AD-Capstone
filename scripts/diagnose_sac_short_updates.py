@@ -19,12 +19,16 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 VARIANTS = {
-    "original": (1.0, False),
-    "zero_q": (1.0, True),
-    "gain4": (1e-4, False),
-    "gain4_zero": (1e-4, True),
-    "gain5_zero": (1e-5, True),
-    "gain6_zero": (1e-6, True),
+    "original": (1.0, False, "direct", False),
+    "zero_q": (1.0, True, "direct", False),
+    "gain4": (1e-4, False, "direct", False),
+    "gain4_zero": (1e-4, True, "direct", False),
+    "gain5_zero": (1e-5, True, "direct", False),
+    "gain6_zero": (1e-6, True, "direct", False),
+    "basis": (1.0, False, "integrated", False),
+    "basis_zero": (1.0, True, "integrated", False),
+    "basis01_zero": (0.1, True, "integrated", False),
+    "basis_norm_zero": (1.0, True, "integrated", True),
 }
 
 
@@ -69,7 +73,19 @@ def main():
     if meta["run_state"]["seed"] != args.seed:
         raise ValueError("warmup must come from the same seed")
     replay = Replay.load(args.checkpoint / "replay.npz", meta["versions"])
-    if replay.size < 5000 or np.any(replay.arrays["teacher_accepted"][:5000]):
+    source_report = meta["run_state"]["report"]
+    if (
+        source_report.get("training_mode") != "pure-sac"
+        or source_report.get("bc_checkpoint_sha256") is not None
+        or source_report.get("initial_replay_size") != 0
+    ):
+        raise ValueError("requires original pure SAC self-collection lineage")
+    if (
+        replay.size < 5000
+        or replay.size == replay.capacity
+        or replay.cursor != replay.size
+        or np.any(replay.arrays["teacher_accepted"][:5000])
+    ):
         raise ValueError("requires 5000 self-collected warmup transitions")
     replay.size = replay.cursor = 5000
     current = versions(args.manifest)
@@ -129,19 +145,25 @@ def main():
     if args.updates >= 1000:
         milestones.update((250, 500, 1000))
     for name in args.variants:
-        gain, zero = VARIANTS[name]
+        gain, zero, basis, norm = VARIANTS[name]
         replay.rng = np.random.default_rng(args.seed)
         with jax.default_device(gpu):
             state = initialize(
                 tensor_observation(CoreObservation.empty()),
                 args.seed,
-                actor=Actor(mean_gain=gain),
+                actor=Actor(mean_gain=gain, mean_basis=basis, head_layer_norm=norm),
                 critic=Critic(zero_output=zero),
             )
             forward = jax.jit(state.actor.apply_fn)
             critic1, critic2 = jax.jit(state.q1.apply_fn), jax.jit(state.q2.apply_fn)
         arm = dict(
-            status="RUNNING", mean_gain=gain, zero_q=zero, milestones=[], updates=0
+            status="RUNNING",
+            mean_gain=gain,
+            zero_q=zero,
+            mean_basis=basis,
+            actor_head_layer_norm=norm,
+            milestones=[],
+            updates=0,
         )
         result["arms"][name] = arm
         start = time.monotonic()
@@ -226,6 +248,7 @@ def main():
             (args.output / f"{name}-learner.msgpack").write_bytes(
                 serialization.to_bytes(state)
             )
+            arm["learner_sha256"] = file_hash(args.output / f"{name}-learner.msgpack")
             arm["status"] = "COMPLETE"
         except Exception as exc:
             arm.update(status="FAILED", error=f"{type(exc).__name__}: {exc}")

@@ -49,13 +49,19 @@ def main():
     if arm["status"] != "COMPLETE" or source["versions"] != version:
         raise ValueError("requires completed, identical-runtime diagnostic arm")
     weights = args.diagnostic / f"{args.variant}-learner.msgpack"
+    if arm.get("learner_sha256") and file_hash(weights) != arm["learner_sha256"]:
+        raise ValueError("diagnostic weight checksum mismatch")
     seed = source["seed"]
     cpu, gpu = jax.devices("cpu")[0], jax.devices("gpu")[0]
     with jax.default_device(gpu):
         initial = initialize(
             tensor_observation(CoreObservation.empty()),
             seed,
-            actor=Actor(mean_gain=arm["mean_gain"]),
+            actor=Actor(
+                mean_gain=arm["mean_gain"],
+                mean_basis=arm.get("mean_basis", "direct"),
+                head_layer_norm=arm.get("actor_head_layer_norm", False),
+            ),
             critic=Critic(zero_output=arm["zero_q"]),
         )
         trained = serialization.from_bytes(initial, weights.read_bytes())
@@ -80,6 +86,8 @@ def main():
         variant=args.variant,
         mean_gain=arm["mean_gain"],
         zero_q=arm["zero_q"],
+        mean_basis=arm.get("mean_basis", "direct"),
+        actor_head_layer_norm=arm.get("actor_head_layer_norm", False),
         selected_pairs=[(r["scene_id"], r["provider"]) for r, _ in selected],
         note="Paired untrained and short-update deterministic mean, CPU Waymax/GPU inference. Selected scenes are not independent test. No teacher or BC.",
         episodes=[],
