@@ -54,7 +54,11 @@ def main():
     source = json.loads((args.diagnostic / "report.json").read_text())
     arm = source["arms"][args.variant]
     version = versions(args.manifest)
-    if arm["status"] != "COMPLETE" or source["versions"] != version:
+    if (
+        source["status"] != "COMPLETE"
+        or arm["status"] != "COMPLETE"
+        or source["versions"] != version
+    ):
         raise ValueError("requires completed, identical-runtime diagnostic arm")
     weights = args.diagnostic / f"{args.variant}-learner.msgpack"
     if arm.get("learner_sha256") and file_hash(weights) != arm["learner_sha256"]:

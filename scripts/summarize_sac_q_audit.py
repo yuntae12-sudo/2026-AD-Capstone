@@ -186,7 +186,7 @@ def summarize(report):
             if continuations
             else None
         ),
-        note="Terminal Q errors compare to known reward with zero bootstrap. Other one-step residuals use learned target Q and are not calibration ground truth. Continuation returns have only two RNG replicates per selected candidate; no confidence interval or population claim. Initial-noise distance is a coordinate diagnostic, not a replay support test. States, candidates, command variants and RNG replicates are not independent scenes.",
+        note="Terminal Q errors compare to known reward with zero bootstrap. Other one-step residuals use learned target Q and are not calibration ground truth. Continuation returns, when requested, use the configured small number of RNG replicates; no confidence interval or population claim. Initial-noise distance is a coordinate diagnostic, not a replay support test. States, candidates, command variants and RNG replicates are not independent scenes.",
     )
     return stats, dict(
         candidates=rows,
@@ -266,7 +266,7 @@ def plots(tables, output):
         ax.grid(axis="x", alpha=0.2)
         ax.set_xlabel("Discounted soft return / Q")
         ax.set_title(
-            "Frozen policy continuations: 2 RNG replicates per candidate\nLines show observed ranges, not confidence intervals"
+            "Frozen policy continuations: observed RNG replicates\nLines show observed ranges, not confidence intervals"
         )
         ax.legend(loc="lower left")
         fig.tight_layout()

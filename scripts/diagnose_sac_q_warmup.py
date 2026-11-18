@@ -20,6 +20,11 @@ def main():
         p.add_argument("--" + name, type=Path, required=True)
     p.add_argument("--diagnostics", type=Path, nargs="+", required=True)
     p.add_argument("--reproduce-count", type=int, default=2)
+    p.add_argument(
+        "--reference-cases",
+        type=Path,
+        help="Use the same train terminal indices as an earlier audit",
+    )
     args = p.parse_args()
     if args.output.exists():
         raise FileExistsError(args.output)
@@ -136,6 +141,7 @@ def main():
                 diagnostic=str(diagnostic),
                 learner_sha256=digest,
                 updates=int(state.updates),
+                mean_gain=arm["mean_gain"],
                 groups=groups,
                 rows=[
                     dict(
@@ -170,12 +176,30 @@ def main():
         (r["scene_id"], r["provider"]): path
         for r, path in selected_scenes(args.manifest, "train")
     }
-    latest = max(report["models"], key=lambda m: m["updates"])
+    # Last explicitly supplied model is the candidate, including equal-budget pairs.
+    latest = report["models"][-1]
+    report["reproduction_model_sha256"] = latest["learner_sha256"]
     candidates = sorted(
         (r for r in latest["rows"] if r["reward"] <= -10),
         key=lambda r: r["current_mean_q"] - r["min_q"],
         reverse=True,
     )
+    selection = "largest current-mean minus stored-action Q gaps, distinct scenes"
+    if args.reference_cases:
+        reference = json.loads(args.reference_cases.read_text())
+        assert (
+            reference["status"] == "COMPLETE"
+            and reference["replay_sha256"] == meta["hashes"]["replay.npz"]
+        )
+        assert reference["versions"] == version
+        by_index = {row["index"]: row for row in latest["rows"]}
+        candidates = [
+            by_index[row["index"]] for row in reference["action_reproductions"]
+        ]
+        if len(candidates) < args.reproduce_count:
+            raise ValueError("not enough reference cases")
+        report["reference_cases_sha256"] = file_hash(args.reference_cases)
+        selection = "fixed terminal indices from earlier train audit, not reselected for this candidate"
     report["action_reproductions"] = []
     seen = set()
     for row in candidates:
@@ -224,7 +248,7 @@ def main():
                 scene_id=row["scene_id"],
                 provider=provider,
                 tick=e.tick,
-                selection="largest current-mean minus stored-action Q gaps, distinct scenes",
+                selection=selection,
                 actions={},
             )
             for name, raw, q_value in [

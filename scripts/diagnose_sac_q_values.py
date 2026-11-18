@@ -63,11 +63,18 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--samples", type=int, default=8)
     parser.add_argument("--continuations", type=int, default=2)
+    parser.add_argument(
+        "--terminal-only",
+        action="store_true",
+        help="Audit only the final pre-step state of each saved rollout",
+    )
     args = parser.parse_args()
     if args.output.exists():
         raise FileExistsError(args.output)
-    if args.samples < 2 or args.continuations < 1:
-        parser.error("at least two candidate samples and one continuation required")
+    if args.samples < 2 or args.continuations < 0:
+        parser.error(
+            "at least two candidate samples and nonnegative continuations required"
+        )
     import tensorflow as tf
 
     tf.config.set_visible_devices([], "GPU")
@@ -223,6 +230,9 @@ def main():
         script_sha256=file_hash(__file__),
         candidate_samples=args.samples,
         continuation_replicates=args.continuations,
+        probe_selection=(
+            "terminal_only" if args.terminal_only else "cadence_and_failure_events"
+        ),
         alpha=alpha,
         episodes=[],
         note="No training/replay changes. Q predicts reward after safety fallback, not a safety probability. One-step target uses target critics and is not independent ground truth. Full continuations use frozen stochastic policy and entropy coordinates, no current-action entropy. Rule-based/zero candidates may be out of policy support. Selected validation states and small MC samples are diagnostic only.",
@@ -237,7 +247,11 @@ def main():
                 args.evaluation / f"updated-{row['scene_id']}-{row['provider']}.json"
             )
             expected = json.loads(evidence_path.read_text())
-            ticks = probe_ticks(expected["frames"])
+            ticks = (
+                [len(expected["frames"]) - 2]
+                if args.terminal_only
+                else probe_ticks(expected["frames"])
+            )
             first_reject = next(
                 (
                     f["proposal_tick"]
@@ -247,7 +261,11 @@ def main():
                 0,
             )
             continuation_ticks = (
-                {0, first_reject} if row["provider"] == "fixed_keep" else set()
+                {0, first_reject}
+                if row["provider"] == "fixed_keep"
+                and args.continuations
+                and not args.terminal_only
+                else set()
             )
             with jax.default_device(cpu):
                 e = SACPlanningEnvironment()

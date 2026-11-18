@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -20,9 +21,23 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument(
+        "--mean-gain",
+        type=float,
+        help="Explicit diagnostic override of the approved linear mean gain",
+    )
+    parser.add_argument(
+        "--save-replay",
+        action="store_true",
+        help="Persist the actual replay for read-only coverage audits",
+    )
     args = parser.parse_args()
     if not 1 <= args.updates <= 1000:
         parser.error("short diagnostic budget must be 1..1000 updates")
+    if args.mean_gain is not None and (
+        not math.isfinite(args.mean_gain) or args.mean_gain <= 0
+    ):
+        parser.error("mean gain must be finite and positive")
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -45,7 +60,9 @@ def main():
     from scripts.sac_experiment_runtime import model_proposer
 
     config = json.loads((args.configuration / "report.json").read_text())
-    variant = config["arms"][args.variant]
+    variant = dict(config["arms"][args.variant])
+    overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
+    variant.update(overrides)
     version = versions(args.manifest)
     if config["versions"] != version or variant["status"] != "COMPLETE":
         raise ValueError("requires a completed matching-runtime configuration")
@@ -104,6 +121,7 @@ def main():
         seed=seed,
         source_checkpoint_sha256=file_hash(args.checkpoint / "manifest.json"),
         configuration_sha256=file_hash(args.configuration / "report.json"),
+        configuration_overrides=overrides,
         script_sha256=file_hash(__file__),
         inherited_self_warmup=5000,
         new_transitions=0,
@@ -212,6 +230,27 @@ def main():
             updates=int(state.updates),
             learner_sha256=file_hash(weights),
         )
+        if args.save_replay:
+            recorded = [
+                json.loads(line)["raw_proposal"]["raw_u"]
+                for line in (args.output / "ticks.jsonl").read_text().splitlines()
+            ]
+            np.testing.assert_array_equal(
+                replay.arrays["raw_u"][5000 : replay.size],
+                np.asarray(recorded, np.float64),
+            )
+            if replay.size != 5000 + report["new_transitions"] or np.any(
+                replay.arrays["teacher_accepted"][: replay.size]
+            ):
+                raise ValueError("unexpected diagnostic replay composition")
+            replay.save(args.output / "replay.npz")
+            report["saved_replay"] = dict(
+                file="replay.npz",
+                sha256=file_hash(args.output / "replay.npz"),
+                size=replay.size,
+                own_warmup=5000,
+                new_online=report["new_transitions"],
+            )
         report["status"] = "COMPLETE"
     except BaseException as exc:
         report.update(status="FAILED", error=f"{type(exc).__name__}: {exc}")
