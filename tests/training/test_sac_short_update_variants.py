@@ -1,4 +1,4 @@
-"""The diagnostic options must not bound actions, smooth means, or freeze Q."""
+"""Diagnostic options preserve unbounded Gaussian actions and trainable Q."""
 
 import jax
 import jax.numpy as jnp

@@ -7,6 +7,7 @@ critic initialization; the objective, sampler, checker and PD stay unchanged.
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -39,9 +40,20 @@ def main():
     p.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(VARIANTS))
     p.add_argument("--updates", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--mean-gain",
+        type=float,
+        help="Explicit gain override for one selected variant",
+    )
     args = p.parse_args()
     if args.updates < 100:
         p.error("at least 100 updates required")
+    if args.mean_gain is not None and (
+        len(args.variants) != 1
+        or not math.isfinite(args.mean_gain)
+        or args.mean_gain <= 0
+    ):
+        p.error("--mean-gain requires one variant and a positive finite gain")
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -76,6 +88,7 @@ def main():
     source_report = meta["run_state"]["report"]
     if (
         source_report.get("training_mode") != "pure-sac"
+        or source_report.get("warmup_transitions") != 5000
         or source_report.get("bc_checkpoint_sha256") is not None
         or source_report.get("initial_replay_size") != 0
     ):
@@ -146,6 +159,8 @@ def main():
         milestones.update((250, 500, 1000))
     for name in args.variants:
         gain, zero, basis, norm = VARIANTS[name]
+        if args.mean_gain is not None:
+            gain = args.mean_gain
         replay.rng = np.random.default_rng(args.seed)
         with jax.default_device(gpu):
             state = initialize(
@@ -252,6 +267,7 @@ def main():
             arm["status"] = "COMPLETE"
         except Exception as exc:
             arm.update(status="FAILED", error=f"{type(exc).__name__}: {exc}")
+            result.update(status="FAILED", error=f"{name}: {type(exc).__name__}: {exc}")
             raise
         finally:
             log.close()

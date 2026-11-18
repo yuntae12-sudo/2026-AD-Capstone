@@ -55,3 +55,12 @@ Waymax rollout으로 검증한다. 이 결과도 진단 범위로 표시한다.
 
 원래 런타임의 실패 결과와 새 실험을 섞어서 재라벨링하지 않는다. 채택 시에는 별도
 production 설정·초기화·checkpoint provenance 개정이 필요하다.
+
+`diagnose_sac_online_updates.py`는 고정 replay 비교에서 선택한 **구조 설정만** 읽고
+learner를 새로 초기화한다. 같은 seed의 자체 warmup5,000개에서 출발해 새 train 전이마다
+업데이트1회를 수행한다. 고정 replay로 학습한 가중치나 validation 경험을 넣지 않는다.
+장면/정책 RNG를 재시작하는 별도 진단이며 기존 실행의 정확한 재개가 아니다.
+진단 예산에서 끊긴 episode는 `DIAGNOSTIC_BUDGET`으로 기록하고 성공으로 세지 않는다.
+
+2026-11-18의 비교 결과와 실제 주행 회귀는
+[초기 업데이트 진단 기록](../records/sac-short-update-20261118.md)에 보존한다.
