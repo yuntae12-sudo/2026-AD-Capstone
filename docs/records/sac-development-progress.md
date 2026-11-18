@@ -223,3 +223,13 @@ GPU 정책 → CPU Waymax → 실제 train 전이 replay → GPU 업데이트 �
 loss/gradient/alpha가 유한했다. replay23개·batch256·업데이트1회이며 test-only entry를
 사용했다. production의 replay5000 및 BC gate 요건을 우회한 학습으로 집계하지 않는다.
 본 온라인 CLI에는 이 우회 옵션이 없다.
+
+## 2026-11-18 순수 SAC 최종 평가와 실패 진단
+
+`pure_sac_stable_20261117`의 seed0/1/2 학습·평가·비교가 모두 완료됐다.
+최종 validation은 각 seed16회 모두 충돌, 제안 경로 전부 `UNRESOLVED_SWEEP` 거절이다.
+학습 시작 직후부터 train 경로 통과율도 붕괴했다. train/validation reset96개 조합의
+평균 경로와 표본192개를 추가 조사했으며 실제 Waymax 비교 GIF2개를 저장했다.
+자세한 수치·접촉 근거·다음 개발 순서는
+[최종 실패 분석](sac-final-failure-20261118.md)을 따른다. 이번 진단에서는 학습 규약이나
+검사 한계를 변경하지 않았으며 새 장시간 학습은 시작하지 않았다.
