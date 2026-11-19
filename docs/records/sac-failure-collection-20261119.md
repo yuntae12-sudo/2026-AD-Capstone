@@ -1913,3 +1913,57 @@ quota 내부 재시작 뒤 열린 path 연속성, 잘못된 설정/200step 미�
 짧은 실패만으로 장기 학습의 불가능성을 주장하지 않는다. 같은예산1,000실험이나 예산 연장은
 실제100자료 검토 후 별도로 판단한다. 긴 경로 추가에 따라 전체 예산 내 main/장면 수가 줄 수
 있으므로 초기 quota 보존을 전체 terminal 노출 보장으로 오해하지 않는다.
+
+## 00:34 KST quota 보존100회 검증 완료, 같은예산1,000 비교 실행
+
+실행 코드는 `c3fe6a746762a7fc12c96b44a68aeee8920cff79`이며 push/원격SHA를 확인했다.
+100회 pilot은00:26:52 KST runner2472555/child2472556으로 시작해 수집·저장 감사·동일4개
+개발 주행을 마쳤다. 두 PID의 종료를 확인했다. main31/branch69, 모두KEEP이며 고유train
+2장면이다. 같은 장면의 root0/1/2/3/4/28에서 기존8step quota 총48개를 유지하고, root0의
+실제 열린 경로에21step을 더해29step 후 충돌 종료를 수집했다. 분기 종료9개다.
+
+독립 검토로 자기 warmup5,000의17배열 바이트 동일과 과거main 이력의 전체 root 선택/순서를
+확인했다. 최초77수집의 검사·source·종료·root/path 순서는 기존quota100과 같았다. 다만
+GPU 학습을 포함한 별도 실행의 수치는 바이트 동일하지 않았다. 최대 raw-u 차이3.7143e-7,
+보상 차이2.8971e-11, packed 관측 차이9.1642e-7를 그대로 기록했다. 원인을 단정하거나
+숫자까지 동일한 실험이라고 부르지 않는다. 함수 자체의 주어진 callback에 대한 quota
+prefix 동일성은 앞서 unit test로 확인한 별도 사실이다.
+
+연장한 path 하나를 CPU에서 원래 자기 raw action 그대로29step 재실행했다. 그중21step이
+추가 extension이다. 관측/다음 관측은 기존 재현 허용오차1e-6, 보상은1e-8 이내이고 mask는
+정확히 같았다. 검사 valid/reason, source, 실제 제어 dict, terminated/truncated/bootstrap을
+대조했다. 다른 quota path까지 전부 새로 재실행했다고 확대하지 않는다. 모든69분기의
+원시 저장 연결 일관성은 별도 auditor로 검사했다. 학습이나 새 NN 추론 없이 수행한 검증이다.
+
+`review_paired100.py`로 같은 초기조건/map/seed4쌍과3모델12episode의 원본 frame 지표를
+재계산했다. 고유 개발 장면2개이며 독립 test가 아니다.
+
+| 모델 | 목표/충돌 | tick | 거절 | 제동 | 정지 | 평균 return |
+| --- | --- | --- | --- | --- | --- | --- |
+| 초기mean0 | 2/4·2/4 | 216 | 58 | 46 | 22 | -10.015390 |
+| quota100 | 0/4·4/4 | 224 | 108 | 96 | 44 | -20.259841 |
+| quota-extension100 | 0/4·4/4 | 224 | 108 | 96 | 44 | -20.259844 |
+
+**새100회 후보도 성능 실패이며 주행 개선은 없다.** 모든 접촉은 정지 중 뒤쪽 접촉 기하로
+분류됐지만 책임 판정은 아니다. 구현/저장/재현 검증과 정책 성능을 구분한다.
+
+로컬 `outputs/sac_quota_extension_20261120/collection100-review.json` SHA
+`869013d890524ede0600674984112155ac7660b0b67211ababab5613cb69760a`,
+`actual-suffix-reconstruction.json` SHA
+`986bfa1f85ee55a3b8382488b660b7302d3b1c1b2a986e0b2839b31d22b948eb`,
+`paired100-review.json`, `audit100.json`에 완료 근거가 있다. 각각 같은 디렉터리의
+`review_collection100.py`, `reconstruct_actual_extension.py`, `review_paired100.py`를
+실제로 실행했다. 새1,000용 검토기들은 구문 검사만 했으며 원본 완료 뒤 실행한다.
+
+위 실제 결과 검토 후00:33:51 KST에 **fresh seed0·같은 자기 warmup5,000의1,000회 비교**를
+시작했다(runner2477739/train2477740). 이전100 가중치를 이어받지 않는다. 100에서 수집한
+완성 extension은KEEP 하나뿐이고 기존quota도100회0/4와1,000회2/4가 달랐으므로, 같은
+1,000예산 대조를 한 번 수행한다.100실패를 성공으로 바꾸거나 더 긴 학습의 개선을 보장하지
+않는다. 근거/고정 조건/남은 정지 문제는 `review-decision1000.json`에 사전 기록했다.
+
+자동 범위는1,000수집→저장 감사→동일4개 개발 주행→고정 종료Q→uniform coverage→수집
+terminalQ다. 이어 같은 두 train 상태×4seed의 실제 종료 soft return을 대조하는 읽기 전용
+runner2478192를00:34:02 KST에 대기시켰다. 두 runner와 train child의 실제 실행을 확인했다.
+모델·배율·원래Gaussian·보상·검사·PD·uniform replay·실제step당 update1·BC/teacher0를
+유지하며 모든 현재 실행 소스를 마지막 검사까지 동결한다. 결과 검토 전 추가 학습 예산,
+전체16/new learner seed/독립 정책 평가는 연결하지 않았다. 안정 정책 목표는 계속 active다.
