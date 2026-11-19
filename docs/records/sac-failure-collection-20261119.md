@@ -1737,3 +1737,51 @@ uniform replay/1actual step당1update/BC·teacher0는 동일하게 유지한다.
 `review-decision1000.json`에 실패 지표·근거 hash·고정 조건·한계를 사전 기록했다.
 소스는 완료까지 동결한다. 추가 예산 자동 연장·새 learner seed·독립 정책 평가는 없으며,
 안정적인 정책 목표는 계속 active다. 성능 개선 근거가 나오기 전에는 평가 확대하지 않는다.
+
+## 2026-11-20 00:03 KST 정지 탐색의 조건부 한계와 후속 검토 준비
+
+실행 코드는55df7a7, 기록 직전 HEAD83a1895다. 같은1,000회 비교는 runner2456547/
+train2456548의 실제 실행을 확인했으며,00:02경727update까지 진행됐다. 결과를 미리 채택하지
+않는다. 고정4주행·Q/coverage가 끝나면 같은 두 train 상태×4seed(88019~88022)의 실제 종료
+soft return을 실행하도록 읽기 전용 runner2460323을23:52:30 KST에 연결했다. 현재
+`WAIT_MATCHED1000_PIPELINE`이며 학습 추가나 별도 평가 장면 사용이 아니다.
+
+기존 규약에서 **평균 raw action=0, anchor 속도=0, 가속도=0**인 조건의 탐색 크기를 별도로
+계산했다. `3*tau^2*B`를 직접 닫힌식으로 계산하고 실제 코드 B/decoder와 대조했다. g=0.002,
+sigma=0.02에서3초 마지막 점의 축별 표준편차는4.7816e-5m이며, 허용 상한0.03에서는
+7.1724e-5m다. 원래 trajectory의 전체 정지 정렬을 충분히 보장하는 두 조건(모든 future 점이
+anchor1mm 이내, 모든 future 점이 첫 future 점1mm 이내)의 실패 확률을2차원 Gaussian
+반경 tail과 union bound로 계산했다. 시간 간 독립성을 가정하지 않는다.
+
+초기 sigma0.02의 상계는1.978e-95, 두 축 모두상한0.03에서도1.192e-42다. 즉 이 조건에서는
+잡음만으로 전체 정지 정렬을 벗어날 가능성이 매우 작다. 원래 decoder/Trajectory를 사용한
+합성100표본(seed20261119)도 모두31개 knot의 정지 경로로 정렬되고 속도0이었다. 최대 원래
+waypoint 거리는0.0001955m였다.100표본은 코드 sanity check이며 확률 상계의 증명 자체가 아니다.
+
+이 결과를 비영점 학습 평균·비영점 anchor·전체 학습 과정으로 일반화하지 않는다. SAC 학습이
+불가능하다는 주장, 수렴 시간 예측 또는 보상/검사/PD 변경 근거로 쓰지 않는다. 수집 길이를
+늘리는 것이 정지 출발도 자동으로 해결한다는 가정에 대한 구체적인 반례 조건이다.
+
+기존quota3,000의 Q감사에 저장된 평균에서도 추가 조건부 계산을 수행했다. 원래 자기 warmup
+replay의 SHA를 검증하고, 고정terminal62행 중 valid packed 속도/가속도가 정확히0인50행을
+출력값과 무관하게 전부 선택했다. 이 저장 평균을 zero anchor에서 원래 decoder/Trajectory로
+계산하면50/50 모두 전체 정지 정렬이며, 최대 평균 waypoint 거리는3.6967e-5m다. 저장 평균과
+sigma상한0.03을 조건으로 정렬 조건 실패 확률의 최대 상계는1.3801e-39다.
+
+이50행 계산은 **과거 batch 추론으로 저장한 평균**에 대한 것이며 scalar Policy 재계산과의
+수치 차이를 없었다고 가정하지 않는다. 실제 scene 재실행이나 새 NN 추론/학습은 없었다.
+비영점 anchor, 이후 바뀌는 평균, 전체 정책의 성능/불가능성에 대한 상계가 아니다.
+보상·검사·PD·잡음·평균 구조는 변경하지 않았고 진행 중인1,000회 조건도 그대로 유지한다.
+
+로컬 `outputs/sac_complete_failure_path_20261119/`의
+`standstill-exploration-review.json`(조건부 수학·합성 코드 확인),
+`saved-standstill-means3000-review.json`(저장50평균 조건부 계산)에 가정·source hash·수치가 있다.
+이 검토와 별개로 실제 주행이 개선됐는지는 완료될 동일예산 평가로 판단한다.
+
+완료 후 사용할 저장/주행/Q 검토기도 준비했다. `review_collection1000.py`는 원시main의
+accepted/rejected 이력에서 root 후보와 우선순위를 독립 재구성하고, 새100회 자료에서 실행해
+기존17배열 동일·선택 root·29step 실제 종료를 확인했다. 이때100자료는 main71/branch29로
+모두KEEP이고, 사전정지 main35/branch20이며 고유train2장면이었다. 완료1,000의 전체
+분모는 아직 미확정이다. `review_evaluation1000.py`와 `review_value1000.py`는 구문검사만
+완료했고 실제 최종 원본이 나온 뒤 실행한다. 다른 분기 방식의 서로 다른 terminal 상태를
+동일 상태의 paired Q로 비교하지 않는다.
