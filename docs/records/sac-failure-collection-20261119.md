@@ -2324,3 +2324,25 @@ coverage→수집terminalQ와runner2493877의같은2train상태×4seed 실제종
 최종 value/sampling독립검토는미실행이다. 실행중부분Q수치를최종결과로채택하지않고완료후
 검토한다. 새로운수집/학습예산은아직결정하지않았다. 보상·검사·PD·원래Gaussian·BC/teacher0와
 현재소스동결을유지하며안정정책목표는active다.
+
+
+## 01:39 KST 종료 Q·uniform 노출 검토 완료, 실제 미래 보상은 대기
+
+같은62terminal/44severe 저장 행의 min(Q1,Q2)와 MAE를 독립 재계산했다.
+extension2,000의 severe MAE는0.847492로 extension1,000의5.584352보다 줄었지만
+같은예산quota2,000의0.742834보다 컸다. 같은실제 terminal 상태에서 현재평균의
+Q−보상은 KEEP0.673838/FOLLOW1.217628점이며 둘다COLLISION·bootstrap false다.
+앞선상태의미래비용이나주행안정을검증한수치가아니다. 실제주행은앞절의0/4성공·4충돌이다.
+로컬 `terminal-fit2000-review.json` SHA
+`6dbfbc0e937e70177385bf43671db4447cdb97efd71dbf7d1f54c634dedb1999`.
+
+`review_sampling2000.py`를실제로실행해512,000uniform추출의전체인덱스와savedRNG,
+CSV와원시replay의ID/tick/reward/bootstrap을대조했다. warmup430,763/online81,237은
+quota와같다. severe terminal 추출은quota9,680 대비새8,754:
+warmup3,767동일/main606→496/branch5,307→4,491이다. branch전체추출은28,326→42,029로
+늘었어도terminal노출은줄었다. 새경험의상태/행동/방문도함께달라단일인과로주장하지않는다.
+로컬 `sampling2000-review.json` SHA
+`6ac3926a94f6e90bf5955042fbc076995f71d60cf4764ed22657df03fe21c6d7`.
+
+수집terminalQ와그뒤실제종료MC가남았고 `review_value2000.py`는MC완료후실행한다.
+추가학습은연결하지않았고소스를그대로유지한다. 안정정책목표는미달이며계속active다.
