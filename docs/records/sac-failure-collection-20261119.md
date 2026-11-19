@@ -2254,3 +2254,73 @@ mu head의 affine 출력과 이후 B/g/gain 적용을 독립 식으로 대조했
 
 이 결과는 안정 정책 달성이나 평가 확대 근거가 아니다. 실행 중인 총2,000 비교와 runtime
 소스 동결을 유지한다.
+
+
+## 01:34 KST quota-extension2,000 수집·4주행 검토 — 기존 두 성공을 잃어 미채택
+
+학습2,000actual transition/update와 저장 감사가 완료됐다. 모델 SHA
+`cce148bb17d6afc54cbfd648445a3a955d6844882cae32ba682a933e461955d9`, replay SHA
+`e6857943447874bd3ba18bf82ec1302abd3e4c4eb045f2619556d31d6479d862`다.
+`review_collection2000.py`를 실제 실행해 이전6,000행17배열과 tick/update prefix 바이트 동일,
+복원 learner/optimizer/target/RNG serialization 동일·source lineage·추가1,000update를 확인했다.
+
+| 같은2,000예산의 실제 수집 | quota2,000 | extension2,000 |
+| --- | --- | --- |
+| main/branch step | 1,349/651 | 1,117/883 |
+| 고유train장면 / root | 19/84 | 15/66 |
+| branch terminal | 129 | 108 |
+| 사전정지 경험 | 1,080 | 972 |
+| 검사 통과 경험 | 908 | 791 |
+| 양의 즉시보상 경험 | 249 | 297 |
+
+추가1,000은 main646/branch354, 고유7train장면이다. 전체main episode는충돌11·목표1·
+RECORD_END2·상속된 nonterminal 예산 경계1이다. 목표1은이전1,000의train수집에서 발생했고
+개발 평가 성공에 더하지 않는다. 긴 경로/정지 비중만 좋아졌다고 전체 수집 효과를 단정하지 않는다.
+
+`review_evaluation2000.py`로 초기mean0·quota2,000·extension1,000·새extension2,000의
+16episode 원시 frame을 재계산했다. 동일2개 개발 장면×KEEP/FOLLOW의4초기상태/map/seed를
+검증했으며 독립 test가 아니다.
+
+| 모델 | 목표/충돌 | tick | 거절 | 제동 | 정지 | 평균 return |
+| --- | --- | --- | --- | --- | --- | --- |
+| quota2,000 | 2/4·2/4 | 236 | 48 | 37 | 13 | -9.992331 |
+| extension1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981107 |
+| extension2,000 | 0/4·4/4 | 220 | 87 | 77 | 25 | -20.222395 |
+
+새 거절39.55%·제동35.00%·정지11.36%이며 기존2,000의20.34%/15.68%/5.51%보다 나쁘다.
+고속 KEEP/FOLLOW가각67/61tick에 충돌했고 중속두주행은각46tick 충돌했다. **기존 두 성공을
+잃었으므로 새 후보 미채택, 추가 예산/전체개발16/새seed/별도정책평가로 자동 확대하지 않는다.**
+
+`review_regression_paths.py`로 실제제안/검사/source/속도/접촉 시간도 대조했다.
+고속KEEP는tick34, FOLLOW는tick32에 기존NEW/OK 대 새REUSED/PREDICTED_OFFROAD로 처음
+검사/source판정이 달라졌다. 그tick의 두차 위치 차이는각약0.049/0.043m이며 첫 제안30점의
+최대차이는약6.80/6.39mm다. 작은첫차이만을 단일원인으로 단정하지 않는다.
+
+새고속KEEP/FOLLOW의 첫제동tick36/34, 최초정지tick61/56, 충돌tick67/61이다. 각각마지막
+30tick동안새제안이계속거절됐으며 terminal에는자차가정지한채뒤쪽객체4877과접촉했다.
+기존두주행은tick65에제동을시작했어도정지하지않고tick72에목표를달성했다. 새중속두주행도
+정지상태에서뒤쪽객체504와접촉했다. 이기하/시간이력은사고책임이나유일한인과판정이아니다.
+
+저장된고속KEEP원본만으로기존SAC2,000 대 새SAC2,000 GIF를렌더했다. 새환경주행/추론0이며
+Rule-based비교영상이아니다.25frame·1440×900·실제7.2초+최종hold1.5초(총8,700ms)를읽어검증했고
+PNG를실제로열어도로/차량/제안/궤적/거절/제동표시를확인했다.
+로컬 `outputs/sac_quota_extension_continuation_20261120/review/quota-vs-extension-2000.gif`,
+SHA `bbafc3d73e989ad92c7783ef31873f107a495539c6dbbf4ffaf2aa594c6bac9d`.
+
+새2,000도앞절과동일한312actual train상태로CPU추론하고인덱스/속도/전체선택행동일을확인했다.
+mean head첫주성분기여99.9082%, 이동135상태보정중앙값0.021054m, 저속0.002332m,
+정지0.00004469m다. 보정크기증가를성능향상으로판단하지않으며전체경로/물리분산과구분한다.
+`outputs/sac_actor_state_response_20261120/four-model-comparison.json` SHA
+`c7a68327e3429c778a9317bebaa3f612755ecd1e9fe309495d0b2a14b0146a8e`.
+
+로컬 continuation의완료근거:
+
+- `collection2000-review.json`: `1185e07c16cb7e5b1d750275c4af2236f207f283648552b0552d71e8e0b3e0d5`.
+- `evaluation2000-review.json`: `b36fab5f2238578343811929a91b9d2b09edefb80f333d0519ae749b150ce68e`.
+- `regression-paths-review.json`: `8e19ab43569c12a78f6ca14f645efde325ba7345b88ab969e84e9b418fd5b786`.
+
+01:33:55KST 기준train2493590/주행2501112는완료·종료했고고정Q child2502570은실제실행중이다.
+coverage→수집terminalQ와runner2493877의같은2train상태×4seed 실제종료MC가남았다.
+최종 value/sampling독립검토는미실행이다. 실행중부분Q수치를최종결과로채택하지않고완료후
+검토한다. 새로운수집/학습예산은아직결정하지않았다. 보상·검사·PD·원래Gaussian·BC/teacher0와
+현재소스동결을유지하며안정정책목표는active다.
