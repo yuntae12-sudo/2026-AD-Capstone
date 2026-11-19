@@ -564,3 +564,112 @@ main 판정/속도로 재생해 이전 보존 소스와 선택 tick이 모두 �
 replay SHA `a09d39f0fd1e68bfe8fa7962ed85351f0b77c60888b575addb6d9ff0b59ccf33`.
 100회 주행 평가는 이번 수집 비교에서 미실행이다. 학습/저장 통과를 성능 통과로
 기록하지 않는다. 현재 같은 설정 fresh1,000회 학습 PID2309042로 진행 중이다.
+
+## 18:50 KST 수집 중간 구성과 종료까지의 가치 검증 준비
+
+현재 predecessor1,000회 실행은 계속 진행 중이다. 첫300개 실제 로그만 고정해서 기존
+physical 대조의 첫300개와 비교했다. 양쪽 main156/branch144이며, 분기 통과는7→48,
+분기 pre-step 정지는40→24였다. 새 predecessor48개는 전부 통과했고 양의 보상8개였다.
+main의 통과32·양의 보상8·정지68은 집계상 같지만 실제 경로/상태의 동일성을 뜻하지 않는다.
+완료된 replay 감사나 주행 평가가 아닌 중간 trace 분석이며, 고정 prefix 바이트 hash와
+분모를 로컬 `outputs/sac_predecessor_collection_20261119/prefix300-comparison.json`에 보존했다.
+
+추가 읽기 전용 `diagnose_frozen_soft_returns.py`를 같은 로컬 폴더에 준비했다.
+현재 모델의 terminal Q 일반화가 나아져도 그 이전 상태의 미래 실패 비용이 여전히
+작게 예측되는지 확인하려는 진단이다. 기존 physical1,000의 paired 검사에서 결과/Q와
+무관하게 선택했던 KEEP tick0/FOLLOW tick4를 그대로 사용한다. 각 모델의 평균을 첫 행동으로
+고정하고, 이후는 기존 `Policy`의 확률 행동으로 실제 계약 종료까지4seed씩 실행한다.
+두 모델은 각자의 평균 첫 행동/후속 정책을 쓰므로 동일 행동 인과 비교는 아니다.
+
+Q의 max-entropy 정의에 맞춰 첫 행동에는 entropy를 넣지 않고 이후에는 원래 ell과
+고정 alpha를 사용한다. 할인율0.99, 실제 reward·delta_tick·terminal을 유지하며 종료에서
+critic bootstrap을 넣지 않는다. 표본 soft return과 Q의 차이는 작은 MC 추정치이고
+정확한 기대 Q 오차나 독립 test 성능이 아니다. Rule-based/teacher는 사용하지 않는다.
+
+구문 검사와 첫 행동 entropy 제외·할인 보상/entropy·1tick guard·유한 Bellman 전개와
+forward 합 일치의 산술 검사를 실행해 통과했다. **GPU/Waymax 실행은 아직 미실행**이다.
+실제 실행에서는 원본 parent 관측/mask/reward를 재현하고, sample_action과 실제 Policy
+raw의 일치, 부모 상태와 모델/replay hash 불변, 실제 종료 도달을 확인한다.
+실행기 `run_soft_return_comparison.py` PID2313732가 현재 파이프라인 종료 뒤
+physical1,000→predecessor1,000 순서로 실행한다. `soft-return-status.json` WAITING,
+`soft-return-launch.json`에 명령·실행기 hash를 보존했다. 학습 코드/가중치/규약은
+변경하지 않았으며, 이 로컬 진단과 기록은 HEAD3180615 이후 미커밋 작업이다.
+
+## 19:00 KST predecessor1,000회 완료: 고정4주행의 성공 두 건 회복
+
+학습과 실제 replay 감사가 완료됐다. 코드3180615, 모델 SHA
+`d9061a908bb3c6f2f5e41d06ad55afc5b66851eb2c00e49236f8d553eaec52ee`, replay SHA
+`56044f85ecbe05fb52a3c0e9a0eacaba236873f95acb45f0cc06dc3c78958f3b`.
+main664/branch336, 고유 train10장면·분기 원본42상태, 실제 분기 종료56/nonterminal280이다.
+원본 행동·보상·관측/mask·종료·teacher0·전이당update1·선택 근거를 대조했다.
+같은 physical 대조와 비교해 분기 통과38→136/336, 양의 보상22→81/336으로 늘었다.
+predecessor144개 중136개 통과·81개 양의 보상이고 나머지8개 거절도 그대로 저장됐다.
+main 종료 집계는 양쪽 모두7충돌·1목표·1RECORD_END·1예산경계로 같았다.
+`completed-collection-comparison.json`에 데이터 구성과 원본 hash를 보존했다.
+
+새 고정 개발2장면×KEEP/FOLLOW의 결과는 **목표2/4·충돌2/4**다. 빠른 장면8b4c…에서
+KEEP/FOLLOW 모두72tick에 목표를 도달해 기존 physical 후보의 두 충돌을 회복했다.
+초기 평균0도 성공했던 장면이므로 최초 성공이나 초기 정책보다 높은 성공률로 표현하지
+않는다. 저속8a4f…는 여전히KEEP/FOLLOW 모두46tick에 충돌했다. 초기 frame/지도/seed를
+네 쌍 모두 대조했고 비용 gate는passed=true다. 정책 확보/최종 성능 기준 통과는 아니다.
+
+새 후보236tick·거절44·제동36·정지12이며, 기존 physical은276tick·거절104·제동96·정지44다.
+초기 평균0의216tick·거절58·제동46·정지22와도 구분한다. episode 길이와 종료 이유가
+달라진 지표를 분리해서 읽는다. `pilot-review.json`에 원본 report hash와 분모를 저장했다.
+현재 고정Q→coverage→새분기Q→수치 진단을 이어가고 있으며, 예약한 실제 종료까지의
+soft-return 비교도 아직 대기 중이다. source/가중치/학습 조건은 변경하지 않았다.
+
+짧은 주행 회귀가 회복됐으므로 같은 고정 모델을 **전체 개발 validation8장면×KEEP/FOLLOW**에서
+초기 평균0과 비교하는 다음 검증을 예약했다. 기존8장면은 반복 사용한 개발 자료이며
+독립 test가 아니다. 각 정책16회, 총32회 실행하고 최초 frame/지도/seed16쌍, 기존 pilot4회
+결정적 결과 재현을 검사한다. Rule-based/다른 seed/독립 장면 최종 비교는 아직 미실행이다.
+`run_full_validation.py` PID2318739, `full-validation-status.json` WAITING,
+`full-validation-launch.json`에 명령·소스 hash가 있다. 실제 실행은 현재 파이프라인과
+읽기 전용 soft-return 비교 종료 후 순차 진행한다. 이 후속 기록은 HEAD3180615 이후 미커밋이다.
+
+## 19:25 KST 실제 종료까지의 가치 비교 완료: 앞선 상태의 과대평가 지속
+
+predecessor1,000의 고정 Q·coverage·새 분기 Q·수치 진단까지 완료했다. 기존 고정 두
+충돌 상태의 현재 평균 Q 오차는6.1073/4.1387로 physical의6.1437/4.1731과 비슷했다.
+새 후보가 실제로 수집한 terminal 두 상태의 평균/확률 행동도12/12회 모두 충돌했고,
+Q 과대평가는 KEEP 약3.28, FOLLOW 약4.33이다. batch256×1,000의 실제 추출 중
+초기 자기 warmup233,361/256,000(91.16%), 새 main13,409, 분기9,230이었다.
+분기336개 중4개(삽입 update930/940/971/972)는 해당1,000회 batch에서 추출0회였다. 저장된 severe terminal
+warmup44개의 Q MAE도5.4065여서 충분한 적합을 주장하지 않는다.
+
+읽기 전용 soft-return 비교를 두 모델 모두 완료했다. 이전 paired 검사에서 미리
+고른 train KEEP77ae… tick0/FOLLOWbaac… tick4에 각 모델의 평균 첫 행동을 적용한 뒤,
+원래 확률 정책으로 실제 종료까지 seed88019~88022 네 번씩 실행했다. 양쪽 모두
+**8/8회 실제 충돌**이었다. 아래는 각 상태의4회 표본 평균이며 정확한 기대 Q가 아니다.
+
+| 후보 | 상태 | 현재 평균 행동 Q | 실제 soft return 평균 ± 표본 표준편차 | Q − 표본 평균 |
+|---|---|---:|---:|---:|
+| physical1,000 | KEEP tick0 | -0.5898 | -13.2774 ± 2.0451 | 12.6875 |
+| predecessor1,000 | KEEP tick0 | -0.3466 | -13.3945 ± 2.0569 | 13.0480 |
+| physical1,000 | FOLLOW tick4 | -0.2683 | -10.5707 ± 0.4755 | 10.3024 |
+| predecessor1,000 | FOLLOW tick4 | -0.2210 | -10.8831 ± 0.6225 | 10.6621 |
+
+각 모델은 자신의 첫 평균/후속 정책/고정 alpha를 사용하므로 동일 행동 인과 비교는
+아니다. 두 train 상태와 반복 seed를 독립 장면16개로 세지 않는다. 확률 후속 주행과
+평균 정책의 개발 pilot2/4성공은 상태·평가 방식이 달라 같은 분모로 섞지 않는다.
+**수집 통과와 pilot 회복은 확인했지만 장기 가치 예측 개선은 확인하지 못했다.**
+
+원본 두 상태의 입력 fingerprint와 반복 seed가 모델 간 같음을 확인했다. 진단기의
+실제 Policy/raw 대조·부모 상태/가중치/replay 불변 검사를 통과했고, 저장된16개 trace를
+별도로 읽어 hash·실제 tick·최종 terminal·첫 entropy 제외·할인 reward/entropy 합·역방향
+유한 Bellman 전개·거절/제동 횟수도 대조했다. 결과는 로컬
+`outputs/sac_predecessor_collection_20261119/soft-return-comparison-review.json`,
+`soft-returns-physical/`, `soft-returns-predecessor/`에 있다.
+
+수치 한계도 보존한다. 같은 physical 모델의 이전1step probe와 이번 재시작 진단 사이
+평균 raw 차이는 최대1.31e-7, Q 차이는 최대0.00572였다. 이번 복원 입력은 원본 replay와
+바이트 단위로 같았으나 이전 probe 입력은 당시 allclose 검사만 했으므로 차이의 원인을
+단정하지 않는다. 관찰된 차이는 이번10~13점 격차보다 작다. 새 후보의 별도20nonterminal×
+2key 수치 진단에서 default fused/분리 계산 차이는5.95e-10였으며 정밀도는 변경하지 않았다.
+
+19:25 KST 전체 개발 validation 실행 PID2329716을 확인했다. 초기 평균0/새 후보 각각
+8장면×KEEP/FOLLOW16회, 총32회이며 아직 실행 중이다. `full-validation-status.json`과
+`full-validation/report.json`에서 확인한다. source/보상/검사/PD/순수 SAC 조건은 그대로다.
+새1,000회 이후 학습은 아직 미실행이고, 전체 결과·초기 조건16쌍·pilot4회 재현을 검토한
+뒤 같은 모델의 추가 학습 또는 수집의 빠진 구간을 선택한다. 안정적인 정책 확보 목표는
+계속 진행 중이며, 새seed·동일 조건 Rule-based·독립 평가 미완료를 유지한다.
