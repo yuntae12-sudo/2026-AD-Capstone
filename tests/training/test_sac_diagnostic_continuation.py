@@ -95,3 +95,53 @@ def test_rollout_horizon_and_implementation_cannot_change_on_resume(completed):
     completed[3]["quota_script_sha256"] = "different quota implementation"
     with pytest.raises(ValueError, match="quota_script_sha256"):
         check(completed)
+
+
+@pytest.fixture
+def budget_resume(completed):
+    import copy
+    path, source, _, _ = completed
+    current = path / "continued"
+    current.mkdir()
+    rows = [dict(update=i + 1, episode_uid="old" if i < 2 else "new",
+                 pre_tick=i if i < 2 else i - 2,
+                 lineage={"kind": "failure_branch" if i == 1 else "main"})
+            for i in range(4)]
+    for name, values in (("ticks.jsonl", rows), ("updates.jsonl", [dict(update=i+1) for i in range(4)])):
+        lines = [json.dumps(row) + "\n" for row in values]
+        (path / name).write_text("".join(lines[:2]))
+        (current / name).write_text("".join(lines))
+    report = copy.deepcopy(source)
+    report.update(updates=4, new_transitions=4, inherited_online_updates=2,
+                  continuation_history=[continuation_lineage(path, source, 2)])
+    report["arms"]["online"]["updates"] = 4
+    return current, report, rows
+
+
+def test_budget_audit_accepts_only_verified_inherited_and_final_boundaries(budget_resume):
+    from scripts.audit_sac_branch_replay import validated_budget_end_indices
+    current, report, rows = budget_resume
+    assert validated_budget_end_indices(current, report, rows) == {1, 3}
+    report.pop("continuation_history")
+    assert validated_budget_end_indices(current, report, rows) == {3}
+
+
+@pytest.mark.parametrize("damage", ["hash", "prefix", "count", "restart", "missing_hash", "duplicate"])
+def test_budget_audit_rejects_unverified_cutoffs(budget_resume, damage):
+    from scripts.audit_sac_branch_replay import validated_budget_end_indices
+    current, report, rows = budget_resume
+    entry = report["continuation_history"][0]
+    if damage == "hash":
+        entry["source_hashes"]["ticks.jsonl"] = "invalid"
+    elif damage == "prefix":
+        (current / "ticks.jsonl").write_text((current / "ticks.jsonl").read_text().replace('"old"', '"changed"', 1))
+    elif damage == "count":
+        entry["inherited_online_updates"] = 1
+    elif damage == "restart":
+        rows[2]["pre_tick"] = 2
+    elif damage == "missing_hash":
+        entry["source_hashes"].pop("replay.npz")
+    else:
+        report["continuation_history"].append(entry.copy())
+    with pytest.raises(ValueError):
+        validated_budget_end_indices(current, report, rows)

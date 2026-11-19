@@ -13,6 +13,45 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def validated_budget_end_indices(directory, report, rows):
+    """Allow only final or hash-verified inherited budget cutoffs, never arbitrary gaps."""
+    from scripts.sac_diagnostic_continuation import validate_source
+    from src.training.sac.checkpoint import file_hash
+
+    ends = {len(rows) - 1}
+    history = report.get("continuation_history", [])
+    expected_files = {"report.json", "online-learner.msgpack", "replay.npz",
+                      "ticks.jsonl", "updates.jsonl"}
+    previous_count = 0
+    for position, entry in enumerate(history):
+        source_dir = Path(entry["source_directory"])
+        hashes = entry["source_hashes"]
+        if set(hashes) != expected_files or any(
+                file_hash(source_dir / name) != digest for name, digest in hashes.items()):
+            raise ValueError("inherited budget source checksum mismatch")
+        source = validate_source(source_dir, report["versions"], report["arms"]["online"],
+                                 report["collection"], report["updates"])
+        count = entry["inherited_online_updates"]
+        if (type(count) is not int or not previous_count < count < len(rows)
+                or count != source["updates"]
+                or source.get("continuation_history", []) != history[:position]):
+            raise ValueError("invalid inherited budget history")
+        for name in ("ticks.jsonl", "updates.jsonl"):
+            prefix = (source_dir / name).read_bytes().splitlines(keepends=True)
+            current = (directory / name).read_bytes().splitlines(keepends=True)
+            if len(prefix) != count or current[:count] != prefix:
+                raise ValueError("inherited budget history prefix mismatch")
+        following = rows[count]
+        if (following["lineage"]["kind"] != "main" or following["pre_tick"] != 0
+                or following["episode_uid"] == rows[count - 1]["episode_uid"]):
+            raise ValueError("inherited budget must explicitly restart collection environment")
+        ends.add(count - 1)
+        previous_count = count
+    if history and previous_count != report.get("inherited_online_updates"):
+        raise ValueError("inherited budget count mismatch")
+    return ends
+
+
 def audit(directory, manifest):
     from src.training.sac.checkpoint import file_hash
 
@@ -156,12 +195,13 @@ def audit(directory, manifest):
         assert row["delta_ticks"] == 1 and row["tick"] == row["pre_tick"] + 1
         assert row["bootstrap"] == (not (row["terminated"] or row["truncated"]))
     priority = {"moving_predecessor": 0, "moving_rejection": 1, "recent": 2, "terminal": 3}
+    budget_ends = validated_budget_end_indices(directory, report, rows) if extend_selected else {len(rows) - 1}
     for trigger, selected_root in extended_roots.items():
         expected = min(states_per_trigger[trigger], key=lambda key: (
             priority[root_initial_lineage[key]["selection_role"]], key[1]))
         assert selected_root == expected
         last_index = root_latest[(*selected_root, trigger[1])]
-        assert not rows[last_index]["bootstrap"] or last_index == len(rows) - 1
+        assert not rows[last_index]["bootstrap"] or last_index in budget_ends
     with np.load(directory / "replay.npz", allow_pickle=False) as data:
         meta = json.loads(str(data["metadata"]))
         assert meta["versions"] == report["versions"]
@@ -211,6 +251,7 @@ def audit(directory, manifest):
                 restart_terminal=restart, complete_path=complete_path,
                 extend_selected=extend_selected,
                 extended_roots=len(extended_roots),
+                validated_budget_end_collection_ids=sorted(i + 1 for i in budget_ends),
                 extension_transitions=sum(r["lineage"].get("quota_extension", False) for r in branches),
                 root_step_counts=list(root_counts.values()) if restart else None,
                 main_provider_counts=dict(Counter(r["provider"] for r in rows if r["lineage"]["kind"]=="main")),

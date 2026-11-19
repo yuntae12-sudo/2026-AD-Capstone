@@ -2762,3 +2762,53 @@ GPU용 분기는 기존62행의 원래 atol3e-5/rtol3e-5와 전체 terminal 배�
 `08ddbbfb1b6400e05cfb02cad5764b5b0d0edbb0cb184d052d63a24f0ff4944f`.
 03:26:22 extension 학습4,323/5,000·child2532783 생존 확인. GPU 수치 차이 해소와
 안정 정책 확보는 아직 미완료다. 문서 기준 HEAD1d47763, 실행 runtime c3fe6a7 유지.
+
+## 03:43 KST extension5,000 학습 완료·검사 오류 수정·평가 복구
+
+두 번째 extension도 총5,000 online update를 완료했다. 새 모델 SHA
+`2dfc45c7fbc3777225d49b05864268c88e43998235b6ec44bf7139a7db9512ab`,
+replay SHA `819d68a8e9a15a26101dfa5d090c02e23df3113392f980fab32f0c54acb26c3e`,
+학습 report SHA `3983e7c680b80e1d9ffc9e0506263f7f4736ae533e0ab3a12680382c9bc071fd`.
+하지만 최초 `audit5000`이 exit1로 실패해 주 runner와 두 대기 reviewer가 실제 종료했다.
+03:37:49 로그·PID 부재·FAILED 상태로 확인했으며, 단순 관찰 timeout으로 재시작한 것이 아니다.
+
+오류는 `audit_sac_branch_replay.py`의 extended root 마지막 상태 검사였다. 실제 전이 중
+비최종 위치에서 열린 경로는 collection_id2,000 단 하나다. 이는 이전2,000회 예산에서
+bootstrap=true로 끝난 정상 분기 경로이며, 이어지는2,001행은 명시적 환경 재시작의
+새 main tick0이다. 당시 파일 마지막을 허용하던 검사 조건이 continuation 뒤에는 그
+검증된 과거 예산 경계를 허용하지 못했다. terminal을 조작하거나 수집 모델을 바꾸지 않았다.
+
+검사 코드에 `validated_budget_end_indices`를 추가했다. continuation의 모든 원본 파일
+SHA·모델/수집 설정·완료 상태·누적 count·중첩 이력과 tick/update byte prefix를 확인하고,
+다음 행이 다른 episode의 main tick0인 경우에만 과거 예산 경계를 허용한다. 임의의
+미종료 분기나 확인되지 않은 경계는 계속 거절한다. bootstrap/실제 종료 검사는 그대로다.
+
+관련 continuation/quota-extension/quota-budget/branch-reconstruction pytest30개 통과.
+새5,000 실제 audit와 독립 collection 검토 모두 exit0이고, 기존extension2,000와quota5,000도
+수정 검사로 재실행해 통과했다. 새 extension의 검증된 budget collection_id는1,000/2,000/5,000.
+이전7,000행17배열과 tick/update prefix가 바이트 동일하고 learner 복원·seed2000 환경
+재시작을 확인했다. 새 audit SHA
+`88379e7a2bb31baac5ccead7bf645c094c7eae95f5b1cf1c177de1542317c868`,
+독립 collection SHA `4d5d09efe2dd1dcb4e12e312dada4817f5fe74976f3529ff4978bda8379ee52f`.
+
+전체 main2,908/branch2,092, 고유 train29, roots150, branch 실제 terminal233개다.
+선택 경로 연장25roots·추가892step이며 pre-step 정지는 main1,785+branch844=2,629/5,000.
+추가3,000회만 보면 main1,791/branch1,209, 고유 train20, branch terminal125개다.
+이 경험량이나 audit 통과는 주행 성능 통과를 의미하지 않는다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/audit-failure-20261120T0337/`에
+원래 FAILED 상태3개·로그·검사 소스를 보존했다. 원래 주 status SHA
+`3b7a2ed195f381f8060251a6c45ec4e653e21232f3f666d710f9f98731630014`.
+새 `resume_validation.py` SHA `49d5aaf7bde0417962ef6642156828b092cf39b6a234211d4c509593145ba0f5`는
+원래 실행의 검사 파일 한 개만 달라졌고 저장 모델/replay가 그대로임을 확인한 뒤,
+미실행 평가부터 순서대로 복구한다. 학습 재실행·추가 예산은0이다.
+
+03:42:57 recovery runner2547534/평가 child2547542 실제 생존·evaluate5000 실행 확인.
+현재 상태는 `status.json`과 `validation-recovery-status.json`이다. 원래 두 reviewer의
+FAILED status는 보존하며 현재 작업은 recovery runner 하나가 평가→고정Q→coverage→
+branchQ→실제종료MC 및 단계별 독립 검토→두 arm GPU62/배열 검토를 수행한다.
+주 status에는 원래 failed execution/원본 source hash와 수정한 validation SHA를 별도 보존한다.
+현재 검사 SHA `73aa87b9d555de53441d252591888e8188bbfab1be87cedc3e799e3eaccec3f1`.
+복구 검증이 끝나기 전까지 현재 core·검사·recovery/reviewer/GPU 스크립트를 고정한다.
+학습 runtime c3fe6a7은 유지하며 기록 기준 HEADbb64ec4에서 검사/테스트 수정은 미커밋이다.
+안정 정책 미확보·두 arm의 최종 주행/가치 비교 미완료·전체 목표 active.
