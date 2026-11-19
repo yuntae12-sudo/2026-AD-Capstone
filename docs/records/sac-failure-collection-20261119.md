@@ -3547,3 +3547,35 @@ world XY로 회전하며, 본문 확인에서 그 회전 누락을 발견한 것
 Notion 첫 화면·03절43·04 현재 작업을6b1cfd2 기준으로 갱신하고 실제 재조회했다.
 핵심 수치/새 실행 경로/커밋 링크 및 과거 headings5/44/19개 보존·43절 중복 없음 확인.
 이 추가 정지 분석과 실제 복원 확인도 같은 절에 후속 반영한다. 안정 정책은 여전히 미확보다.
+
+
+## 2026-11-20 07:25 KST — 10,000 후속 검토기 준비·기존 결과 재현
+
+실행 코드6b1cfd2와 모든 동결 조건을 유지한다. 07:25:11 runner2620438/train2620440
+실제 생존·총8,072/10,000 확인. 현재 모델의 완료 평가 결과는 아직 없고 안정 정책은 미확보다.
+
+로컬 `outputs/sac_mean_decoupled_g_budget10000_20261120/`에 두 CPU 읽기 전용
+후속 검토기를 준비했다. 모델 forward/환경 step/학습을 추가 실행하지 않고,
+기존 완료5,000의 원본 JSON/CSV/replay를 읽어 이전 검토 수치와 대조했다.
+
+- `review_terminal_preference.py`: 실제 보상/종료/outcome/다음 관측 hash가 같을 때만
+  동일 실패 전이의 Q 선호로 해석한다. 새 평균 행동이 비종료로 바뀌면 Q−즉시보상을
+  terminal 오차로 세지 않는다. 저장 행동·scene/tick/reward/bootstrap를 실제 replay와
+  대조하며 기존 네 반례의 모든 기존 수치가 정확히 재현됐다.
+- `review_speed_coverage.py`: [0,0.1)/[0.1,2)/[2,∞)m/s의 정지/저속/이동으로 전체
+  online행과 최근100행을 분류한다. 원본 index/전체행 수/자료 hash를 검증하고 기존5,000
+  그룹별 행 수·현재95%영역 포함 수·추출/미추출 수·RMS 중앙값 모두 정확히 재현했다.
+  정책/방문 상태가 다른 예산 사이의 값이며 인과적 paired 주행이나 안전 gate가 아니다.
+
+실행은 각 script에 `--run outputs/sac_mean_decoupled_g_budget5000_20261120/online5000`
+및 새 출력폴더 내 별도 `--output`을 사용했다. 속도 검토에는
+`--previous-review outputs/sac_mean_decoupled_g_budget5000_20261120/coverage-speed-stratification.json`도 지정했다.
+두 script와 후속 `finalize_review.py`의 py_compile 통과. 준비 검증의 정확한 source hash는
+`review-preparation.json`에 있으며 terminal preflight SHA
+`f21906226f20ca0e420552668a7802cbf40d5fc8bf9ff922a9dbb47453cc9b79`,
+speed preflight SHA `d1f1f326010dca6df86a74588de89a3541f3319d2d2ba151dc97ad67b8e6f13b`다.
+
+실제10,000 Q/branch/coverage가 COMPLETE일 때만 새 입력에 적용한다. 최종 검토기는
+전체 runner job 정상 종료·PID 부재·소스/입력 hash 확인 후에만 결과를 작성하도록
+준비했으며 아직 실행하지 않았다. runtime/runner/decision 변경0, 새 pytest/주행 평가0.
+이 준비는 새 후보의 주행 성능이나 목표 달성의 증거가 아니다.
