@@ -1086,3 +1086,87 @@ soft return을 검사한다. 실행기2376459는 WAITING이며 `soft-return-stat
 자동 연장하지 않는다. 다음 예산/수정은 실제 미래 비용과 Q 목표 전달 결과를 검토한 뒤
 정한다. 안정적인 KEEP/FOLLOW·새 seed·동일 조건 Rule-based 최종 비교·독립 test 확보
 목표는 계속 active이며, 주행 성능 미달을 기록 완료와 혼동하지 않는다.
+
+
+## 21:45 KST 1,000회 미래 비용 검사 완료와 같은2,000회 시점 비교 시작
+
+직전 후속 수집1,000회의 저장·4주행·고정 Q·coverage·수집 상태 새 행동 Q·frozen 실제
+종료 보상·저장 경로 Bellman 검사를 모두 완료했다. 원래 pipeline2371489, 후속2376459와
+2379547 및 child는 종료됐다. 코드90c15a4는 그대로이며 새 로컬 읽기 전용 분석기를 썼다.
+
+수집한 첫 terminal 상태의 현재 평균 Q 오차는 기존→새 KEEP3.28041→2.50442,
+FOLLOW4.32534→4.59269로 **개선이 섞여 있다**. 각각 저장/평균/4표본6개, 두 상태12개
+실제 행동은 모두 충돌했다. replay draw256,000개 중 원래 warmup233,361(91.16%),
+새 main13,409/branch9,230이다. 새 online22개는 아직 추출되지 않았고21개는 마지막100개에
+있다. 분기336개 중 현재 정책95% 타원체 안의 기록 행동 비율은93.45%다. 이 조건부
+분포 겹침은 충분한 학습·정책 성공의 증거가 아니다.
+
+같은 두 실제 train 상태에서 자기 평균 첫 행동 뒤 원래 확률 정책으로 실제 종료까지
+seed88019~88022를 실행했다. 이전과 같은 최초 관측/seed, 첫 entropy 제외, 원본8trace의
+hash·tick·실제 종료·할인합을 별도 `review_value1000.py`로 다시 확인했다.
+
+| 새1,000회 상태 | 현재 평균 첫 행동 Q | 실제 soft return 평균±표본SD | Q−표본평균 |
+| --- | --- | --- | --- |
+| KEEP77ae… tick0 | -0.48678 | -13.39445±2.05693 | 12.90768 |
+| FOLLOWbaac… tick4 | -0.23445 | -10.97692±0.59091 | 10.74247 |
+
+고유2상태의 반복8/8충돌이며 독립test/정확한 기대 Q가 아니다. 기존1,000 대비 paired
+return 평균차이는+0.00009094/-0.09386039로 주행 개선 근거가 없다. 기존 Q−표본평균은
+13.04797/10.66209였으므로 FOLLOW는 이 검사에서도 개선되지 않았다.
+
+별도 저장 행동 검사는 과거 physical1,000의 첫 KEEP/FOLLOW main 충돌 경로에서
+terminal까지 남은0/1/3/7/15tick과 최초 상태, 총12개 고정 상태를 Q를 보기 전에 선택했다.
+기존 independent1,000/2,000과 새 quota1,000을 같은 저장 관측/행동으로 비교하고,
+각 nonterminal에서 같은32seed로 다음 현재 정책 표본의 online/target 값을 대조했다.
+새 KEEP tick0의 저장 행동 Q/학습목표는-0.560/-0.173, FOLLOW tick0은-0.426/-0.191이다.
+두 상태의 다음 online soft value−target soft value는약-0.047/-0.038로 모두 작았다.
+반면 terminal Q는약-17.511/-15.431로 큰 종료 비용을 일부 배웠다. FOLLOW tick0의
+저장 행동 검사와 위 MC tick4의 현재 평균 행동 검사는 서로 다른 표본이다.
+
+종료 적합과 앞선 상태의 낙관적인 학습 목표가 분리되어 있다. 현재 online을 target으로
+즉시 바꾸면 해결된다는 근거는 없으며, 수집 분포·함수 근사·여러 단계 비용 전달을
+이 검사 하나로 단일 원인으로 단정하지 않는다. 기존2,000 모델도 최초 상태 Q가 작지만
+15tick 앞의 Q는약-15~-17로 내려가 있었다.
+
+보조적인 이상화 계산에서는 매 update 모든 online Q가 목표를 정확히 맞추는 결정적
+표 형식 chain, 중간보상0·종료-20·gamma0.99·tau0.005를 사용했다. 28step 앞 비용의
+반영 비율은2,000회약0.000206%/5,000회약29.91%다. 별도 binomial CDF 식으로30개
+snapshot cell을 대조해 최대절대오차4.93e-12였다. 실제 신경망은 이미15step 앞 비용을
+일반화하므로 **이 계산은 실제 수렴 시점·필요 예산·성능 예측이 아니다**. 실제 target
+갱신율이나 보상/알고리즘을 변경하지 않았다.
+
+로컬 `outputs/sac_failure_rollout_quota_20261119/`:
+
+- `soft-returns1000/report.json` SHA `4879ebba76009f65cfc8565a2ae6e1b73e067f92d197d77d0f1f10327e1a3d4b`.
+- `saved-bellman-chain.json` SHA `3ada0ca376793dff119df1a5cec20668735560edb65448ea6b0aae72cbb42bcf`.
+- `value1000-review.json` SHA `7b7737fa8d58a80b70af9b2a9380a38eb6d0be9931adb2318eeeb02dc4738664`.
+- `idealized-target-lag.json`와 `idealized-target-lag-verification.json`은 이상화 계산/별도 수식 대조다.
+
+새 후속 수집1,000의 고정4주행은 초기/기존1,000의2성공을 유지했지만 개선은 없다.
+실제 Q/목표의 미학습과 초기 경험의 높은 batch 점유를 근거로, **같은 모델·수집 조건에서
+추가1,000실제전이/update, 총2,000회까지만** 이어 학습한다. 기존 independent2,000은
+0/16으로 회귀했던 실패를 유지하고 같은 시점의 고정4주행에서 비교한다. 안정적인 정책
+기본 채택이나 전체개발/seed 확대가 아니며, 정지 평균 조건화 문제가 해결된다고 가정하지
+않는다. 단순 target lag나 추가 예산을 확정 원인/해결책으로 취급하지 않는다.
+
+먼저21:41:03 KST actual1001 smoke를 실행했다. 원본 learner 바이트 동일 복원을 확인하고
+기존6,000전이의17배열,1,000개 tick/update 파일 prefix를 원본과 정확히 대조했다.
+새 actual 전이는1개이고 총 main665/branch336,후속237·terminal66의 저장 감사를 통과했다.
+smoke learner는 새 비교에 재사용하지 않고 원래1,000모델 b32586d…에서 다시 시작한다.
+
+새 로컬 `outputs/sac_failure_rollout_quota_continuation_20261119/`:
+`resume1001-review.json`에 실제 복원/저장 대조, `review-decision.json`에 근거와 증거hash,
+`launch.json`·`status.json`·`sources/`에 명령/PID/동결 source가 있다.
+21:43:15 KST runner2390993/train2390994를 시작했다. learner/optimizer/target/learner RNG와
+replay RNG를 유지하며, 환경/장면/정책 수집 RNG만1000으로 명시 재시작한다. 가짜 종료를
+넣지 않고 exact simulator resume라고 주장하지 않는다. 보상·검사·PD·원래 Gaussian·
+actor/Q·수집 조건·uniform replay·전이당update1·BC/teacher0을 유지한다.
+
+runner SHA `03d5122e8d2a2c6f54b6cd1491bcaf0fd0a43165cf0a2aa608e1142043bdb480`,
+결정 SHA `62b077b74793bfa6c87ef62b8b7bcf7c585781cea9112f9d5dc55be1ea5ea981`.
+학습→저장 감사→같은4주행→고정Q→coverage→새분기Q 뒤, runner2392865가 실제종료8회,
+runner2393214가 같은12상태의 quota1,000/independent2,000/quota2,000 Bellman 검사를
+순차 실행한다. 후속 두 실행은 현재 WAITING, 구문/대기 상태까지만 확인했다.
+각 `soft-return-status.json`·`chain-profile-status.json`에 소스 hash/PID를 보존한다.
+총2,000회 후 자동 학습 연장은 없고, 실제 주행과 미래 비용을 다시 검토한다.
+안정적인 정책·새seed·동일조건 Rule-based 최종 비교·독립 평가 목표는 계속 active다.
