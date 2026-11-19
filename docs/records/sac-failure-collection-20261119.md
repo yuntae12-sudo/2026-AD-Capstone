@@ -1170,3 +1170,93 @@ runner2393214가 같은12상태의 quota1,000/independent2,000/quota2,000 Bellma
 각 `soft-return-status.json`·`chain-profile-status.json`에 소스 hash/PID를 보존한다.
 총2,000회 후 자동 학습 연장은 없고, 실제 주행과 미래 비용을 다시 검토한다.
 안정적인 정책·새seed·동일조건 Rule-based 최종 비교·독립 평가 목표는 계속 active다.
+
+
+## 22:11 KST 후속 수집2,000회: 같은 예산의 회귀 감소, 전체 개발 평가 대기
+
+같은 quota1,000 learner에서 추가1,000 actual transition/update를 완료했다. 학습2390994와
+기본 검증 실행기2390993은 종료됐다. 저장 감사는 총2,000개·main1,349/branch651,
+고유 train19장면·84roots·실제 후속456개·branch terminal129/nonterminal522를 확인했다.
+새1,000개는 main685(통과409·양의보상39·사전정지514), branch315(통과56·양의보상56·
+사전정지102)다. 같은 예산의 독립 수집은 main683(401/37/514), branch317(86/85/93)이었다.
+후속 실패 경험 증가와 유효/양의 보상 분기 경험 감소를 함께 기록한다.
+
+고정2개 개발 장면×KEEP/FOLLOW를 같은 초기 frame/map/seed에서 비교했다.
+`review_evaluation2000.py`로 초기 평균0·기존 독립1,000·quota1,000·기존 독립2,000·
+quota2,000의 원본20episode를 다시 계산했다. 고유 장면은2개이며20개 독립 장면이 아니다.
+
+| 정책 | 목표/충돌 | tick | 거절 | 제동 | post-step 정지 | 평균 보상 |
+| --- | --- | --- | --- | --- | --- | --- |
+| quota1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.98123323 |
+| 기존 독립2,000 | 0/4·4/4 | 173 | 91 | 79 | 26 | -20.25300687 |
+| quota2,000 | 2/4·2/4 | 236 | 48 | 37 | 13 | -9.99233126 |
+
+고속 KEEP/FOLLOW는 새2,000에서도72tick 목표 도달로 초기 성공을 유지했다. 기존 독립
+2,000이 같은 두 성공을 잃었던 회귀를 줄였다. 그러나 새1,000과 초기 평균0도2/4성공이었고,
+새 성공은 없다. 저속 KEEP은46tick 충돌이며 새1,000 대비 거절11→14·제동10→11·정지6→7,
+저속 FOLLOW도46tick 충돌이다. **같은 예산 대조의 개선과 이전 시점 대비 일부 비용 악화를
+함께 보존한다. 안정적인 정책·Rule-based 우위·기본 채택으로 분류하지 않는다.**
+
+종료 severe44개 저장 Q MAE는 기존 독립2,000의0.92579보다 낮은0.74283이었다.
+고정 warmup terminal의 현재 평균 실제 Q 오차는 KEEP0.57071/FOLLOW0.71981이며
+실제 결과는 여전히 충돌이다. 수집한 첫 terminal에서 평균 Q 오차는-0.33674/-0.23194,
+저장/평균/4표본×두 상태12actual 행동도 모두 충돌했다. 전체512,000draw 중 원래
+warmup430,763/online81,237, 새 online25개는 미추출이었다. 단기 종료 적합과 앞선 상태의
+실제 미래 비용 적합은 구분하며 후자는 현재 재검증 중이다.
+
+로컬 `outputs/sac_failure_rollout_quota_continuation_20261119/`:
+
+- 모델 `7c898963fab8aa1b980199398a4dac6a60cfc01a001c428933cfa48eb29c7347`.
+- replay `3713625f8979b00d42c460ee018a1407f0eb1b3370d5c0a910d46668318e8724`.
+- 학습 report `d85654f5772fb1c010961ee581a8fe1290b8356f6834823f5b9fbd5519c8168c`.
+- `audit2000.json` SHA `0f2a13ddcbd87c546d335dc1e0e314e1f3ea64909757f1899087e97bfbc34761`.
+- `collection2000-review.json` SHA `23b7487a2f9f001d6090e7bda3f37adebe2a068475c49ec9df978042278e1792`.
+- `evaluation2000-review.json` SHA `8274fd2ab04d990ed3bf5df1f4236bca353c14c2bc71ce46da77d97a1eb9aac7`.
+- `q2000.json` SHA `77d3ec5274f29f2e3f76dc411215a3028ebf9353eec60d5199ed330f5b0dd0aa`.
+
+같은 고속 KEEP의 기존/새2,000 기록으로 `review/independent-vs-continuation-2000.gif`와
+PNG를 만들었다. PNG를 실제로 열어 도로·차량·제안/실제 궤적·거절·제동·held 표시를
+확인했고 GIF25frame/1440×900/물리7.2초+최종1.5초도 읽어 확인했다. 기존은4.7초 충돌 뒤
+고정 표시, 새 모델은7.2초 목표 도달이다. SAC 대 SAC이며 새 주행/Rule-based 비교가 아니다.
+GIF SHA `f660e16829f3c13a17d429b815bb59c18c8604f55e719bf7bb22a1a8571e80e5`.
+source hash와 renderer hash는 같은 `review/render.json`에 보존했다.
+
+현재 runner2392865/child2404077가 실제 종료까지의 보상을 재검증 중이며, runner2393214의
+12상태 Q 경로 비교가 뒤따른다. 새2,000이 같은 예산 대조에서 두 성공을 유지했으므로
+다른 개발 장면의 회귀도 확인하려고 **기존 개발8장면×2행동16회** 평가를 준비했다.
+runner2401291·`full-validation-status.json`은 WAITING이다. 아래 reset 자료 준비까지
+끝난 뒤 수행하여 원본 스캔과 성능 측정을 겹치지 않는다. 초기 조건16쌍 및 이번 pilot4회의
+결정적 결과를 다시 확인한다. 독립 test 성능 평가나 추가 학습/새 seed 실행이 아니다.
+전체 개발 및 미래 비용 결과를 검토하기 전 총2,000회 이후 학습은 연장하지 않는다.
+
+### 별도 평가 자료: 메타데이터 후보 봉인 완료, 실제 reset 적격성 미확정
+
+기존 first200 shard의 저장된 screen 메타데이터만 읽어14,166개 고유 scene,
+train11,320/validation1,429/test1,417을 재확인했다. 원본200파일의 크기/mtime는 과거
+fingerprint와 같았다. 이 단계에서 원본 protobuf를 읽거나 정책을 실행하지 않았다.
+모든 test 행은 `HELD_OUT/test_not_screened`, cached proto 없음이었다. scene ID 중복0,
+기존 개발 manifest와 scene/group ID 및 **기록된** raw SHA 중복이 없음을 대조했다.
+원본 바이트 SHA 재검증은 후속 로딩에서 수행한다. drive/시간구간 독립성은 여전히 미확인이다.
+
+정책과 무관한 `sha256('heldout_reset_order_v1|scene_id')` 순서로1,417개 후보를 고정했다.
+공식 Waymo test가 아니라 원래 training_20s source의 프로젝트 hash-test다.
+**1,417개는 미검사 후보 수이며 평가 가능한32개 확보가 아니다.** 현재 train/validation
+manifest·진행 중 실험 조건은 변경하지 않았고 학습 loader의 test 거절도 그대로다.
+
+로컬 `outputs/sac_heldout_preparation_20261119/test-candidate-order.json` SHA
+`806b7341c33fba89b3406a7107a5ea433fc9d8e307e75891f69a8f0d54947beb`.
+`audit_sealed_candidates.py`의 실제 메타데이터/중복/hash split 검사는 완료했다.
+`prepare_reset_inventory.py`는 같은 기존 route prefilter와 실제 environment reset만
+사용해 모든 제외·데이터/reset 오류를 보존한다. KEEP/FOLLOW 각각 reset만 하고 teacher/SAC
+경로 생성·제어 step·보상·성능 선택을 하지 않는다. 구문 검사만 했으며 실제 원본 로딩/reset은
+아직 미실행이다. 첫200 pool에서32개가 안 나오면 부족 수를 기록하고 별도 확장을 검토한다.
+
+실행기2397055는 현재 WAITING이다. 현 학습의 실제종료/경로Q 검사 완료 뒤 CPU로 실행한다.
+예상 산출물 위치는 Storage의
+`/mnt/e/Datasets/WOMD/v_1_3_1/derived/training_20s/sac_heldout_20261119/reset_first200/`다.
+실제 생성/적격 수/오류는 완료 후 확인한다. 로컬 `status.json`·`launch.json`에 source hash,
+후속 명령, 실행 PID와 대기 조건을 남겼다. 원본/기존 개발 자료는 수정하지 않는다.
+
+이번 추가 작업은 실행 코드90c15a4를 유지한 로컬 분석/실험 준비이며 새 PR/병합은 없다.
+안정적인 KEEP/FOLLOW, 새 seed, 같은 조건 Rule-based 최종 비교, 별도 성능 평가와32개
+적격 장면 확보는 여전히 미완료다. 전체 목표는 계속 active다.
