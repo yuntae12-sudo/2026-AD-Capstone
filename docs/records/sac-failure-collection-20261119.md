@@ -2847,3 +2847,98 @@ quota5,000과 자신의2,000 대비 모두 aggregate 거절·제동·정지 비�
 03:47:15 recovery runner2547534 및 q5000 child2548836 실제 생존 확인.
 extension의 Q/coverage/branchQ/MC와 두 arm GPU62 검토는 아직 남았다.
 다음 학습 조건은 미선택이며 현재 소스 고정을 유지한다. 기준 HEADf4ce66c.
+
+## 04:01 KST 두5,000회 비교의 최종 가치/GPU 검토 완료
+
+복구 runner2547534는 모든 누락 평가·독립 검토·두 arm GPU62/배열 검토를 마치고
+`COMPLETE_PENDING_SCIENTIFIC_REVIEW`로 정상 종료했다. 이후 실제 process 부재와
+동결 source/model/report hash를 확인하고 최종 비교를 작성했다.
+`scientific-review.json`은 `REVIEWED_BOTH_DRIVING_FAILURES/qualified=false`다.
+두 모델 모두 개발0/4성공·4충돌이고 안정 정책이 아니다.
+
+extension의 고정62행 중 severe44 Q MAE는2,000회의0.847492→5,000회의0.256212다.
+현재 평균을 실제 실행한 고정 terminal KEEP65/FOLLOW72tick의 Q−reward는
+-0.160065/+0.119806, 수집 branch KEEP28/FOLLOW55tick은-0.133846/-0.035326이다.
+모두 실제 충돌/bootstrap=false이며, 저장 행동의 reward를 다른 평균에 붙이지 않았다.
+
+같은2train상태×4seed88019~88022의 원래Gaussian 후속 행동은 다시8/8충돌했다.
+
+| extension5,000 | KEEP tick0 | FOLLOW tick4 |
+| --- | --- | --- |
+| 현재 평균 첫 행동 Q | -0.698844 | -0.688830 |
+| 실제 soft return 평균±표본SD | -12.532541±2.215768 | -10.564603±0.514426 |
+| Q−실제 표본평균 | 11.833697 | 9.875773 |
+| 자신의2,000 대비 paired return 차이 | +0.847921 | -0.306754 |
+
+KEEP의 return 증가에는 종료보상 할인+1.089006이 기여했다. 할인하지 않은 reward합은
+-0.051920으로 악화됐고, 종료전보상-0.016765·entropy-0.224320이다. FOLLOW의 할인하지
+않은 reward합 차이는-0.00000342, 종료보상 할인+0.056107·종료전+0.002774·entropy-0.365634다.
+quota5,000 대비 extension의 soft return은KEEP+1.591350/FOLLOW+1.344745지만 종료보상
+할인 차이가+1.400705/+0.976182이고 양쪽 모두8/8충돌이다. 평균 보상 증가를 안전 주행으로
+해석하지 않는다. 두 arm의 동일 관측 hash·paired seed·return 구성·원본trace hash를 대조했다.
+
+extension의 uniform1,280,000draw와 saved RNG를 재현했다. severe terminal 추출29,448회
+(warmup7,734/main2,045/branch19,669). 새3,000회에 수집한 severe139행은5,705회 추출됐고
+5행은 미추출이다. 저장 경험 노출과 terminal 적합이 있어도 현재 앞선 상태의 Q/주행은 미달이다.
+
+같은 GPU/62배치 기준은 원래 atol3e-5/rtol3e-5를 두 모델 모두 통과했다. 기준 최대절대차는
+quota0.000101089/extension0이며 상대허용치를 포함한 원래 조건 그대로다. 허용치를 넓히지 않았다.
+quota402/extension330 terminal행을 padding 제외 후 모두 검토하고 별도 통계 재계산도 통과했다.
+severe373/302행 MAE는각0.231766/0.190450이다. **모든 terminal Q가 정확하다는 뜻은 아니다.**
+extension의 main RECORD_END(replay index7,600,scene24aee88cb4ba196a,tick195)는
+reward-0.013391/Q-12.540760/error-12.527369이며 실제 학습batch63회에 포함됐다.
+severe subset 평균만으로 이 비충돌 종료의 큰 과소평가를 숨기지 않는다.
+
+quota CPU/GPU의 같은 원본행 차이는 전체 Q1최대0.004009247/Q2최대0.002593994,
+새online행 min-Q최대0.001495361이다. GPU 기준 재현과 새행 통계를 확인한 것이며
+CPU 차이의 구체적인 연산/하드웨어 원인을 확정하거나 CPU 엄격대조 실패를 소급 통과시키지 않았다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/`:
+`scientific-review.json` SHA `c5172855bad608fe6417d91fde941612556f41689084634dfb6cadc9d8550ef8`,
+`extension/value-independent-review.json` SHA `ee7135745e5c0749320f0c654e12788ad095bb546c112b2a1c1c0a36a7680896`,
+`extension/soft-returns5000/report.json` SHA `ed635a956b70bddeba8b88f7b55b0e23699a124aecfc5aef4f3d7ac179761c13`,
+GPU reports quota `7982e22c86f2f19f94ba2ff031f168dcd26e65db07ada4eae55746fd1ac69cd6`,
+extension `f8b5a02e1b24dc2057ab6f868f7a891e8a7f357fd25bbb3b143b64650d198b0c`,
+GPU independent arrays quota `6f643c29340c26e5759aa58c85a9d22efd14483d7b4029aeaac392ddf60bee2c`,
+extension `39e137f3ddf2235ea406cf588bf7f1bf904fe937dc4ee6521028d3199b1a3dd2`.
+학습 수집/보상/안전검사 규약은 유지했다. 두 수집 대안의 이 예산 비교는 끝났고,
+장기 수렴 불가능이나 수집이 무의미하다는 일반 결론은 내리지 않는다. 안정 정책 목표는 active다.
+
+## 04:12 KST 저속 평균의 명시적 g 분리: fresh1,000회 비교 시작
+
+수집만 바꾼 두5,000회 모두 미달이므로, 앞서 측정한 작은 평균 변화의 구조적 요인을
+승인된 B 평균 비교 범위에서 분리한다. [평균 좌표 실험 문서](../architecture/sac-mean-basis-experiment.md)에
+조건·한계·추가 개발 평가를 명시했다. 기준은 entropy 평균 gain0.0012098536225957168,
+후보는 raw B 평균 gain0.0001이다. gain*c=0.0001로 속도2m/s 이상 기준 배율을 맞추고
+평균에만 명시적으로 곱하던 저속 g를 제거한다. 탐색Gaussian의 g/sigma/ell/log_pi는 유지한다.
+단순500배 성능 향상이나 유일 원인 해결을 가정하지 않으며, 이전 사후 mean/g 실패와 달리
+새로 초기화해 실제 자기 경험으로 학습한다. 기본 설정·사용자 채택 결정은 바꾸지 않는다.
+
+`scripts/diagnose_sac_online_updates.py`에 명시적 `--mean-coordinate-scale` override만
+추가했다. Actor/critic/learner 코어는 변경0이다. 같은 seed0·자기warmup5,000·physical Q와
+zero-action 초기화·quota8/window6/moving_predecessors/restart-terminal·전이당1update·
+uniform replay·보상/검사/PD·BC/teacher0을 유지한다. extension 옵션은 사용하지 않는다.
+기준1,000 실제 모델 SHA `b32586d181f072a69baaa97539069ba056f0613e25594460dff7939b906e2708`를
+재확인했으며 새 후보는 두5,000 모델을 이어받지 않는다.
+
+실제 초기 자기 경험에서 정책과 무관하게 균등 간격256행을 선택했다(정지171/저속13/이동72).
+두 fresh learner의 파라미터·optimizer·target·RNG 직렬화 바이트와 초기mu0/rho/표본/ell/log_pi가
+정확히 같음을 GPU에서 확인했다. 이는 초기 동등성만 검증하며 학습 후 성능 증명이 아니다.
+관련 action-coordinates/continuation/diagnostic-critic pytest27개 통과.
+초기 테스트1개는 서로 다른 평균을 뺀 noise 차이2.1684e-19가 임의 atol2e-19를 넘어서 실패했다.
+허용치를 키우지 않고 공통 zero-mean noise에 각 평균을 더한 표본과의 정확한 일치 검증으로
+바꿔 재실행했다. `initial-test-failure.json`에 보존했으며 production/물리검사 허용치 변경0이다.
+
+기존 고속/중속2장면×KEEP/FOLLOW4주행은 유지한다. 별도 사전 지정 개발 cohort로
+정지 출발 `8dd5939855c15b3f`, `a62f5a7d2cd9b3d9`의 KEEP/FOLLOW4주행을 기준1,000/후보
+모두 실행하고 실제 이동·정지·성공·충돌·거절·제동·보상을 검토한다. 기존 평가를 소급 변경하거나
+새 독립test라고 부르지 않는다. 그 뒤 고정Q/coverage/branchQ/같은2train상태×4seed MC를 연결했다.
+주행/가치 미달 시 다음 조건을 다시 판단하며1,000 이후 자동예산 확대·새seed·기본채택은 없다.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/`의 preflight SHA
+`d6370e99efff63e585039438e617e38a2cff018cf2869cf9a10b1dcc82e47079`,
+decision SHA `0ec4fe614523dcbabbd8afba872c4ca6c50b0f3655cf67bc98981d28c5a7a390`,
+runner SHA `ce102fa1e5b933a92c11588944df0e8bbc4c57d27ba5913fb7a10aaaf9bd114a`.
+04:12:03 runner2560409 생존·train child2560430 시작 기록과RUNNING/train1000을 확인했다.
+source snapshot/hash/정확한 명령은decision.json·status.json·sources/에 보존한다.
+기준 HEAD35dd60e에서 이번 진단CLI·테스트·문서 수정은 미커밋이며 실제 학습 성능은 아직 미검증이다.

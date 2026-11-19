@@ -53,6 +53,10 @@ def main():
         help="Explicit diagnostic override of the approved linear mean gain",
     )
     parser.add_argument(
+        "--mean-coordinate-scale", choices=("raw", "entropy"),
+        help="Explicit mean-coordinate comparison within the approved B-mean experiment; sampler is unchanged",
+    )
+    parser.add_argument(
         "--save-replay",
         action="store_true",
         help="Persist the actual replay for read-only coverage audits",
@@ -119,6 +123,8 @@ def main():
     config = json.loads((args.configuration / "report.json").read_text())
     variant = dict(config["arms"][args.variant])
     overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
+    if args.mean_coordinate_scale is not None:
+        overrides["mean_coordinate_scale"] = args.mean_coordinate_scale
     if args.critic_action_gain is not None:
         overrides["critic_action_gain"] = args.critic_action_gain
     if args.critic_action_coordinates is not None:
