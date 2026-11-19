@@ -3312,3 +3312,42 @@ full-state 복원 동일성을 검사한다. 05:39:02 runner2597128 시작,05:39
 
 05:45:47 실제 report에서 `restored_learner_bytes_identical=true`, 승계2,000·추가416·
 누적2,416/5,000·collection-seed2000을 확인했다. runner2597128/train2597131 생존 확인.
+
+## 2026-11-20 06:01 KST — 별도 평가 원본 길이 오류의 외부 근거 확인
+
+5,000 학습을 유지하며 기존 `raw-shape-review.json`과 공식 저장소 자료만 읽었다.
+새 데이터 scan/reset/정책 평가/시간 보간/loader 변경은0이다. 기준 HEAD1328990.
+17개 원본 모두 장면 내부 track 길이는 서로 같고 dynamic 길이는 timestamps와 같지만,
+track 대 timestamps의 길이는 다르다. track−timestamp 차이는
+`+1:2, -1:3, +6:1, -3:2, +2:1, -2:5, +3:2, +7:1`이다.
+
+[Waymo의 Scenario 스키마](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/protos/scenario.proto)는
+timestamp/track/dynamic 길이와 index 대응을 요구한다. 공식 저장소
+[이슈773](https://github.com/waymo-research/waymo-open-dataset/issues/773)은 v1.2.0에서
+비슷한 불일치를 보고했으며 조회 시 open이었다. 2024-02-01의
+[프로젝트 협업자 답변](https://github.com/waymo-research/waymo-open-dataset/issues/773#issuecomment-1921936778)은
+잘라내기 또는 명목0.1초 timestamp 근사를 임시 방안으로 제시했다. 정확히 복구된
+timestamp/state 대응표나 원본 수정본을 제공한 것은 아니다.
+
+로컬 v1.3.1 장면 `33e5ac4c35a5af28`은 보고된 장면 ID와 timestamps193/states199가 같다.
+그러나 공개 보고의 shard00123과 로컬 shard00285(record16)는 다르다.
+로컬152track은 모두199states, dynamic은193이며 원시 SHA는
+`db19918b9e1e021e145f5e8e1552ea195de8d07890004145030e2948f0fb71ff`다.
+공개 원시 hash는 없어 바이너리 동일성이나17건 전체의 동일 근본 원인을 확정하지 않는다.
+첫 대조에서 파일 번호까지 같다고 가정한 assertion이 실패했다. 이를 즉시 정정하고
+`upstream-shape-initial-review-failure.json`에 남겼으며 원본/실행 코드는 수정하지 않았다.
+
+또한 [2022년 이슈402 답변](https://github.com/waymo-research/waymo-open-dataset/issues/402#issuecomment-1029696009)은
+training_20s를 공식 training 부분의 비중첩20초 구간으로 설명한다. 이는 현재 프로젝트의
+hash 분할이 drive 단위로 독립이라는 증명이 아니다.
+[2025년 이슈931 답변](https://github.com/waymo-research/waymo-open-dataset/issues/931#issuecomment-2825188051)은
+9초/20초 형식의 scenario ID가 다르며 대응 방법을 제공하지 않는다고 설명했다.
+다른 형식의 ID가 겹치지 않는다는 이유로 궤적 독립성을 단정하지 않는다.
+
+**판단:** 길이가 다른 배열을 임의로 잘라 목표32개를 채우지 않는다. 보존된17개 입력 오류와
+29개 후보/목표32개·drive 독립성 미확인·정책 test0 상태를 유지한다. 외부에 유사 오류와
+같은 장면/길이 보고가 있다는 근거를 추가했으며, 정확한 복구는 여전히 미해결이다.
+로컬 `outputs/sac_heldout_expansion_20261119/upstream-shape-evidence.json` SHA
+`098a0b1d17387dc7cc7e940f3462915f093e7579e2d4abe047588f44eec7526d`에 조회 상태·출처·
+원본 검토 hash·일치/불일치 항목을 보존했다. 새 pytest는 실행 코드 변경이 없어 미실행.
+06:01:04 runner2597128/train2597131 실제 생존, 학습3,569/5,000 확인. 안정 정책은 미확보다.
