@@ -2115,3 +2115,70 @@ train2477740/주행2485021은 완료 후 종료됐고 runner2477739의 고정 �
 이어 실행 중이다. coverage·수집 terminalQ가 뒤따르고, runner2478192는 같은 두 train
 상태×4seed 실제 종료 soft return을 대기한다. 최종 Q/coverage/MC 원본 검토는 미실행이며
 완료 후 실행한다. 현재 소스 동결을 유지하며 다음 학습 예산/새 수집 변경은 아직 결정하지 않았다.
+
+
+## 01:11 KST quota-extension1,000 최종 Q·실제 미래 보상 검토 — 안정 주행 미달
+
+앞 절에서 대기했던 Q/coverage/수집 terminalQ/실제 종료 soft return은 모두 완료됐고
+runner2478192/child2490860의 종료도 확인했다. 실행 코드c3fe6a7과 core hash는 검증 종료까지
+그대로였다. `review_value1000.py`와 `review_sampling1000.py`를 실제 실행해 원본과 재계산했다.
+
+같은 저장 terminal62개 중 severe44개의 Q MAE는 quota1,000의4.896726에서 새5.584352로
+악화됐다. 같은 실제 terminal 상태의 현재 평균 행동도 KEEP6.134260/FOLLOW4.633496점의
+오차가 남았다(기존5.988793/3.325783). 다른 수집 terminal 상태의 오차와 섞지 않는다.
+새 수집 KEEP tick28/FOLLOW tick55에서 현재 평균·저장 행동·4확률표본은 모두 실제 충돌했으며
+현재 평균의 오차는3.464533/6.392146이었다. 이 두 상태는 다른 후보와 같은 상태라는 보장이 없다.
+
+동일2train상태×4paired seed(88019~88022), 첫 행동은 각 모델의 현재 평균, 이후 원래 Gaussian을
+사용했다. 실제 종료까지 reward와 규약 entropy를 재합산하고 첫 행동 entropy 제외·gamma0.99·
+마지막 bootstrap false·8trace SHA를 검증했다. 모두 충돌했다.
+
+| 상태 | quota1,000 Q−실제 soft-return 평균 | extension1,000 Q | 실제 soft-return 평균±표본SD | 새 Q−실제 평균 |
+| --- | --- | --- | --- | --- |
+| KEEP `77ae312df21e80b9` tick0 | 12.907675 | -0.432714 | -13.394224±2.056887 | 12.961510 |
+| FOLLOW `baac7893b025167a` tick4 | 10.742470 | -0.258815 | -10.766693±0.764925 | 10.507878 |
+
+KEEP의 paired return 차이는 평균+0.000227, FOLLOW는+0.210228±0.498768이었다.
+FOLLOW 차이는 [+0.000161,-0.113486,+0.954051,+0.000186]이며8/8충돌과 큰 Q 과대평가는
+그대로다. 소수의 반복 표본을 정확한 기대값·독립 장면·안정 주행 개선으로 해석하지 않는다.
+고정 개발4주행도 앞 절의2/4성공·2충돌,44거절/36제동/12정지로 기존과 같다.
+
+uniform batch256의256,000개 추출을 RNG부터 다시 계산했다. warmup233,361/online22,639가
+기존과 같고 saved replay RNG도 일치했다. severe terminal 추출은 quota3,726회 대비 새3,590회:
+warmup2,018동일, main220→187, branch1,488→1,385다. 긴 경로만 수집했던 complete-path의
+branch189회보다는 회복됐지만 Q/주행 개선은 없었다. terminal 노출만의 인과 실험은 아니다.
+
+로컬 `outputs/sac_quota_extension_20261120/`의 최종 근거:
+
+- `value1000-review.json`: `be15ea3c579509027377d1c80515c3a440d5b766e84e730988d182803de67173`.
+- `sampling1000-review.json`: `a25f78d4248038f63a6d0f83a624d39177d8a24464e794ef169bf15d43a5894e`.
+- `soft-returns1000/report.json`: `4ce4fe4a764436abf9d9d81745dbaddf19019f2580cf2f407c40a54d5bf74d5c`.
+
+## 01:12 KST 같은 수집·모델을 총2,000회까지 잇는 제한 비교 시작
+
+**새 수집을 채택하지 않는다.** 긴 실패 경로와 상당한 terminal 노출을 함께 확보해도1,000회에서
+주행/초기 Q 개선은 없었다. 기존 quota2,000 결과와 같은 예산으로 한 번 비교하기 위해
+추가1,000actual transition/update를 실행한다. 학습 부족이 원인이라고 확정하거나 이 예산으로
+수렴한다고 예측하지 않는다. 모델/수집 규칙을 동시에 다시 바꾸지 않는다.
+
+`outputs/sac_quota_extension_continuation_20261120/run_matched2000.py`가01:11:40.586KST에
+runner2493589/train2493590으로 시작했다. source는 위 extension1,000의 모델 `b29adb1a…`와
+replay `83005d55…`다. fresh 초기화가 아니라 learner/optimizer/target/learner RNG/replay RNG를
+복원하며 runtime이 전체 learner serialization 바이트 동일과 BC0/teacher0/counter를 강제한다.
+환경과 장면/행동 수집 RNG는 기존 quota2,000과 같은 collection_seed1000으로 명시적으로
+재시작한다. 정확한 중간 환경 resume이라고 하지 않고 이전 예산 경계를 가짜 종료로 만들지 않는다.
+
+규약의 보상·검사·PD·원래 Gaussian·uniform replay·실제전이당1update와 별도 비교로 허용된
+기존 B-mean/초기화/배율을 유지한다. main runtime/수집 소스 수정은0개다. seed0, 같은
+train manifest59고유장면을 사용하며 실제 이번 방문 장면 수는 완료 후 집계한다.
+
+연결 범위는 총2,000수집→원본 저장 감사→같은2개 개발 장면×KEEP/FOLLOW4주행→고정 종료Q→
+coverage→수집 terminalQ다. 별도 runner2493877(01:11:46.940KST)은 이 pipeline 완료 뒤
+같은2train상태×4seed 실제 종료 soft return을 기존 quota2,000과 비교하도록 대기한다.
+
+근거를 대조한 `review-decision.json` SHA는
+`a83372bb0713b2979cb12eaeaf2efde46d7b80d4ed973c5fcc2dd1717d92e06d`다.
+원본 완료 후 실행할 collection/evaluation/value/sampling 독립 검토4개를 준비했다.
+현재는 아직 미실행이며 이전6,000 replay행의17배열·tick/update prefix·실제 주행 frame·
+동일 terminal/MC·512,000추출을 확인해야 한다. 총2,000 이후 자동 추가 학습은 없다.
+주행 개선이 없으면 안정 정책/평가 확대/기본 채택으로 처리하지 않는다. 전체 목표는 active다.
