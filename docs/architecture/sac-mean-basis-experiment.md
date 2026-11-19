@@ -209,3 +209,24 @@ mean gain0.0001·physical Q·수집 규칙·uniform replay50k·실제 전이당1
 raw2,000과 과거 entropy2,000을 참고하며, entropy5,000 정지 평가를 수행한 것으로
 쓰지 않는다. 이후 전체 validation·다른 seed·독립 평가·기본 채택·5,000 이후 학습은
 자동 연결하지 않고 완료된 다중 지표를 검토한다. 실행 식별자는 작업 기록에 남긴다.
+
+
+### 2026-11-20 동일 learner의 총10,000회 제한 비교
+
+raw5,000의 기존4주행·정지4주행·train MC8회는 모두 충돌했다. 고정 종료 Q 적합은
+자신의2,000보다 좋아졌지만 현재 평균 행동의 잘못된 선호와 초기 상태 Q 과대평가가
+남았다. 실패 후보는 미채택이며, 완료 검토 후 동일 설정의 학습 경과를 확인하기 위해
+총10,000회(추가5,000 실제 전이/update)를 별도 선택한다. 학습량만 늘리면 해결된다는
+확정은 아니다. 보상·검사·PD·Gaussian·raw mean gain·Q/수집 구조·BC/teacher0 유지.
+
+완료5,000 learner/optimizer/target/RNG와 replay10,000행/RNG를 복원한다.
+collection-seed5000으로 환경/장면/행동 RNG가 재시작하므로 exact rollout resume는 아니다.
+진단 CLI와 continuation 상한을10,000으로 맞추고 원본prefix를 유지하도록
+warmup5,000+총예산이 실제 replay capacity보다 작아야 한다. cursor wrap도 거절한다.
+fresh상한1,000 및 실제 replay50k는 그대로다. 코어 모델/학습 수학은 변경하지 않는다.
+
+비교는 자신의 raw5,000과 기존4주행·정지4주행·고정Q/실제branchQ/coverage/같은2train상태
+×4seed MC다. 동일 예산 entropy10,000 비교군이 있다고 주장하지 않는다.
+전체 개발·다른 seed·Rule-based·별도 test 확대와10,000 이후 예산·기본 채택은
+완료 결과의 다중 지표를 검토한 뒤 결정한다. 설정 변경 없는 학습 경과 비교도
+환경 RNG 재시작과 반복 개발 평가의 한계를 가진다.

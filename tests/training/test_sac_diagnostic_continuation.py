@@ -3,7 +3,10 @@ import json
 
 import pytest
 
-from scripts.sac_diagnostic_continuation import validate_source, continuation_lineage
+from scripts.sac_diagnostic_continuation import (
+    MAX_CONTINUATION_UPDATES, validate_source, continuation_lineage,
+    validate_replay_capacity,
+)
 from src.training.sac.checkpoint import file_hash
 
 
@@ -40,10 +43,28 @@ def test_lineage_preserves_cumulative_count_and_explicit_collection_fork(complet
     assert set(result["source_hashes"]) == {"report.json", "online-learner.msgpack", "replay.npz", "ticks.jsonl", "updates.jsonl"}
 
 
-@pytest.mark.parametrize("total", [2,5001])
+@pytest.mark.parametrize("total", [2, MAX_CONTINUATION_UPDATES + 1])
 def test_rejects_nonincreasing_or_excess_budget(completed, total):
     with pytest.raises(ValueError, match="budget"):
         check(completed, total)
+
+
+def test_larger_budget_preserves_completed_source_and_history(completed):
+    path, source, _, _ = completed
+    before = {p.name: p.read_bytes() for p in path.iterdir()}
+    assert check(completed, total=10_000) == source
+    assert before == {p.name: p.read_bytes() for p in path.iterdir()}
+
+
+@pytest.mark.parametrize("capacity,total", [(50_000, 45_000), (10_000, 5000), (6000, 1001)])
+def test_budget_cannot_overwrite_or_wrap_replay_prefix(capacity, total):
+    with pytest.raises(ValueError, match="without cursor wrap"):
+        validate_replay_capacity(capacity, total)
+
+
+@pytest.mark.parametrize("capacity,total", [(50_000, 10_000), (10_001, 5000), (6001, 1000)])
+def test_budget_with_preserved_prefix_capacity(capacity, total):
+    validate_replay_capacity(capacity, total)
 
 
 def test_rejects_changed_model_or_collector(completed):

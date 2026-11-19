@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fresh short online diagnostic with inherited self warmup, not a production run."""
+"""Bounded own-policy diagnostic with audited warmup and optional continuation."""
 
 import argparse
 import json
@@ -62,8 +62,9 @@ def main():
         help="Persist the actual replay for read-only coverage audits",
     )
     args = parser.parse_args()
-    if not 1 <= args.updates <= (5000 if args.continue_from else 1000):
-        parser.error("fresh budget must be 1..1000; continuation total at most5000")
+    from scripts.sac_diagnostic_continuation import MAX_CONTINUATION_UPDATES, validate_replay_capacity
+    if not 1 <= args.updates <= (MAX_CONTINUATION_UPDATES if args.continue_from else 1000):
+        parser.error(f"fresh budget must be 1..1000; continuation total at most{MAX_CONTINUATION_UPDATES}")
     if args.collection_seed is not None and (not args.continue_from or args.collection_seed < 0):
         parser.error("collection seed requires continuation and must be nonnegative")
     if args.mean_gain is not None and (
@@ -154,6 +155,7 @@ def main():
     if file_hash(args.checkpoint / "replay.npz") != meta["hashes"]["replay.npz"]:
         raise ValueError("replay checksum mismatch")
     replay = Replay.load(args.checkpoint / "replay.npz", meta["versions"])
+    validate_replay_capacity(replay.capacity, args.updates)
     if (
         not 5000 <= replay.size < replay.capacity
         or replay.cursor != replay.size
@@ -255,6 +257,7 @@ def main():
         audit(args.continue_from, args.manifest)
         del replay
         replay = Replay.load(args.continue_from / "replay.npz", version)
+        validate_replay_capacity(replay.capacity, args.updates)
         source_weights = (args.continue_from / "online-learner.msgpack").read_bytes()
         with jax.default_device(gpu):
             state = serialization.from_bytes(state, source_weights)

@@ -6,6 +6,15 @@ from pathlib import Path
 from src.training.sac.checkpoint import file_hash
 
 
+MAX_CONTINUATION_UPDATES = 10_000
+
+
+def validate_replay_capacity(capacity, total_budget):
+    """Retain the full warmup/online prefix required by continuation audits."""
+    if 5000 + total_budget >= capacity:
+        raise ValueError("diagnostic budget must fit replay without cursor wrap")
+
+
 ARM_FIELDS = (
     "mean_gain", "mean_basis", "mean_coordinate_scale", "actor_head_layer_norm",
     "zero_q", "critic_action_coordinates", "critic_action_kernel_init",
@@ -24,7 +33,7 @@ def validate_source(directory, version, variant, collection, total_budget):
             or source.get("inherited_self_warmup") != 5000
             or updates != arm.get("updates")
             or updates != source.get("new_transitions")
-            or not 0 < updates < total_budget <= 5000):
+            or not 0 < updates < total_budget <= MAX_CONTINUATION_UPDATES):
         raise ValueError("invalid completed diagnostic or bounded continuation budget")
     for key in ARM_FIELDS:
         if arm.get(key) != variant.get(key):

@@ -3419,3 +3419,91 @@ Gaussian 잡음, suffix 수정, 폐루프 누적 이동을 제외한 현재 가�
 06:23:34 runner2597128/q5000 child2612309 생존, q5000은 RUNNING이다.
 남은 고정Q/coverage/실제branchQ/MC와 가치 비교를 이어간다. 완료 학습을 성능 달성으로
 세지 않으며 후보 미채택·안정 정책 미확보·전체 목표 active다. 새 예산/gain/구조는 미선택이다.
+
+
+## 2026-11-20 06:36–06:39 KST — raw5,000 최종 미달 검토 및 동일 learner 10,000 준비
+
+5,000 runner2597128과 모든15개 child가 정상 종료했고 PID가 없는 것을 확인했다.
+변경 전35개 고정 소스 및 검토 입력 hash를 확인한 뒤 `finalize_review.py`를 실행했다.
+로컬 `outputs/sac_mean_decoupled_g_budget5000_20261120/scientific-review.json`은
+`REVIEWED_DRIVING_FAILURES / qualified=false`, SHA
+`998b426116777f165a03e77fbab34253656d2c5f630c59f6635f49d3b6fc5ffb`다.
+기존4주행과 정지4주행의 실패는 위 기록 그대로이며 두 cohort를 독립 test로 부르지 않는다.
+
+### 실제 미래 보상과 종료 행동의 잘못된 Q 선호
+
+같은2개 train 상태×seed88019..88022의 원래 Gaussian 후속8주행이 모두 충돌했다.
+고정 첫 평균 행동의 Q와 이후 실제 discounted reward/규약 entropy 합을 대조했다.
+
+| 상태 | 첫 Q | 실제 soft return 평균 ± 표본SD | Q−실제평균 |
+| --- | --- | --- | --- |
+| KEEP 77ae312df21e80b9 tick0 | -0.889010 | -12.505350 ±1.393296 | 11.616339 |
+| FOLLOW baac7893b025167a tick4 | -0.776821 | -11.175464 ±0.491882 | 10.398643 |
+
+자신의 raw2,000 대비 KEEP soft return은+0.106684지만 종료 할인 효과+0.432048,
+entropy 변화-0.324451이고 undiscounted reward는-0.006300 악화했다.
+FOLLOW는 soft return-0.627383, 종료 할인-0.223047/entropy-0.399074이며
+undiscounted reward+0.002312다. 동일 예산 entropy5,000 대비 KEEP+1.618542도
+종료 할인+1.482401이 대부분이며 undiscounted reward-0.058072다.
+성공 없는 return 증가를 안정 주행 개선으로 판정하지 않는다. 소규모 paired MC이며
+정확한 기대 Q나8개 독립 장면의 근거가 아니다.
+
+고정44개 심한 종료의 저장 행동 Q MAE는 raw2,000의3.616825→1.152763으로 감소했다.
+그러나 같은 충돌 결과·보상·다음 관측 hash·bootstrap=false를 갖는 현재 평균 행동을
+저장 행동보다 높게 평가하는 문제가 남았다. 고정 KEEP/FOLLOW 반례 선호 차이는
++3.553111/+0.153849, 별도 실제 branch KEEP/FOLLOW는+4.834799/+0.895765다.
+각 현재 평균 Q−즉시 보상은5.168016/0.390264/4.060415/0.434223이다.
+branch 원본 행동은 저장 replay행과도 일치함을 확인했다. 이 terminal 오차는
+해당 전이의 다음 Q bootstrap으로 설명되지 않는다.
+`terminal-preference-review.json` SHA
+`40d4a5be4102261429dee28c7a33a7766a42512915a180cc38b3e6791353cfbf`.
+
+### 자기 실패 경험은 실제 학습에 들어갔지만 현재 행동 분포 차이가 남음
+
+총1,280,000 batch draws 중 warmup886,708/online393,292다.
+추가3,000 중 새 main 심한 종료18행은786회, branch162행은6,528회 뽑혔고
+한 번도 뽑히지 않은 새 심한 종료는0행이다. 단순 저장 누락/전혀 학습하지 않음은
+이 결과와 맞지 않는다. 충분히 학습됐다는 인과적 증명은 아니다.
+
+최종 정책의 조건부95% Gaussian 영역 안에 있는 online행은16.96%다.
+속도별 online 정지2,668행 중0행, 저속360행 중11행, 이동1,972행 중837행이다.
+최근100행에서는 정지27행 중0행, 저속3행 중1행, 이동70행 중30행이다.
+이는 Gaussian 지지집합/성공 확률/새 검사 기준이 아니다. 장면과 학습 중 정책이
+다른 구간 간 비율만으로 수집 방식의 인과 효과를 주장하지 않는다.
+`coverage-speed-stratification.json` SHA
+`7447e9603b2f4f85e8e510267514e41636f1cbe4dd69df9d1f444fd8f7b5c88b`.
+
+### 다음 제한 실험과 실행 전 검증
+
+5,000 완료 후 선택한 다음 범위는 **같은 learner 총10,000회**다. 추가5,000 실제
+자기 전이로 비용 전달·현재 행동 적합·실제 주행의 학습 경과를 함께 확인한다.
+학습 부족만이 원인이라는 확정이나10,000에서 성공한다는 보장은 없다.
+raw gain0.0001·physical Q·quota8/window6/moving_predecessors/horizon8/restart-terminal,
+uniform replay50k·전이당1update·원래 Gaussian·보상·검사·PD·BC/teacher0은 유지한다.
+원래5,000 모델/optimizer/target/learner RNG와 replay10,000행/RNG를 복원하고
+collection-seed5000으로 환경/장면/행동 RNG만 명시적으로 재시작한다.
+exact rollout resume가 아니며 같은 예산 entropy10,000 비교군은 없다.
+
+`diagnose_sac_online_updates.py`와 `sac_diagnostic_continuation.py`의 continuation
+상한만5,000→10,000으로 확장했다. fresh상한1,000은 유지한다.
+`5000 + total_budget < replay.capacity`를 두 실제 Replay.load 직후 검사해
+원본prefix 소실과 cursor wrap을 막는다. replay를 키우거나 과거 행을 제거하지 않는다.
+기준 HEAD e04309e 이후 미커밋 변경이며 core SHA
+`96fa1d625b0d8525b1de6de05a12cc132721a03ee47eb51dff3d6e25f02e30ef` 동일 확인.
+과거 실험의 CLI 현재파일 hash는 이 변경 이후 달라지며 당시 소스 사본/해시가 기준이다.
+
+검증: `JAX_PLATFORMS=cpu .../python -m pytest tests/training/test_sac_diagnostic_continuation.py -q`
+**20 passed**. 초과/비증가 예산·설정/해시/이력 변조·검증된 과거 경계·용량 동일/초과
+거절 및 충분한 용량을 확인했다. 실제 CLI의 fresh1,001/continuation10,001은
+입출력 생성 전에 exit2로 거절됐다. 실제 완료5,000의 lineage/hash와 replay capacity50,000,
+size/cursor10,000을 CPU 검토했다. 예정15,000행은 wrap이 없다. 새 정지 reviewer는
+완료5,000을 양쪽에 넣어4쌍 frame/map/seed/수치를 대조하는 preflight를 통과했다.
+runner/reviewer py_compile 통과. 새학습의 실제 learner복원은 실행 후 별도로 확인한다.
+전체회귀/추가 GPU preflight는 미실행이며 코어 수학·환경·모델은 변경하지 않았다.
+
+로컬 실행 준비: `outputs/sac_mean_decoupled_g_budget10000_20261120/`의 decision/run_trial/
+preflight/stopped-review-preflight. 총10,000 학습→저장/audit/prefix→기존4주행→정지4주행→
+고정Q/coverage/실제branchQ/같은2train상태×4seedMC를 순차 연결했다.
+기존 raw5,000과 대조하며 전체 개발·다른 seed·Rule-based·별도 test 확대는
+실제 개선 후 판단한다. 10,000 이후 추가 학습이나 기본 채택은 자동 연결하지 않는다.
+안정 정책은 미확보이며 전체 목표는 계속 진행한다.
