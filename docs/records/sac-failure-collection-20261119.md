@@ -2346,3 +2346,101 @@ warmup3,767동일/main606→496/branch5,307→4,491이다. branch전체추출은
 
 수집terminalQ와그뒤실제종료MC가남았고 `review_value2000.py`는MC완료후실행한다.
 추가학습은연결하지않았고소스를그대로유지한다. 안정정책목표는미달이며계속active다.
+
+
+## 01:48 KST extension2,000 최종 미래 보상 검토 — 비용 과대평가 지속
+
+runner2493877/child2506987은 실제 종료했고 `review_value2000.py`를 실행해 같은 두 train
+상태×4paired seed(88019~88022)의 원본8trace SHA·reward·규약 entropy·첫 행동 entropy 제외·
+gamma0.99·원래 terminal/bootstrap을 재계산했다. 각 모델의 현재 평균 첫 행동 뒤 원래 Gaussian으로
+실제 종료까지 실행한 표본이며, 기존quota2,000과 새extension2,000 모두8/8충돌이다.
+
+| 상태 | 기존2,000 Q−실제 평균 | 새2,000 Q | 새 실제 soft-return 평균±표본SD | 새 Q−실제 평균 |
+| --- | --- | --- | --- | --- |
+| KEEP `77ae312df21e80b9` tick0 | 12.587732 | -0.313643 | -13.380463±1.966190 | 13.066820 |
+| FOLLOW `baac7893b025167a` tick4 | 10.367984 | -0.204530 | -10.257849±0.641258 | 10.053319 |
+
+paired return 차이 평균±표본SD는KEEP -0.319437±0.495077, FOLLOW +0.391735±0.853888이다.
+FOLLOW 차이4개는[-0.000017,-0.111177,+0.008173,+1.669961]이며 이 소수 표본의 증가를
+안정 주행 개선으로 해석하지 않는다. 고정 개발 평가0/4성공·4충돌과 기존 두 성공의 상실은
+그대로다. 종료 Q 적합 개선이 초기의 실제 미래 비용 적합으로 충분히 이어지지 않았다.
+수집 terminal 상태들은 다른 수집 방식과 같다고 가정하지 않고, 실제 terminal인 행동만
+Q−즉시 보상 오차로 검증했다.
+
+로컬 `outputs/sac_quota_extension_continuation_20261120/value2000-review.json` SHA
+`c2e937f550747a0c34a23e63b8dd1572d38b6cb80ec2c5dec87148cdaf0896a9`,
+`soft-returns2000/report.json` SHA
+`28a4a095502307ba25d7d19449cb4c19e15f9df315c37884eda8026114ff10aa`.
+새 수집의 우월성·안정 정책·기본 채택은 입증되지 않았다.
+
+## 01:49 KST 실제 저장 상태의 Q→평균 head 기울기 — 0은 아니며 정지 조건화가 남음
+
+기존quota2,000과 새extension2,000을 동일312actual train상태(47장면)에서 CPU로 미분했다.
+현재 평균과 원래 Gaussian8seed(44019~44026)를 사용했고 actor/Q update·optimizer step·
+환경 주행·replay write는0이다. 각 모델의2,496확률표본에서 학습된 minQ의 행동 기울기는
+모두 유한하고 0이 아니었다. 실제 환경 보상/검사 함수의 미분을 구한 것은 아니다.
+
+현재 physical critic 좌표를w=B^-1*u/c, 평균 head의B/g/gain 적용 전 출력을z라고 하면
+head 방향의 Q 기울기는 `mean_gain*g*∂Q/∂w`다. 현재 mean_gain은0.0012098536225957168이며
+정지 g=.002에서 비례계수는2.419707245191434e-6이다. 이는 같은물리좌표 Q기울기에 대한
+선형 좌표변환 계수의500배 차이이며 서로다른상태에서실측한 기울기중앙값의500배 차이는아니다.
+
+| 모델/속도 집단 | 상태 수 | 물리좌표 Q기울기 norm 중앙값 | mean head Q기울기 norm 중앙값 |
+| --- | --- | --- | --- |
+| quota2,000 / ≥2m/s | 135 | 0.169261 | 0.000204781 |
+| quota2,000 / <0.1m/s | 156 | 0.627997 | 0.000001520 |
+| extension2,000 / ≥2m/s | 135 | 0.143131 | 0.000173168 |
+| extension2,000 / <0.1m/s | 156 | 0.809839 | 0.000001960 |
+
+실제 head 기울기 norm 중앙값 비율은 이동/정지 quota134.76배·extension88.37배다.
+공유 신경망 parameter 전체 기울기·clip·Adam 보정·실제 정책 변화는 이 검사에서 계산하지
+않았으므로 학습 실패의 유일 원인이나 g 변경의 개선을 입증하지 않는다. 이미알려진조건부
+작은 정지 탐색과 연결되지만, 기울기가 0으로 끊겼다는 설명은 이 표본에서 지지되지 않는다.
+
+처음 진단은 frozen 관측/parameter를 JIT closure로 넣어 constant-folding 경고가 발생했고,
+서로 다르게 반올림된 두 float32 Q계산 그래프의 end-to-end gradient를1e-12 수준으로
+비교한 assertion에서 실패했다(최대 해당절대차2.821e-10). 실패script/log/미완료report를보존했다.
+관측/parameter를동적인JIT인자로넘겨불필요한상수접기를제거했고, 동일Q cotangent에대한
+선형 head→raw좌표 변환의 VJP만 독립 검증하도록 검사범위를 명시했다. 신경망 Q 미분의
+독립 finite-difference 검증을 통과했다고 주장하지 않는다. production 검사/허용치는바꾸지않았다.
+
+`audit_mean_gradient.py`와 `review_gradient_arrays.py`를 실제 실행했다. 원본모델/관측 hash,
+선택인덱스, 이전CPU mean출력 동일, 좌표 VJP, 원래Gaussian 표본 재구성을 확인했다.
+Gaussian 재구성 최대절대차는quota3.4694e-18/extension2.6021e-18이다.
+로컬 `outputs/sac_actor_mean_gradient_20261120/report.json` SHA
+`181306d61eadeeeea9b9086c762355fca445b6d7111140534d92b0bf7a1b329d`,
+`array-review.json` SHA
+`c20258d3b49f24f91e3d661f1dfc0b3f7e3e2f52e60da4903d4b0137c629f076`.
+
+## 01:51 KST 두 수집 방식의 동일 총5,000회 제한 비교 시작
+
+**실패한extension2,000을 채택하지 않는다.** 종료직전 적합과 초기비용 사이의 큰차이가
+남고, 현재 Q기울기가 0인 것은 아니었다. 수집방식의1,000/2,000 결과만으로 수렴이나
+학습부족을 확정할 수 없으므로, 모델/수집 규칙을 고정한 같은 총5,000예산을 한 번 비교한다.
+학습부족이 유일 원인이라거나5,000이면 충분하다고 예측하지 않는다. 과거 회귀를 지우지 않는다.
+
+각 arm은자신의2,000 checkpoint에서 추가3,000actual transition/update를 이어받는다.
+순서는 quota→extension, 총추가6,000이다. 같은train manifest·seed0·최초자기warmup5,000·
+모델설정/배율·보상/검사/PD·원래Gaussian·uniform batch256·실제전이당1update·BC/teacher0를
+유지한다. 해당arm의learner/optimizer/target/learner RNG/replay RNG를복원하고 환경/장면·행동
+수집 RNG는두arm 모두collection_seed2000으로명시적으로재시작한다. 정확한환경resume은아니다.
+새 학습 알고리즘/모델/수집 규칙 구현은0개이며 기존 continuation의총예산상한5,000 안에서 실행한다.
+
+`prepare_comparison.py`로두완료원본의버전·설정·ARM_FIELDS동일, 각collection mode/소스hash,
+checkpoint/replay/이력·유효continuation을 실제검증했다. quota는기존quota 모드를그대로사용하며
+새 extension 플래그는활성화하지않는다. 원본근거와결정은로컬
+`outputs/sac_collection_budget5000_20261120/review-decision.json`, SHA
+`9ce6247b5540c7bdf4ded05f14eda95aa3cf3a80d9cdf92e3c7e4cc3d4add316`.
+
+01:50:35.571KST runner2510498/첫quota train2510518으로시작했다. runner SHA
+`5ab84168a7e7a7cf25641ad7dda0fca774b4ceca3b4f21b5face1a292bd1edbd`.
+quota source모델7c898963…/replay3713625f…, extension source모델cce148bb…/replaye6857943…다.
+현재 첫arm만실행중이며 extension은대기다. 실제report에서 restored_learner_bytes_identical=true,
+상속2,000·총2,021update·추가21actual step·collection_seed2000을확인했다.
+
+각arm은학습5,000→저장감사·이전7,000행17배열/prefix검사→같은4개개발주행→고정종료Q→
+uniformcoverage→수집terminalQ→같은2train상태×4seed실제종료MC를순서대로실행한다.
+두arm을동시에GPU에올리지않는다. 결과원본완료후독립재계산하며실패/회귀도그대로남긴다.
+오류/해시/비유한/lineage불일치는batch를중단한다. 총5,000초과추가학습·전체validation/
+새seed/독립정책평가는자동연결하지않는다. 모델선정/평가확대는실제다중주행지표를검토한뒤판단한다.
+현재 안정정책은미확보이며전체목표는active다.
