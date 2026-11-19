@@ -36,7 +36,13 @@ def audit(directory, manifest):
     horizon = report["collection"].get("rollout_horizon", 1)
     restart = report["collection"].get("restart_terminal", False)
     complete_path = report["collection"].get("complete_path", False)
-    assert isinstance(restart, bool) and isinstance(complete_path, bool)
+    extend_selected = report["collection"].get("extend_selected", False)
+    assert all(isinstance(flag, bool) for flag in (restart, complete_path, extend_selected))
+    if extend_selected:
+        assert restart and not complete_path and horizon == 8
+        assert report["collection"]["samples"] == 8 and report["collection"]["window"] == 6
+        assert report["collection"]["selection"] == "moving_predecessors"
+        assert report["collection"].get("quota_script_sha256")
     assert isinstance(horizon, int) and 1 <= horizon <= (200 if complete_path else 8)
     assert not restart or horizon > 1
     if complete_path:
@@ -48,7 +54,7 @@ def audit(directory, manifest):
         assert report["collection"]["samples"] == (horizon if restart else 1)
         assert report["collection"]["window"] * horizon <= 48
         assert report["collection"].get("rollout_script_sha256")
-    root_counts, root_latest = {}, {}
+    root_counts, root_latest, root_initial_lineage, extended_roots = {}, {}, {}, {}
     for i, (row, update) in enumerate(zip(rows, updates)):
         assert row["collection_id"] == row["update"] == update["update"] == i + 1
         assert row["policy_updates_before"] == i
@@ -62,7 +68,7 @@ def audit(directory, manifest):
             root_key = (lineage["parent_episode_uid"], lineage["parent_tick"])
             assert row["episode_uid"] == root_key[0] and root_key in parents
             depth = lineage.get("branch_step", 0)
-            assert isinstance(depth, int) and 0 <= depth < horizon
+            assert isinstance(depth, int) and 0 <= depth < (200 if extend_selected else horizon)
             assert row["pre_tick"] == root_key[1] + depth
             branch_id = (*root_key, lineage["branch_sample"], depth)
             assert branch_id not in branch_ids
@@ -73,11 +79,23 @@ def audit(directory, manifest):
             if restart:
                 quota_key = (*root_key, lineage["trigger_tick"])
                 used = root_counts.get(quota_key, 0)
-                assert lineage["root_budget_step"] == used < horizon
+                assert lineage["root_budget_step"] == used
+                assert used < horizon or (extend_selected and used < horizon + 200)
+                is_extension = used >= horizon
+                assert lineage.get("quota_extension", False) == is_extension
+                if is_extension:
+                    trigger_key = row["episode_uid"], lineage["trigger_tick"]
+                    assert lineage["root_selection_rule"] == "earliest_predecessor_then_rejection_then_recent"
+                    assert all(root_counts.get((*key, lineage["trigger_tick"]), 0) >= horizon
+                               for key in states_per_trigger[trigger_key])
+                    assert extended_roots.setdefault(trigger_key, root_key) == root_key
                 if used == 0:
                     assert depth == 0 and lineage["branch_sample"] == 0
+                    root_initial_lineage[root_key] = lineage
                 else:
                     previous_root = rows[root_latest[quota_key]]
+                    if is_extension:
+                        assert previous_root["bootstrap"]
                     if previous_root["bootstrap"]:
                         assert lineage["previous_collection_id"] == previous_root["collection_id"]
                     else:
@@ -137,6 +155,13 @@ def audit(directory, manifest):
             branches.append(row)
         assert row["delta_ticks"] == 1 and row["tick"] == row["pre_tick"] + 1
         assert row["bootstrap"] == (not (row["terminated"] or row["truncated"]))
+    priority = {"moving_predecessor": 0, "moving_rejection": 1, "recent": 2, "terminal": 3}
+    for trigger, selected_root in extended_roots.items():
+        expected = min(states_per_trigger[trigger], key=lambda key: (
+            priority[root_initial_lineage[key]["selection_role"]], key[1]))
+        assert selected_root == expected
+        last_index = root_latest[(*selected_root, trigger[1])]
+        assert not rows[last_index]["bootstrap"] or last_index == len(rows) - 1
     with np.load(directory / "replay.npz", allow_pickle=False) as data:
         meta = json.loads(str(data["metadata"]))
         assert meta["versions"] == report["versions"]
@@ -184,6 +209,9 @@ def audit(directory, manifest):
                 branch_unique_parent_states=len({(r["lineage"]["parent_episode_uid"],r["lineage"]["parent_tick"]) for r in branches}),
                 branch_continuation_transitions=len(successor_pairs), rollout_horizon=horizon,
                 restart_terminal=restart, complete_path=complete_path,
+                extend_selected=extend_selected,
+                extended_roots=len(extended_roots),
+                extension_transitions=sum(r["lineage"].get("quota_extension", False) for r in branches),
                 root_step_counts=list(root_counts.values()) if restart else None,
                 main_provider_counts=dict(Counter(r["provider"] for r in rows if r["lineage"]["kind"]=="main")),
                 branch_provider_counts=dict(Counter(r["provider"] for r in branches)),

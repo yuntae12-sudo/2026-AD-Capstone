@@ -87,3 +87,11 @@ def test_rollout_horizon_and_implementation_cannot_change_on_resume(completed):
     completed[3]["complete_path"] = True
     with pytest.raises(ValueError, match="complete_path"):
         check(completed)
+    completed[3]["complete_path"] = False
+    completed[3]["extend_selected"] = True
+    with pytest.raises(ValueError, match="extend_selected"):
+        check(completed)
+    completed[3]["extend_selected"] = False
+    completed[3]["quota_script_sha256"] = "different quota implementation"
+    with pytest.raises(ValueError, match="quota_script_sha256"):
+        check(completed)

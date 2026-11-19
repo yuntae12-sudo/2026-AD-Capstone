@@ -1785,3 +1785,131 @@ accepted/rejected 이력에서 root 후보와 우선순위를 독립 재구성�
 분모는 아직 미확정이다. `review_evaluation1000.py`와 `review_value1000.py`는 구문검사만
 완료했고 실제 최종 원본이 나온 뒤 실행한다. 다른 분기 방식의 서로 다른 terminal 상태를
 동일 상태의 paired Q로 비교하지 않는다.
+
+## 2026-11-20 00:20 KST 종료까지 수집한1,000회도 실패 — 종료 노출 감소 확인
+
+실행 코드55df7a7, 기록 전 HEAD ea5fb39의 조건을 그대로 사용했다. runner2456547의
+학습·저장 감사·동일4주행·고정 종료Q·coverage·수집 terminalQ는 모두 완료됐고 실제
+프로세스도 종료됐다. 학습1,000회 완료는 안정 정책 달성이 아니다. 모델 SHA는
+`2db717baf1e9b323e9267727ffe27100ddf164659d2007eeea75b01dcbd49054`, replay SHA는
+`451640b6db13ae6da5cdc7a5b83dab29c11e90b666b5c9fdcce8a2c2d63fc12e`다.
+
+저장 자료를 독립 검토해 자기 warmup5,000의17배열 바이트 동일, 과거main의 수락/거절 이력에서
+root 선택 우선순위 재구성, 실제 후속 관측/mask 연결, 원래 종료/보상/raw action, teacher0를
+확인했다. main589/branch411, 고유train9장면이며, 선택한7개 분기는 각각29/31/47/56/120/55/73
+실제step 후 모두 충돌했다. 가짜 종료나8step 이후의 연결 누락은 없었다. KEEP/FOLLOW별
+분기step은235/176이다. main의 마지막 예산 경계는 성공/종료로 바꾸지 않았다.
+
+같은2개 개발 장면×KEEP/FOLLOW4회와 기존3모델을 합쳐16episode의 원본 frame을 재계산했다.
+초기 frame/map/seed4쌍은 같다. 고유 장면2개이며 독립 test가 아니다.
+
+| 모델 | 목표/충돌 | tick | 거절 | 제동 | 정지 | 평균 return |
+| --- | --- | --- | --- | --- | --- | --- |
+| 초기mean0 | 2/4·2/4 | 216 | 58 | 46 | 22 | -10.015390 |
+| quota1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981233 |
+| independent1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981133 |
+| complete-path1,000 | 0/4·4/4 | 186 | 96 | 84 | 32 | -20.254178 |
+
+새 후보의 거절51.61%·제동45.16%·정지17.20%는 quota의18.64%·15.25%·5.08%보다 나쁘다.
+고속 두 주행은72tick 목표 도달에서57tick 충돌로, 중속 두 주행은46tick 충돌에서36tick
+충돌로 바뀌었다. 모두 정지 중 뒤쪽 접촉 기하이며 책임/단일 인과 판정은 아니다.
+첫 제안의 최대 World waypoint 차이는 quota 대비 약3.02~3.04mm지만, 이 작은 초기 차이
+하나가 전체 실패의 원인이라고 단정하지 않는다. 이후 폐루프 상태/행동도 달라진다.
+**새 후보는 미채택이며 전체16·다른 learner seed·별도 정책 평가로 확대하지 않는다.**
+
+긴 경로 수집에는 부작용도 있었다. quota는42root/분기336step/분기종료66개였지만 새 후보는
+7root/411step/종료7개다. 전체 사전정지 경험도464→486/1,000으로 늘었다. 고정62개 저장 종료
+중 큰 음의 보상44개의 twin-min Q MAE를 원시 Q에서 다시 계산하면4.896726→8.799604로
+악화됐다. 같은 실제 종료 두 상태에서 현재 평균 행동을 실행해도 충돌이고, Q−보상 차이는
+KEEP5.988793→8.973167, FOLLOW3.325783→7.728353이었다. 별도 수집 terminal 상태들은
+서로 다르므로 같은 상태의 paired 비교로 합치지 않는다.
+
+`review_sampling1000.py`는 독립 정수 추출/누적으로 총256,000개 인덱스, 저장 RNG와
+6,000행 CSV/replay를 대조했다. 두 실험의 warmup/online 추출 수는233,361/22,639로 같다.
+큰 실패 종료 경험의 배치 노출은 아래와 같다. 동일 warmup의 노출은 그대로이며, 새 경험의
+구성이 바뀌었다. 이는 종료 노출 감소를 확인한 것이지, 다른 상태/행동 분포 효과를 제거한
+인과 실험은 아니다.
+
+| 추출된 큰 실패 종료 경험 | quota1,000 | complete-path1,000 |
+| --- | --- | --- |
+| 동일 자기 warmup | 2,018 | 2,018 |
+| 새 main | 220 | 212 |
+| 새 branch | 1,488 | 189 |
+| 합계 | 3,726 | 2,419 |
+
+검토기 첫 실행은 저장 metadata 키를 `rng_state`로 잘못 읽어 KeyError가 났다. 원본은
+`rng`이며 실험/데이터를 바꾸지 않고 검토기 키만 수정한 뒤 위 전체 대조를 통과했다.
+초기 검토기/오류는 로컬에 보존했다. 실행 중인 MC 조회에서도 아직 summary가 생성되지
+않은 중간 항목을 바로 읽어 KeyError가 났으나 실제 진단 프로세스는 정상 진행했다.
+
+이번 모델의 저장된 zero packed velocity/acceleration50평균도 원래 zero-anchor 계산에서
+50/50 전체 정지 정렬됐다. 최대 평균 waypoint 거리는1.2684e-5m, 최대 sigma0.03 조건부
+정렬 이탈 상계는1.3838e-41이다. 이전 절과 같은 조건부 계산이며 실제 장면 출발 검사,
+미래 학습 불가능성 또는 새로운 NN 추론의 결과로 일반화하지 않는다.
+
+로컬 `outputs/sac_complete_failure_path_20261119/`의
+`collection1000-review.json`(SHA `b3f652191648ffe6cb533072fb4c53a2c6a3197ff750485bafd48d57916b1473`),
+`evaluation1000-review.json`(SHA `d06a2a0a6f0b541aed2676d6c604a65f2ae833d5440a7df2dec766b8043761b7`),
+`sampling1000-review.json`, `saved-standstill-means1000-review.json`에 검토 근거가 있다.
+실행 명령은 각각 같은 디렉터리의 `review_collection1000.py`, `review_evaluation1000.py`,
+`review_sampling1000.py`이며, 마지막 계산은 `review_saved_standstill_means.py --q
+outputs/sac_complete_failure_path_20261119/q1000.json --output
+outputs/sac_complete_failure_path_20261119/saved-standstill-means1000-review.json`으로 실행했다.
+
+같은 두 train 상태×4seed의 실제 미래 보상 대조는 runner2460323/child2468917로 진행 중이다.
+현재 소스 동결은 유지한다. 다음 후보는 기존 여러 root의 수집/종료 반복을 유지한 뒤
+선택한 이동 경로의 실제 후속 경험을 추가하는 방안을 검토한다. 아직 구현·실행·채택하지
+않았으며 전체 예산 안에서 장면 수/정지 비중/종료 노출이 다시 달라질 수 있음을 명시한다.
+
+## 00:26 KST 실제 미래 보상 검토 완료와 기존 quota 보존 옵션 구현
+
+같은 두 train 상태×4seed(88019~88022)의 실제 종료 진단은 완료됐고 runner2460323과
+child2468917의 종료 및 마지막 소스 hash 일치를 확인했다. 보상·entropy·discount·terminal,
+trace hash·상태/seed 동일성을 `review_value1000.py`로 독립 대조했다. 첫 행동은 각 정책의
+현재 평균, 이후는 원래 Gaussian이며 첫 행동 entropy를 제외한 실제 soft return이다.
+8/8 모두 충돌했다. 표본 수가 작고 train 상태에 대한 조건부 비교이며 독립 평가가 아니다.
+
+| 상태 | 새 Q | 새 실제 return 평균±표본SD | Q−평균 | quota 대비 paired return 차이 |
+| --- | --- | --- | --- | --- |
+| KEEP77ae… tick0 | -0.250134 | -14.052836±1.083310 | 13.802702 | -0.658385±1.042408 |
+| FOLLOWbaac… tick4 | -0.159687 | -10.801195±0.799995 | 10.641508 | +0.175726±0.933531 |
+
+FOLLOW의 작은 표본 평균 개선을 성공으로 해석하지 않는다. 네 paired 차이는
+-0.773574/-0.477651/+0.944823/+1.009308로 혼재하고 모두 충돌이다. KEEP도 앞의 두 차이는
+약+0.00044지만 나머지 둘이-2.190034/-0.444385로 나빠졌다. 실제 Q 과대평가는 양쪽 모두
+남았고, 별도 개발4주행도 모두 실패했으므로 complete-path1,000은 미채택이다.
+
+최종 검토 SHA는 `value1000-review.json`
+`07b4186bdeeae0206728cb0febad887f2a75bc478ba148a7186102eb4c786f2e`,
+MC 보고서는 `c2346ac4114981285f358ef534aea6a84ee4f851dcfbe9c4dfde6c38d7c2dbd2`,
+추출 재검토는 `4c9a8a246e084a7907a56eefa810b7231608098d1ff90df57621afa12bb0f771`이다.
+
+그 뒤에만 후속 수집 옵션을 구현했다. `scripts/sac_failure_quota_extension.py`는 기존
+`collect_fixed_budget_rollouts`를 그대로 호출해 선택된 모든 root의8step 수집을 먼저 마친다.
+이 과정의 종료 후 root 재시작도 원래 동작과 같다. 그다음 과거main의 accepted predecessor
+우선/이른 tick 규칙으로 한 root를 골라, 마지막 quota 전이가 아직 nonterminal인 경우에만
+그 실제 다음 상태에서 원래 종료까지 잇는다. 마지막 quota가 terminal이면 추가 재시작하지
+않는다. 기존 quota 안에서 이미 재시작했다면 현재 열려 있는 path를 그대로 잇는다.
+새 행동의 통과 여부로 데이터를 선별하지 않는다.
+
+CLI `--failure-branch-extend-selected`는 samples8/window6/moving_predecessors/horizon8/
+restart-terminal 조합에서만 허용한다. main/분기 모두 원래 Gaussian·collector·uniform
+replay·실제step당 update1을 사용한다. 200step 경계는 가짜 terminal이 아니라 원래 환경이
+종료하지 않은 경우의 오류 검사다. 전체 예산 경계에서는 원래 bootstrap을 유지한다.
+새 flag와 quota 소스 hash를 continuation 설정 검증에 추가했으므로 다른 수집 모드의
+학습 가중치를 조용히 이어받을 수 없다. 새 모드는 별도 진단이며 기본 채택하지 않는다.
+
+저장 auditor는 실제 선행 quota 완료, 선택한 한 root만 확장, 동일 path의 실제 next obs/mask/
+이전 collection ID, terminal 이후 확장 금지, global budget 외 nonterminal 확장 중단 금지를
+검사한다. 기존3,000quota와 새1,000complete 자료를 새 auditor로 실제 재검증해 모두 통과했다.
+로컬 `outputs/sac_quota_extension_20261120/*-backward-audit.json`에 근거가 있다.
+
+관련6개 pytest 파일34case를 실제 통과했다. 새8case는 기존 quota prefix의 완전 동일,
+실제 terminated/truncated 종료, 예산 전/중간 경계, quota 마지막 terminal의 재시작 금지,
+quota 내부 재시작 뒤 열린 path 연속성, 잘못된 설정/200step 미종료 오류를 다룬다.
+추가로 실제 분기 재구성과 Q 진단 관련2개 파일8case도 통과해 관련 총42case를 확인했다.
+아직 새 옵션의 실제 학습/주행 성능은 미검증이다. 다음은 같은fresh seed0·자기 warmup5,000의
+100actual-step 저장 감사와 같은4개 개발 주행이다. 이100회는 실제 연결 구현 검증이며,
+짧은 실패만으로 장기 학습의 불가능성을 주장하지 않는다. 같은예산1,000실험이나 예산 연장은
+실제100자료 검토 후 별도로 판단한다. 긴 경로 추가에 따라 전체 예산 내 main/장면 수가 줄 수
+있으므로 초기 quota 보존을 전체 terminal 노출 보장으로 오해하지 않는다.
