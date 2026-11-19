@@ -3507,3 +3507,43 @@ preflight/stopped-review-preflight. 총10,000 학습→저장/audit/prefix→기
 기존 raw5,000과 대조하며 전체 개발·다른 seed·Rule-based·별도 test 확대는
 실제 개선 후 판단한다. 10,000 이후 추가 학습이나 기본 채택은 자동 연결하지 않는다.
 안정 정책은 미확보이며 전체 목표는 계속 진행한다.
+
+
+## 2026-11-20 06:44 KST — 10,000회 후속 실행 복원 확인과 정지 거절 세부 분석
+
+코드 `6b1cfd2feaed7e47bca908c5bf5478a0b8616160` push/원격 SHA 확인.
+06:40:35 runner2620438/train2620440으로 실제 시작했다. 2026-11-20T06:44:24.274159+09:00 두 PID 생존,
+총5128/10,000·새 전이/update128 확인. learner/optimizer/target/RNG 전체
+복원 바이트 동일, collection-seed5000, 고정 소스 hash 동일이다. 런타임 변경 없이 진행한다.
+로컬 `launch.json`, `restoration-observed.json`, `status.json`에 실제 실행 근거를 남겼다.
+
+완료 raw5,000의 정지4주행 저장 frame을 읽어 운동한계 세부항목을 대조했다.
+모델 forward/환경 step/학습은 추가 실행하지 않았다. 같은 초기4쌍의 과거 결과는 다음과 같다.
+
+| 모델 | 총 tick | 거절 | KINEMATIC_LIMIT | PREDICTED_COLLISION | 곡률 위반 | 곡률 변화율 위반 |
+| --- | --- | --- | --- | --- | --- | --- |
+| entropy2,000 | 328 | 80 | 8 | 72 | 2 | 8 |
+| raw1,000 | 328 | 124 | 57 | 67 | 57 | 57 |
+| raw2,000 | 328 | 264 | 252 | 12 | 252 | 252 |
+| raw5,000 | 328 | 328 | 328 | 0 | 328 | 328 |
+
+raw5,000의 모든 거절은 곡률과 곡률 변화율이 함께 위반된 것이다. 이 cohort에서는
+가속도/jerk 위반이 기록되지 않았다. 한 거절의 다중 위반을 합쳐 거절 수를 늘리지 않는다.
+KINEMATIC_LIMIT가 먼저 반환되므로 PREDICTED_COLLISION0을 예측 충돌 위험0으로
+해석하지 않는다. 같은 시작 상태지만 후속 정책/관측은 다르며 독립 test나 인과 분리가 아니다.
+
+raw5,000의3초 raw 경로 끝점 변위 중앙값은4쌍별0.05546/0.05510/0.05865/0.06924m다.
+이동 경로는 매우 짧지만 이를 곡률 검사 면제로 삼지 않는다. ego heading 방향의 끝점이
+뒤쪽인 제안은101/328개였다. 이는 raw제안 끝점의 기하학이지 실제 후진, 도로 Frenet방향,
+PD 참조 속도나 학습 잔차만의 값이 아니다. 원래 decoder는 ego-local residual을 yaw로
+world XY로 회전하며, 본문 확인에서 그 회전 누락을 발견한 것은 아니다.
+
+최초 분석기는 모든 과거 거절도 KINEMATIC_LIMIT라고 잘못 가정해 assertion으로 실패했다.
+이를 숨기지 않고 `stopped-violation-review-initial.py`와 initial-failure.json에 보존했다.
+모든 이유를 그대로 집계하도록 읽기 전용 분석기만 수정했으며 입력/런타임은 그대로다.
+완료 산출물(로컬5,000 출력폴더) `stopped-violation-review.json` SHA
+`10fb4cf1fd0e14c837d5faf4f402368ca22a8fb95f1a226a04ccd2a093281749`.
+
+Notion 첫 화면·03절43·04 현재 작업을6b1cfd2 기준으로 갱신하고 실제 재조회했다.
+핵심 수치/새 실행 경로/커밋 링크 및 과거 headings5/44/19개 보존·43절 중복 없음 확인.
+이 추가 정지 분석과 실제 복원 확인도 같은 절에 후속 반영한다. 안정 정책은 여전히 미확보다.
