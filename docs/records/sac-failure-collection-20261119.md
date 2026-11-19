@@ -2710,3 +2710,32 @@ WAITING/MATCHED_PIPELINE_COMPLETION을확인했다. runner SHA
 `reviews-status.json`과새 `terminal-gpu-review-status.json`을구분해확인한다.
 문서기준HEAD17957b2·runtime c3fe6a7 유지. CPU수치문제해결/안정정책확보는아직아니며
 전체목표는active다.
+
+## 03:18 KST 과거 온라인 설정 중복 점검
+
+현재 두 수집 방식의 비교가 끝나기 전에 다음 설정을 결정하지 않도록, 완료된 과거
+온라인 진단의 설정만 목록화했다. `rg --files --no-ignore outputs -g report.json`의
+141개 경로에서 sources 사본을 제외하고, 온라인 완료 상태·모델 파일 존재·기록된 모델
+SHA로 중복을 제거한 범위는 33개다. 전체 연구 이력이나 모든 오프라인 진단을 포괄하는
+검색은 아니다. 누락된 설정 필드는 ABSENT로 남겼으며 현재 기본값으로 소급하지 않았다.
+
+이 목록에서 entropy 평균 좌표가 명시되지 않은 과거 두 모델의 실제 가중치 SHA를
+재계산해 기록과 일치함을 확인했다. `sac_short_updates_20261118/online100-seed0`는
+integrated/gain0.001, `sac_action_coordinates_20261118/online100-seed0`는
+integrated/gain0.01/whitened Q다. 당시 문서의 raw B 평균 실험·주행 실패와 대조했지만
+과거 주행을 재실행하거나 모든 33개 모델의 가중치를 재검증한 것은 아니다.
+
+이 제한 목록에는 physical_whitened Q와 비entropy 평균의 조합이 명시된 완료 온라인
+모델이 없었다. 이는 해당 조합의 효과나 실험 필요성을 입증하지 않는다. 과거 raw B 평균
+실패를 현재 physical Q 설정과 같은 실험으로 취급하지 않으며, 새 실험 선택·구현·실행은
+하지 않았다. 승인된 B 평균은 여전히 별도 비교이고 기본 정책 채택이 아니다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/`의
+`completed-online-setting-inventory.json` SHA
+`5b0165c06709bce9d400d0d17c6fea0a600e50fd479b6ccd833cc0a1cc18730f`,
+`selected-historical-model-check.json` SHA
+`f30a0e39e13d79da092cc341b8e5e663382cc67a18354e423b6bae30b12b913a`.
+03:16:44 extension은3,706/5,000, 실제 학습 child2532783과 runner2510498,
+독립 검토2517850, 대기 GPU 검토2538421의 생존을 확인했다. 두 arm 비교와 후속 GPU
+검토 완료 전까지 runtime/script 고정을 유지한다. 문서 기준 HEAD1824ebe, 실행 코드
+c3fe6a7이며 이번 변경은 기록뿐이다. 안정 정책은 아직 미확보다.
