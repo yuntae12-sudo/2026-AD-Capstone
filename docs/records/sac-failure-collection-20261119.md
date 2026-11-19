@@ -2205,3 +2205,52 @@ entropy +0.075686이다. 거절49→54/제동44→45/정지25→24이며 할인 
 인과 개입도 아니며 의도적인 reward hacking이나 보상 변경 근거로 단정하지 않는다.
 기존 규약을 유지하면서 성공/충돌/거절/제동/정지와 보상을 함께 판단한다.
 `return-components1000-review.json` SHA `a1ef8b79d50c7e4a72945c85060764fd96563640efcdfe8929eb35d5d40e1e75`.
+
+
+## 01:24 KST CPU 관측별 정책 응답 점검 — 상수 정책은 아니지만 평균 변화가 집중됨
+
+총2,000회 continuation을 유지하면서 완료된 quota1,000/extension1,000/quota2,000을 CPU로
+읽었다. 현재 학습 중인 extension2,000의 결과가 아니다. extension1,000 replay6,000행에서
+scene/command별 서로 다른 tick 최대5개를 균등 선택했다. Q·보상·검사 결과로 고르지 않았고
+같은 tick의 첫 저장 행을 사용했다. 고유train47장면의312상태(KEEP165/FOLLOW147)이며
+속도2m/s이상135·0.1~2m/s21·0.1m/s미만156상태다. 모든 ID가 현재 manifest의 train임을
+확인했으며 동일 상태를 각 모델에 넣었다. 모든 모델이 이 상태를 직접 방문했다는 뜻은 아니다.
+
+`audit_actor_state_response.py`로 실제 Encoder·마지막 hidden·mu head를 추출했다.
+mu head의 affine 출력과 이후 B/g/gain 적용을 독립 식으로 대조했다. CPU만 활성화했고
+2개 CPU에 제한했으며 실제 환경·정책 평가·gradient/update·teacher·replay write는 없다.
+`review_response_arrays.py`로 저장 배열 hash·선택 인덱스·train 포함·SVD와 속도별 통계를
+독립 재계산했다. plot을 생성하고 실제 이미지를 열어 축/범례/분모를 확인했다.
+
+| 같은312상태의 관측별 응답 | quota1,000 | extension1,000 | quota2,000 |
+| --- | --- | --- | --- |
+| Encoder 중심화 에너지/전체 에너지 | 0.143064 | 0.147689 | 0.152270 |
+| mu head 중심화 변화의 첫 주성분 기여 | 99.9334% | 99.9592% | 99.7314% |
+| 이동135상태 평균 경로 보정 최대크기의 중앙값 | 0.008503m | 0.009022m | 0.021141m |
+| 저속21상태의 같은 중앙값 | 0.001044m | 0.001148m | 0.002176m |
+| 정지156상태의 같은 중앙값 | 0.00001224m | 0.00001958m | 0.00001044m |
+
+관측/hidden/mean head가 전부 상수인 정책은 아니다. 다만 이 실제 상태 표본에서 mu head의
+중심화 변화는 거의 한 방향에 집중된다. KEEP/FOLLOW를 나누거나 이동 상태만 골라도
+대부분 첫 주성분에 집중된다. 이것은 표본 내 관측별 출력 변화의 통계이며 60개 출력의
+수학적 자유도가 사라졌다거나 유용한 제어가 불가능하다는 증명이 아니다.
+
+경로 보정은 `max_t ||3*t^2*mu||`만 측정했다. 속도/가속도 anchor를 제외했으므로 전체
+경로 길이·PD 추종 오차·안전 여유가 아니다. PCA도 B/g/gain 이전 head 좌표의 통계이며
+물리 경로 분산과 동일하게 해석하지 않는다. 한 방향의 변화·작은 보정만으로 수집/모델의
+유일 원인을 정하거나 배율·Gaussian·구조를 바꾸지 않는다. 완료될 extension2,000과 같은
+312상태의 응답 및 실제 주행을 함께 비교할 후속 근거로 사용한다.
+
+첫 로컬 진단은 command가 packed tensor 맨 앞이라고 둔 검증 assertion에서 실패했다.
+신경망 추론 전에 중단됐으며 실패 스크립트/log를 보존했다. 실제 `CORE_SHAPES` 순서로
+19개 command block의 offset을 구하고 앞5개 one-hot 및 field mask를 검증하도록 고쳐
+완료했다. 학습/계약/관측 runtime에는 변경이 없으며 실패한 결과를 통과로 간주하지 않았다.
+
+로컬 `outputs/sac_actor_state_response_20261120/` 근거:
+
+- `report.json`: `bb110422bb1a6dfde4106e3c264b5da64ead9b8df6a8c9e34176d2bd6568dfda`.
+- `array-review.json`: `040038339e83a8b4ec62cf123a4a5dd5db02bf1ed6886243dc07f1f8714870e9`.
+- 실제 확인한 `actor-state-response.png`: `23704ad9dd81dc06da8522110f7e121e898997536ca9b413043de5174ac5412c`.
+
+이 결과는 안정 정책 달성이나 평가 확대 근거가 아니다. 실행 중인 총2,000 비교와 runtime
+소스 동결을 유지한다.
