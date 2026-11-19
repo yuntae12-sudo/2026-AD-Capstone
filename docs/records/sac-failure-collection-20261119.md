@@ -3648,3 +3648,106 @@ anchor v/a·Gaussian·suffix 수정·폐루프 누적 이동을 제외한다. �
 완료 후 terminal/속도 검토기와 최종 검토기를 적용한다. 전체개발·다른seed·Rule-based·
 별도test 확대나 새로운 예산/구조/손실 변경은 아직 선택하지 않았다. 이번 예산의 실패를
 장기 수렴 불가능으로 단정하지 않으면서, 현재 후보 미채택·안정 정책 미확보를 유지한다.
+
+## 2026-11-20 08:05 KST — raw10,000 전체 검토 종료, 현재 행동의 Q 오차 유지
+
+실행 코드6b1cfd2·기록 기준 HEAD ea829bf, core96fa1d6 유지. runner2620438과
+13개 child의 정상 종료/실제 PID 부재, 고정30개 소스·decision·runner hash 및 모든
+후속 검토의 원본 hash를 확인하고 `finalize_review.py`를 실행했다.
+로컬 `outputs/sac_mean_decoupled_g_budget10000_20261120/scientific-review.json`
+SHA `27d54545a21c52375777dc71b00bb47f6af528dc8a7fc2c7c46655743e256e8c`.
+별도 `policy-decision.json` SHA
+`bb11860d530edefe62d949b54c58c099bfb960c15148d7660f2402f6a1cee5ef`는
+`REVIEWED_DRIVING_FAILURES`, qualified=false다. 후보 미채택이며 전체 목표는 미완료다.
+
+앞 절의 기존4주행·정지4주행 실패에 더해 같은2개 train 상태×4seed의 실제 종료 검증도
+8/8충돌했다. KEEP Q -1.352793, 실제 soft-return 평균 -12.885103±2.440118(표본표준편차),
+차이11.532310이다. FOLLOW Q -0.669760, 평균 -9.083225±1.133343, 차이8.413465다.
+자신의5,000 대비 KEEP return -0.379753, FOLLOW +2.092239다. FOLLOW 차이는
+종료 보상의 할인 +2.297761·종료 전 보상 +0.157178·entropy -0.362700으로 나뉜다.
+평균 충돌 시점이24틱 늦어졌고 비할인 보상 차이는+0.092367이다. 4회 모두 충돌하므로
+할인 return 증가를 주행 성공으로 판단하지 않는다. 이2개 train 상태의 소표본을
+개발 validation이나 독립 test 결과와 합산하지 않는다.
+
+### 현재 행동과 저장 행동의 차이
+
+고정 severe44개 저장 행동의 Q MAE는 raw5,000의1.152763→10,000의3.109345로 악화됐다.
+별도 실제 상태 재실행에서 저장 행동과 현재 평균의 reward/종료/next_obs가 같은4지점
+모두 현재 평균을 더 좋게 평가했다. 고정 KEEP/FOLLOW 선호 차이는+6.013400/+2.452528,
+실제 수집 branch KEEP/FOLLOW는+7.675698/+3.512333이다. 해당 현재 평균의 Q−실제
+종료 보상은 각각+9.223094/+3.599493/+8.669208/+6.796194다. bootstrap=false인
+동일 실제 종료를 대조했으므로 이4지점은 미래 가치 항으로 설명되지 않는다.
+`terminal-preference-review.json` SHA
+`9bffcdf0f34c9eedfbe1cf44f4565c1f461d06f5f96d87ca78e16600093c242c`.
+
+온라인 경험 중 최종 정책의 조건부95% Gaussian 영역 안에 들어가는 비율은
+5,000의16.96%→10,000의3.59%였다. 이는 확률분포의 support·안전 기준·성공 확률이 아니다.
+누적 정지5,144행은 모두 영역 밖이며 현재 sigma 단위 RMS 중앙값488.644다.
+최근100행의 정지20행도 모두 영역 밖이고 중앙값338.207, 누적batch 추출10회·미추출12행이다.
+나머지 최근100행 중 저속3행은1행, 이동77행은37행이 영역 안이다. 속도/상태/정책이
+다른 구간을 통제된 인과 비교로 해석하지 않는다. 속도 검토 SHA
+`b6e3d08c77a9f712d4676613a01f7722b9b029936ceb4bb605d0acf50c129f67`.
+
+추가5,000update의 새 severe main37행은1,955회 추출(미추출1), branch326행은16,732회
+추출(미추출5)됐다. 총 실제 수집·uniform replay RNG와 추출량은 확인했지만, 이 수치가
+현재 행동에 대한 학습 충분성을 증명하지 않는다.
+
+### 오래된 정책 실행 가능성 점검과 다음 진단
+
+main/branch 모두 `train_actual_step`에서 행동 직전 `policy.actor=state.actor`를 대입한다.
+`model_proposer`의 closure는 같은 Policy 객체를 호출하고, `Policy.action`은 현재
+`self.actor.params`를 JIT 함수의 인자로 전달한다. 파라미터를 초기 상수로 캡처하지 않는다.
+10,000개 trace의 policy_updates_before=i/update=i+1도 모두 일치했다.
+이 소스 점검에서는 stale-policy 결함을 찾지 못했다. 과거 각 행동 시점의 실제 파라미터
+hash를 기록한 것은 아니므로 counter만으로 모든 역사적 실행을 증명했다고 쓰지 않는다.
+마지막 정지 branch 행14991은 행동 이후9update 만에 최종 정책과374.236552 sigma RMS
+차이가 났고 학습 batch 추출은0회였다. 소스/trace 검토 SHA
+`b69538a5ad6b0023ce16bdaddd312b8b02a64a318bb9fb966788335bcabe302f`.
+
+다음은 로컬 `outputs/sac_raw10000_update_drift_20261120/probe.py`의 읽기 전용 진단이다.
+동일10,000 learner/optimizer/target/learner RNG로 매번 돌아가 uniform256 batch4개 각각에
+원본 `update()`를 한 번 적용한다. 새 실제 전이는 넣지 않으므로 실제 온라인 다음
+update 재현이나 누적4회 학습이 아니다. 마지막100개 실제 관측 전부에서 평균의 변화와
+head/feature 기여를 분리한다. 기여 norm은 서로 상쇄될 수 있어 합산 백분율로 쓰지 않는다.
+checkpoint/replay 쓰기·환경 step·새 reward label·배포는 없으며 규약10절의 손실/lr/tau,
+원래 sampler·보상·검사·PD·BC/teacher0을 유지한다. 단일 변화량이 주행 개선을 증명하지 않는다.
+구문 검사는 통과했고 08:05에 PID2649190으로 시작했다. 진단 결과는 후속 절에 기록한다.
+결정 SHA `74546826d12fe08704a8e6679a439a58a95367aaef189b66e727e8770fcfb43d`.
+
+## 2026-11-20 08:10 KST — 한 번 update 진단과 평균 B 곱셈의 수치 오차
+
+위 진단 PID2649190은 exit0으로 종료됐다. 원본 learner의 byte 동일성 및 입력 파일 hash가
+유지됐다. 4개 독립 batch의 정지20관측 평균 변화는 기존 sigma 단위 RMS 중앙값
+32.343/40.898/45.118/49.241, 이동77관측은0.172/0.151/0.166/0.170이었다.
+저속3관측은0.941/1.074/1.110/1.015였다. raw head/hidden의 실수 연산 분해와 실제 출력의
+차이가 있어 feature 변화만으로 전체 원인을 확정하지 않았다. 이는 저장된 자기 경험에
+대한 반사실적 한 번 update4개이며 실제 환경 전이·추가 학습 완료로 세지 않는다.
+로컬 `outputs/sac_raw10000_update_drift_20261120/report.json` SHA
+`4aa59635d1307432b20db117e2be1868a15a037ff2fbab6503328c5cc4e918ea`.
+
+별도 `basis_numerics.py`에서 **같은 최종 모델의 같은 NN head**를 고정하고 마지막100관측에
+대한 B 곱셈만 대조했다. NN의 정밀도나 가중치를 바꾸지 않았다. f32에서 기존 gain을 곱한
+head를 기준으로 B의 float64 곱을 독립 NumPy 계산과 대조했다(최대 오차6.51e-19).
+실제 actor 출력은 별도로 수행한 default B 곱과 정확히 일치했다.
+
+| B 곱셈 | float64 기준 raw 평균 최대 차이 | 정지20관측 sigma RMS 중앙값 / 최대 | 이동77 중앙값 |
+| --- | ---: | ---: | ---: |
+| 현재 GPU default | 1.402184e-6 | 279.463767 / 942.256170 | 1.570492 |
+| float32 highest | 3.549749e-10 | 0.119780 / 0.209780 | 0.0003053 |
+| float64 | 6.505213e-19 | 1.5158e-10 / 3.5973e-10 | 6.4502e-13 |
+
+조건수가 큰 B의 역변환과 작은 정지 g 때문에 작은 raw 차이가 정책 분포 및 critic 입력
+좌표에서 증폭될 수 있음을 **현재 모델의 고정 head 비교로 확인**했다. 이전16:37의
+target fused/분리 계산 검사는 다른 연산을 다뤘으므로 당시 정밀도 보류 판단과 구분한다.
+이 발견만으로 주행 실패 전체가 설명되거나 고정밀 후보가 성공한다고 주장하지 않는다.
+기존 coverage는 실제 출력된 평균 기준의 값이므로 삭제하거나 계산 오류로 재분류하지 않는다.
+
+현재 운영/학습 소스·checkpoint·sampler·reward·검사·PD는 그대로다. 다음 보완은 별도
+실험 actor에서 NN head를 유지하고 **승인된 B 평균의 곱셈만 float64로 계산**하는 것이다.
+60자유도·무제한 출력·동일 B/gain·원래 Gaussian·SAC 목적함수와 lr/tau·BC/teacher0을
+유지한다. 이론적 식이 같아도 실제 출력/gradient가 달라지므로 별도 비교로 명시한다.
+초기 가중치/직렬화 동일성, sampler/밀도, B 왕복과 gradient를 검증한 뒤 fresh 제한 학습과
+동일 주행을 비교한다. 아직 구현/학습/주행은 미실행이며 기본 채택은 아니다.
+
+로컬 `basis-numerics.json`·`basis-numerics.npz`·두 진단 스크립트에 모델/입력/소스 hash와
+원본 배열을 보존했다. 규약10절의 손실을 바꾸는 CQL·actor 지연·lr 변경은 선택하지 않았다.
