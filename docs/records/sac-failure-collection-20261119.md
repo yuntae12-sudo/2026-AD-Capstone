@@ -3180,3 +3180,46 @@ AppendixC의tanh행동과표의entropy target -dim(A)는우리상관경로분포
 SHA `ca3e559da6725da7e71994f35ec5f02076080fe879d5f73fc2bd955a7ec8fa42`.
 05:10:04 실제train2580237생존·총1,446/2,000(추가446)확인. 기준HEADe82b14e에서
 이번기록만추가했고현재실험의평가완료나주행개선을주장하지않는다.
+
+
+## 05:20 KST raw2,000 수집·저장검토와기존4주행완료: 여전히미달
+
+추가실제전이/update1,000개를마쳐누적2,000이다. 학습모델 SHA
+`8d8f8c0c8ec27ad0c2e92ac2c7b82db066fdb2dbf7dae0c7381a06cc06fe4601`,
+replay7,000행 SHA `757f46e0a89b7eee8b737a881e9538d325871d26dff08eb1292c915d0d89af8a`,
+report SHA `10aadae7605d37f9dfe3d6ec22aa3a0e131c93419fa7c24b640933c5b5383931`.
+동일learner/optimizer/target/RNG복원과기존6,000행17배열byte-prefix·traceprefix동일,
+collection-seed1000·teacher0·실제train전이lineage검사를통과했다. 원본hash도다시대조했다.
+
+전체train18고유장면,main1,393/branch607·branch충돌112개다. 새1,000만보면9고유장면,
+main681/branch319·branch충돌64개,step전정지638/1,000이다(기존1,000은440/1,000).
+새main수락97/681·branch46/319,합143/1,000이다. 학습중다른상태/다른장면에서수집한
+수치이며같은상태의고정정책성능비교로세지않는다.
+
+신규운동한계거절은main484/branch186개,그중step전정지는각387/78개다.
+curvature_rate위반은각484/186,curvature는483/181이고가속도/jerk위반도함께발생했다.
+한거절의다중위반을서로독립된거절로합하지않는다. 이전1,000의운동한계거절115/86과
+단순차이만으로정책변경의단독인과효과를주장하지않는다. 이반복정지/곡률위반편중을
+후속고정주행·Q/coverage와함께검토한다.
+
+| 기존2개개발장면×KEEP/FOLLOW | entropy2,000 | own raw1,000 | raw2,000 |
+| --- | ---: | ---: | ---: |
+| 성공 / 충돌 | 2/4 / 2/4 | 0/4 / 4/4 | 0/4 / 4/4 |
+| tick | 236 | 236 | 230 |
+| 거절 | 48 (20.34%) | 92 (38.98%) | 100 (43.48%) |
+| 제동 | 37 (15.68%) | 84 (35.59%) | 88 (38.26%) |
+| step후정지 | 13 (5.51%) | 30 (12.71%) | 36 (15.65%) |
+| 평균return | -9.992331 | -20.225907 | -20.247278 |
+
+두비교의4쌍초기frame/map/seed와원본값/해시대조완료. 현재4회모두정지중뒤차접촉이다.
+raw2,000은자신의1,000및동일예산entropy2,000대비개선되지않아미채택을유지한다.
+05:20:01 runner2580230/stopped-candidate2588386실제생존·정지출발추가4주행실행중을
+확인했다. 그뒤Q/coverage/실제branchQ/MC검토가남았다. 새로운예산/gain/구조는미선택이다.
+현재소스·보상·검사·PD·원래Gaussian·순수SAC조건유지·전체목표active.
+
+로컬 `outputs/sac_mean_decoupled_g_continuation_20261120/`:
+collection-independent-review SHA `710919570aa49d0073c07f2c724cda244fab4d030bee7f2d5b4d132eccd06d92`,
+collection-violation-breakdown SHA `0e25a1b40fec35157cd105b15ae483f6f92550a3f17133d3e87c0515070029fa`,
+evaluation-independent-review SHA `3b5e0426595ece3a474aefa6c2252b954cfa3be2883f671d633d5abac9903f92`,
+own-evaluation-independent-review SHA `29f5ce696972c8309eb57a1d0d4757e179ed49b14fb66469b9fb1ed4363fb511`.
+기준HEAD792800d에서소스변경없이이번결과기록만추가했다.
