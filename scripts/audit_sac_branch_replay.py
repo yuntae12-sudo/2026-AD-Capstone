@@ -34,11 +34,15 @@ def audit(directory, manifest):
     parents, branch_pairs, successor_pairs, branches = {}, [], [], []
     branch_ids, states_per_trigger = set(), {}
     horizon = report["collection"].get("rollout_horizon", 1)
+    restart = report["collection"].get("restart_terminal", False)
+    assert isinstance(restart, bool)
     assert isinstance(horizon, int) and 1 <= horizon <= 8
+    assert not restart or horizon > 1
     if horizon > 1:
-        assert report["collection"]["samples"] == 1
+        assert report["collection"]["samples"] == (horizon if restart else 1)
         assert report["collection"]["window"] * horizon <= 48
         assert report["collection"].get("rollout_script_sha256")
+    root_counts, root_latest = {}, {}
     for i, (row, update) in enumerate(zip(rows, updates)):
         assert row["collection_id"] == row["update"] == update["update"] == i + 1
         assert row["policy_updates_before"] == i
@@ -60,6 +64,21 @@ def audit(directory, manifest):
             assert 0 <= lineage["branch_sample"] < report["collection"]["samples"]
             assert row["scene_id"] == rows[parents[root_key]]["scene_id"]
             assert row["provider"] == rows[parents[root_key]]["provider"]
+            if restart:
+                quota_key = (*root_key, lineage["trigger_tick"])
+                used = root_counts.get(quota_key, 0)
+                assert lineage["root_budget_step"] == used < horizon
+                if used == 0:
+                    assert depth == 0 and lineage["branch_sample"] == 0
+                else:
+                    previous_root = rows[root_latest[quota_key]]
+                    if previous_root["bootstrap"]:
+                        assert lineage["previous_collection_id"] == previous_root["collection_id"]
+                    else:
+                        assert depth == 0 and lineage["previous_collection_id"] is None
+                        assert lineage["branch_sample"] == previous_root["lineage"]["branch_sample"] + 1
+                root_counts[quota_key] = used + 1
+                root_latest[quota_key] = i
             if depth == 0:
                 assert lineage.get("previous_collection_id") is None
                 branch_pairs.append((i + 5000, parents[root_key] + 5000))
@@ -155,6 +174,8 @@ def audit(directory, manifest):
                 unique_train_scenes=len({r["scene_id"] for r in rows}),
                 branch_unique_parent_states=len({(r["lineage"]["parent_episode_uid"],r["lineage"]["parent_tick"]) for r in branches}),
                 branch_continuation_transitions=len(successor_pairs), rollout_horizon=horizon,
+                restart_terminal=restart,
+                root_step_counts=list(root_counts.values()) if restart else None,
                 main_provider_counts=dict(Counter(r["provider"] for r in rows if r["lineage"]["kind"]=="main")),
                 branch_provider_counts=dict(Counter(r["provider"] for r in branches)),
                 branch_rejections=sum(not r["check_valid"] for r in branches),

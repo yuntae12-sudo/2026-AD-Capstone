@@ -921,3 +921,60 @@ teacher0의 이전 결과가 유지됨을 확인했다. 출력은 기존 continu
 현재 actor/Q 초기화·mean 배율·Gaussian·보상·안전검사·PD·uniform replay·BC/teacher0은
 직전1,000 비교와 같으며 실패2,000모델의 가중치는 이어받지 않는다.
 새100회의 결과는 아직 미확정이며1,000회로 자동 확대하지 않는다.
+
+## 20:50 KST 실제 후속 수집100회 실패·동일 예산 대조와 수집량 통제 보완
+
+첫 실제 후속 수집100회가 완료됐다. main59/branch41,6roots에서후속35전이를 포함하며
+실제terminal1/nonterminal40,branch거절40/통과1이었다. train 고유2장면·KEEP만 포함했다.
+원본 관측/field/item mask와 실제 후속next-state 연결, raw/보상/종료/계보/train-only/teacher0
+저장 감사를 완료했다. 모델SHA `7871bd972f892f590525eec4bc5bb7d3d95f077a8d68852fa348174736c5ffbf`,
+replaySHA `abd0dde127816300a6401e7d811cb6f43f1ac89b7de14f06482dc6e19f40c4e9`.
+
+기존 predecessor100은 과거에 저장 검사만 했으므로 같은2개개발장면×KEEP/FOLLOW4회의
+주행을 이번에 새로 평가했다. 각 모델의 원본 frame에서 지표를 재계산하고 최초frame/지도/
+seed4쌍을 대조했다. 초기평균0도 같은4쌍만 골라 비교했다. 고유장면은2개다.
+
+| 정책 | 목표/충돌 | tick | 거절 | 제동 | 정지 | 평균보상 |
+|---|---|---:|---:|---:|---:|---:|
+| 초기평균0 | 2/4,2/4 | 216 | 58 | 46 | 22 | -10.01539 |
+| 기존 독립1step100회 | 0/4,4/4 | 224 | 106 | 94 | 44 | -20.25450 |
+| 후속 경로100회 | 0/4,4/4 | 224 | 108 | 96 | 44 | -20.25984 |
+
+새 후보의 빠른 KEEP/FOLLOW는 각76tick, 저속은 각36tick에 충돌했다. 두100회 모델은
+모두 초기 성공을 잃었고 새 방식의 주행 개선은 없다. 같은 모델 설정·자체 warmup·seed·
+100update를 확인했고 첫 분기 전29main의 검사·제어 source·보상은 같았다. raw 최대 차이는
+1.45e-8로 작지만 bit-identical이라고 주장하지 않는다. 저장 severe44개의 Q MAE는
+기존18.38788/새18.48035로 둘 다 크다. 이 초기 결과를 수렴한 정책으로 취급하지 않는다.
+
+추가로6roots의 가장 깊은 분기 이력을 각각 실제 Waymax로 다시 실행했다. 원래 main
+prefix→실제 branch raw 이력과 마지막 행동까지79actualstep을 재현해41개 모든 분기 전이의
+관측·mask·보상·검사·제어 source·종료가 저장 자료와 일치했다. 최초 root 상태로 매번 잘못
+복귀하거나 같은 tick의 main 행동으로 대체한 것이 아님을 확인했다. 반복 prefix를 새로운
+독립 장면으로 세지 않는다.
+로컬 `outputs/sac_failure_rollout_collection_20261119/`의 `paired100-review.json`,
+`actual-suffix-reconstruction.json`, `fixed-q100.json`, `review-status.json`에 근거가 있으며
+pilot/review 실행기와 child는 종료됐다.
+
+자가검토에서 첫 후속 방식은 terminal root 경험이 기존8개→1개, main 수집이52→59로
+달라지는 추가 분포 변화를 확인했다. 후속 상태 효과를 더 잘 분리하려고 root당 실제8전이를
+유지하는 `--failure-branch-restart-terminal` 비교 옵션을 추가했다. nonterminal이면 실제
+다음 상태를 계속 밟고, 실제 종료되면 그 경로를 끝낸 뒤 남은 quota만큼 원래 불변 root에서
+새 경로를 시작한다. 매 tick 최신 정책으로 새 경로를 제안하고 원래 SAC 업데이트를 한다.
+종료 이후를 이어붙이지 않고 새 branch_sample과 별도 이력을 기록한다. 실패당 최대48실제
+전이, 원래 정책 표본·보상·검사·PD·uniform replay·전이당update1·BC/teacher0은 그대로다.
+
+`sac_failure_rollout_budget.py`와 CLI·저장 감사·continuation 호환 검사를 연결했다. 새3개를
+포함한 관련29pytest 통과(0.38초), 구문/diff 검사 통과. 새 감사기로 앞선100개 replay의
+호환성도 다시 확인했다. 실제 새 수집의 개선은 아직 미검증이다.20:49:05 KST 새 fresh100
+pilot을 `outputs/sac_failure_rollout_quota_20261119/`에서 시작했다(runner2364007/train2364008).
+`launch.json`·`pilot-status.json`·`sources/`에 명령/소스를 보존했다. 같은100update→저장 검사→
+같은4주행이며1,000회 자동 확대는 없다. 현재 코드는HEADa6092f5 이후 미커밋이다.
+
+20:53 KST 추가 확인: quota pilot의100실제전이/update와 저장 감사를 완료했다. 실제로
+main52/branch48,6roots 각각8전이, terminal8/nonterminal40으로 기존 독립1step100회와
+수집 수를 맞췄다. 후속 상태35개, 분기 거절47/통과1이다. 원본/후속 관측·mask·실제
+종료 후 새 경로 구분·raw·보상·train-only·teacher0 검증을 통과했다. 새100개의 데이터는
+여전히 KEEP2장면이며 FOLLOW 데이터 확보로 해석하지 않는다. 현재4주행 평가 중이다.
+모델 SHA `a92376abdc651584a9f09fa3b26056af9d24f1c2eebcd230ad4e3f2f5114f11e`,
+replay SHA `a943837cc5e75d54b22577aec5a7eecbe34135e80418cde421648c66fab71505`.
+같은 폴더의 `rollout100/report.json`과 `audit100.json`에서 확인했다.

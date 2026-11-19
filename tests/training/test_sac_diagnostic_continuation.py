@@ -79,3 +79,7 @@ def test_rollout_horizon_and_implementation_cannot_change_on_resume(completed):
     completed[3]["rollout_script_sha256"] = "different implementation"
     with pytest.raises(ValueError, match="rollout_script_sha256"):
         check(completed)
+    completed[3]["rollout_script_sha256"] = None
+    completed[3]["restart_terminal"] = True
+    with pytest.raises(ValueError, match="restart_terminal"):
+        check(completed)

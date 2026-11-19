@@ -32,7 +32,7 @@ def validate_source(directory, version, variant, collection, total_budget):
     for key in ("mode", "samples", "window", "selection", "branch_script_sha256", "fork_script_sha256"):
         if source["collection"].get(key) != collection.get(key):
             raise ValueError(f"continuation cannot change collection setting: {key}")
-    for key, default in (("rollout_horizon", 1), ("rollout_script_sha256", None)):
+    for key, default in (("rollout_horizon", 1), ("rollout_script_sha256", None), ("restart_terminal", False)):
         if source["collection"].get(key, default) != collection.get(key, default):
             raise ValueError(f"continuation cannot change collection setting: {key}")
     saved = source.get("saved_replay", {})
