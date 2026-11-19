@@ -978,3 +978,39 @@ main52/branch48,6roots 각각8전이, terminal8/nonterminal40으로 기존 독�
 모델 SHA `a92376abdc651584a9f09fa3b26056af9d24f1c2eebcd230ad4e3f2f5114f11e`,
 replay SHA `a943837cc5e75d54b22577aec5a7eecbe34135e80418cde421648c66fab71505`.
 같은 폴더의 `rollout100/report.json`과 `audit100.json`에서 확인했다.
+
+## 21:03 KST 수집량 통제100회 검토 완료와 같은1,000회 예산 비교 시작
+
+quota100의4주행도 모두 충돌했다. 빠른KEEP/FOLLOW 각76tick·저속 각36tick, 총224tick에서
+거절108·제동96·정지44·평균보상-20.25984068이다. 기존 독립1step100회도4/4충돌이지만
+거절106·제동94였으므로 개선으로 판정하지 않는다. 초기 평균0은 같은4회에서2회 성공이다.
+`review_paired100.py`로 같은 최초frame/지도/seed와 전체frame 지표를 대조했고, main52/
+branch48·terminal8의 같은 수집 수와 모델 설정·seed·warmup·100update도 확인했다.
+
+6roots의13개 실제 경로를 독립 재실행했다. 반복 main prefix를 포함한282actualstep으로
+48개 분기 전부의 관측/mask·보상·검사·제어source·실제 종료가 재현됐다. 즉시 종료 root의
+8개 새 경로와 다른5roots의 연속 경로를 구분했다. 고유 상태는6개이며13개 독립 장면이 아니다.
+새 Q 감사에서도 저장 severe44개 MAE는18.39707(기존100회18.38788)로 컸다. 두 고정
+terminal 현재 평균 Q는-1.70735/-1.65662, 실제 보상은-20.014/-20.017이었다.100회 결과는
+주행 실패와 큰 Q 오차이며 성능 gate 통과로 바꾸지 않는다.
+
+로컬 quota폴더의 `paired100-review.json` SHA
+`b9ac2a89c23658dcd781a32a40af21d95e2feab21ed50f3e025f22b72649e07f`,
+`actual-suffix-reconstruction.json` SHA
+`7b01872aa41080e5e3d251be786600ba2be5c496284ca460ac6f4c146168d9cc`,
+`fixed-q100.json` SHA `ff375fd38981149ce058d51d92a4cc9d91470eae4a64dc1e1f7323777385ada4`.
+pilot/review 실행과 모든 child가 종료된 뒤 검토했다.
+
+같은 설정의 기존 독립1step1,000회 모델은 고정4주행에서2회 성공이었고,100회보다
+종료 Q 적합도 나았다. 따라서 양쪽 모두 크게 미학습된100회 결과만으로 수집 효과를
+단정하지 않고 **기존과 같은 fresh1,000회 예산의 비교를 한 차례 실행**하기로 했다.
+100회 실패를 보존한 별도 제한 진단이며 기본 채택·전체 평가 확대가 아니다. 기존의
+1,000회 모델과 동일 설정·초기 자체warmup을 사용하고 root당 실제 수집 quota만 후속 경로로
+배분한다. 실제 종료 결과를 강제해 개수를 맞추지는 않는다.
+
+21:02:05 KST `run_reviewed1000.py`를 시작했고 runner2371489/train2371490이 살아 있다.
+21:03에는10update를 확인했다. 원본100회 learner나 실패2,000회 learner를 이어받지 않는
+fresh seed0 실행이다. `review-decision1000.json`에 실패 판정·검토 근거·원본 hash,
+`reviewed1000-launch.json`·`reviewed1000-status.json`·`full-sources/`에 명령/PID/동결 소스를
+보존했다. 실제1,000전이→저장 감사→같은4주행→고정Q→replay 노출→새 분기Q 순서이며
+이후 자동 학습 연장은 없다. source는90c15a4와 동일하다. 안정적인 정책 확보는 미완료다.
