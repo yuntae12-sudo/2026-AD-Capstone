@@ -40,3 +40,22 @@ def test_scaled_restore_requires_recorded_implementation():
         diagnostic_critic(arm,restoring=True)
     arm['critic_factory_sha256']=critic_factory_hash()
     assert isinstance(diagnostic_critic(arm,restoring=True),InputGainCritic)
+
+
+def test_archived_gain_restore_retains_legacy_module_but_cannot_restore_physical():
+    legacy = "9986af114dd291e6664e007782287c07d0e75bcfee9c2d05526b08b384a8ed12"
+    arm = dict(zero_q=True, critic_action_gain=.1, critic_factory_sha256=legacy)
+    assert isinstance(diagnostic_critic(arm, restoring=True), InputGainCritic)
+    arm.update(critic_action_gain=1., critic_action_coordinates="physical_whitened")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        diagnostic_critic(arm, restoring=True)
+
+
+def test_physical_factory_requires_current_provenance_and_single_coordinate_change():
+    from scripts.sac_physical_critic import PhysicalActionCritic
+    arm = dict(zero_q=True, critic_action_coordinates="physical_whitened",
+               critic_factory_sha256=critic_factory_hash())
+    assert type(diagnostic_critic(arm, restoring=True)) is PhysicalActionCritic
+    arm["critic_action_gain"] = .1
+    with pytest.raises(ValueError, match="cannot combine"):
+        diagnostic_critic(arm)

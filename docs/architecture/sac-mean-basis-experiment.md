@@ -106,3 +106,24 @@ optimizer/target/learner RNG, 실제 replay와 그 RNG를 그대로 이어받는
 
 2026-11-18의 비교 결과와 실제 주행 회귀는
 [초기 업데이트 진단 기록](../records/sac-short-update-20261118.md)에 보존한다.
+
+## 2026-11-19 별도 Q 내부 좌표 비교
+
+`physical_whitened`는 critic의 내부 특징만 `v=B^-1*u/c`로 만드는 opt-in 진단이다.
+실제 actor Gaussian, entropy 좌표 w/ell, decoder, checker, replay의 raw u는 바꾸지 않는다.
+입력 사본에 같은 현재 관측의 g를 float64로 곱한 뒤 기존 whitened critic의 float64 solve를
+통과시키므로 내부에서 g가 상쇄된다. g≥.002이고 B가 full rank이므로 60자유도를 유지한다.
+같은 고정 c와 MLP/초기화를 쓰며 sigma로 정규화하거나 출력을 clip하지 않는다.
+
+기존 w 특징은 정지 부근 raw 잡음도 1/g로 확대한다. 실제 같은 결과인 0.12mm 미만 경로
+변화에 큰 Q 차이가 남았고, 같은 모델의 추가 학습도 4/4충돌이어서 검토하는 후보이다.
+정지 행동의 Q 민감도를 줄이는지 보는 가설이며 원인 확정·성능 개선·기본 채택이 아니다.
+평균의 기존 integrated/entropy 설정은 그대로이며 승인된 B 비교 범위로 계속 표시한다.
+critic의 함수 표현과 최적화가 달라지므로 동일한 학습 과정이라고 주장하지 않는다.
+
+`--critic-action-coordinates physical_whitened`로 선택하고 다른 input gain과 동시에
+사용하지 못하게 한다. `sac_physical_critic.py`와 factory 두 소스의 합성 hash로 복원
+설정을 검증한다. 기존 raw/whitened와 과거 gain0.1의 실행 의미는 보존하며, 알려진
+과거 factory hash만 호환한다. 알 수 없는 hash나 과거 hash를 새 physical 모델에
+붙이는 복원은 거절한다. 같은 자체 warmup·seed·mean·수집·학습 예산 대조와 실제
+주행 검증이 필요하다.

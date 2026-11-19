@@ -254,6 +254,7 @@ def main():
         diagnostic_sha256=file_hash(args.diagnostic / "report.json"),
         script_sha256=file_hash(__file__),
         critic_factory_sha256=critic_factory_hash(),
+        critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
         collection=source.get("collection"),
         learner_sha256=digest,
         online_replay_sha256=file_hash(replay_path),

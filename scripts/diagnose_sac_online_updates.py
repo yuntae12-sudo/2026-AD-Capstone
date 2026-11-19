@@ -32,6 +32,8 @@ def main():
 
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")
+    parser.add_argument("--critic-action-coordinates", choices=("raw", "whitened", "physical_whitened"),
+                        help="Explicit critic feature coordinates; executed/stored raw u is unchanged")
     parser.add_argument(
         "--zero-critic-action-init",
         action="store_true",
@@ -92,6 +94,8 @@ def main():
     overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
     if args.critic_action_gain is not None:
         overrides["critic_action_gain"] = args.critic_action_gain
+    if args.critic_action_coordinates is not None:
+        overrides["critic_action_coordinates"] = args.critic_action_coordinates
     if args.zero_critic_action_init:
         overrides["critic_action_kernel_init"] = "zero"
     variant.update(overrides)

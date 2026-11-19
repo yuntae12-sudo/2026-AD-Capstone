@@ -72,7 +72,7 @@ def main():
         prefix_size=5000,
         terminal_transitions=len(indices),
         models=[],
-        note="Every original self-warmup terminal transition, evaluated at its recorded raw action. Target equals immediate reward exactly because bootstrap is false. This is training-data fit, not generalization; new online 1,000 transitions are not included. Reward <= -10 is a severe-penalty group, not a reconstructed collision event label.",
+        note="Every original self-warmup terminal transition, evaluated at its recorded raw action. Target equals immediate reward exactly because bootstrap is false. This is training-data fit, not generalization; new online transitions are not included. Reward <= -10 is a severe-penalty group, not a reconstructed collision event label.",
     )
     gpu = jax.devices("gpu")[0]
     for diagnostic in args.diagnostics:
@@ -140,6 +140,7 @@ def main():
                 learner_sha256=digest,
                 updates=int(state.updates),
                 mean_gain=arm["mean_gain"],
+                critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
                 critic_action_gain=arm.get("critic_action_gain", 1.0),
                 critic_factory_sha256=arm.get("critic_factory_sha256"),
                 groups=groups,

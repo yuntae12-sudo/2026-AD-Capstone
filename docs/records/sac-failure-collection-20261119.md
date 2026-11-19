@@ -316,3 +316,97 @@ coverage로 다시 판단하고, 추가 연장은 그 결과를 검토한 뒤 �
 `extended-sources/`에 명령/PID/동결 소스가 있다. 실제 추가1,000전이→저장 감사→
 고정4주행→기존Q2반례→coverage→새 수집2상태Q 순서이며 그 후 자동 연장은 없다.
 정책/장면 RNG는1000으로 재시작하고 learner/replay RNG는 그대로 잇는다.
+
+## 17:25 KST 같은 모델의 물리 경로 변화와 Q 민감도 재분석
+
+실행 중인2,000회 모델/수집 설정은 바꾸지 않았다. 이미 실제 실행한 moving1,000모델의
+terminal2상태8확률 행동과 이동2상태64확률 행동을 같은 decoder 식으로 재분석했다.
+모델 SHA가 같은지, 원본 두 보고서가 COMPLETE인지 확인한 뒤 결과와 입력 hash를
+로컬 moving 출력의 `physical-q-sensitivity.json`에 보존했다. 새 rollout은 아니다.
+`compare_action_scales.py`가 재현 코드, `physical-q-sensitivity.png`가 확인한 산점도다.
+
+| 상태 | 표본수 | 평균과 경로 최대 분리의 범위 | 표본 Q 최대−최소 | 실제 다음 상태 수 |
+|---|---:|---:|---:|---:|
+| KEEP 정지/충돌 직전 | 4 | 0.0120~0.0975mm | 13.4386 | 1 |
+| FOLLOW 정지/충돌 직전 | 4 | 0.0505~0.1182mm | 5.1614 | 1 |
+| KEEP 이동 tick1 | 32 | 6.017~107.988mm | 0.0747 | 1 |
+| FOLLOW 이동 tick5 | 32 | 11.254~116.490mm | 0.1145 | 11 |
+
+동일한2장면의 서로 다른 시점이다. 정지 사례의 실제 reward/next state는 표본 사이에
+같았고, 0.12mm 미만 변화에도 Q 차이는 컸다. 반면 이동 사례의 Q 변화는 작았다.
+상태·분모가 다르므로 causal 효과나 전체 장면의 통계로 해석하지 않는다. nonterminal의
+Q 변화는 Q 오차가 아니다. 이전 recent 모델의 비슷한 관찰과 새 모델 수치를 섞지 않는다.
+
+원본 v1.2 텍스트(`PPO_SAC_PD_구현기준선_v1_2.txt`)의SHA가runtime의
+`10b2a882e5dfb3f31b4b300793a67a3d10aa19886421a3782e7b9a58394b4a64`와 일치함을
+재확인하고§5/§10을 읽었다. 개인 reference의 `Implementation_Basis_v1.pdf`는 과거
+v1(tanh) 문서로 현재 규약 근거와 구분했다. 임시PDF 읽기 도구는 `/tmp`에만 설치했고
+실행 중인 conda환경의 dependency는 변경하지 않았다.
+
+**후속 가설, 미구현/미채택:** 현재 critic의whitened 입력 `w=B^-1*u/(g*c)`는 정지 부근
+작은 raw 잡음을1/g로 확대한다. g=.002이면 같은 물리적 변화에 이동g=1 대비500배의
+좌표 배율이다. 현재 entropy mean의g와 이1/g가 actor의 mean gradient에서 상쇄되므로
+정지 경험이 많다고 그 평균 갱신 영향도 작다고 가정할 수 없다. 필요하면 critic 내부
+입력만 `v=g*w=B^-1*u/c`로 정하는 별도 좌표 비교를 검토한다. actor/표본/entropy/raw
+저장/보상/검사/PD는 그대로 두는 안이다. g가양수여서 자유도는 유지되지만 학습 과정이나
+Q 함수의 적합이 같다는 뜻은 아니다. 현재§5는Q를raw u로 계산하는 것도 허용하지만
+이 새로운 내부 조건화를 기본 설정으로 채택한 것은 아니다. 기존1000→2000 결과를
+먼저 검토하며, 이 가설을 확인된 원인이나 성능 개선으로 기록하지 않는다.
+
+## 17:43 KST 총2,000회 제한 진단 완료: 추가 연장하지 않음
+
+`outputs/sac_continuation_20261119/extended-status.json`의 모든 지정 단계가
+COMPLETE_PENDING_REVIEW/COMPLETE로 종료됐고 실행 PID2264605/마지막 검증 PID2276348의
+종료를 확인했다. 원본1,000회+신규1,000회, replay7,000개(자체 warmup5,000 포함), BC/teacher0.
+모델 SHA `0a34e50663e4d7d79bc2f1bfe784382b1133506642f040f6c33740c46ae68ea6`,
+replay SHA `f5a6934e0811f67093ec60ecf28726aae7cc1b05f37531cfed505fa4035b57cf`.
+실행 소스는 commit2fb3e4c와 동일하며 `extended-sources/`에도 보존했다.
+
+추가1,000전이: main684/branch316, 정지521+93=614, 양의 보상31+17=48.
+전체 누적 main1,348/branch652, main 종료14충돌·3RECORD_END·이전 예산 경계1이고 목표 도달0.
+원본의 이전 예산 경계는 그대로 이력에 남았으며 새 episode나 가짜 terminal로 재분류하지 않았다.
+고정4주행: **목표0/4·충돌4/4**,157tick·거절96(61.15%)·제동84(53.50%)·정지32(20.38%),
+평균 보상-20.26705714. 빠른 장면47tick씩, 저속31/32tick 충돌이다. 기존1,000회와 같이 실패다.
+
+기존 고정 Q2반례의 현재 평균 과대평가는16.679419/15.490440으로 1,000회의
+13.601100/15.133336보다 줄지 않았다. 새 수집 고정2상태12행동도 모두 충돌했다.
+저장 행동 오차1.581696/1.684767, 평균11.980103/7.744276,
+새4표본9.960168~13.965941/8.241598~10.120334였다. 동일2상태에서 1,000회 모델보다
+현재 평균 오차가 커졌다.
+
+replay RNG를 검증한512,000 batch 추출 중 warmup430,763/online81,237이다.
+추가 학습1,000회의 online 추출 비중은22.8898%(앞선1,000회8.8434%)로 늘었다.
+동일한 기존 branch336개를 CSV index로 대조하면 최종 정책95% Gaussian 영역 포함은
+318/336→156/336으로 감소했다. 경험 노출을 늘리는 것만으로 Q 일반화/주행이 개선되지 않았다.
+저장 감사·주행·고정 Q·coverage·새 분기 Q는 모두 실행했고 새 seed/전체 validation/독립 test는
+미실행이다. 현재 설정의 추가 연장을 중단하고 별도 Q 좌표 후보를 검증한다.
+전체 정책 확보 목표는 계속 진행한다.
+
+## 17:44 KST 다음 별도 후보: 물리 크기를 반영한 Q 내부 특징
+
+기준 HEAD2fb3e4c 이후 미커밋 구현으로 `PhysicalActionCritic`을 추가했다.
+critic 입력 사본만 g를 곱해 내부 특징을 `B^-1*u/c`로 만든다. actor/표본/entropy/보상/검사/PD와
+기존 moving_rejections 수집은 동일하다. `physical_whitened`는 별도 설정이며 production
+기본값이나 기존 평균 B 비교의 기본 채택이 아니다. 원본 raw u는 그대로 저장/실행한다.
+
+관련22pytest 통과. 새2개는 독립 선형 solve/재구성·고속 동일 동작·동일 초기 파라미터·
+저속 gradient 유한성/비영·raw 불변을 검증했다. 최초 원소별 비교는240성분 중1개에서
+상쇄 오차 relative1.31e-11로 실패했다. 조건수 약2.89e4인 B의 float64 normwise 오차와
+역재구성 검사로 바꿔 통과했으며 물리 검사 기준은 바꾸지 않았다. factory 관련2추가 검사는
+과거 gain 모델 호환과 새 모델의 구현 hash 검증을 확인했다. 새 factory hash는 두 소스를 포함한다.
+
+17:44 KST `outputs/sac_physical_q_20261119/branch100` fresh100학습을 시작했다.
+동일 seed0·원본 자체 warmup5,000·mean gain0.0012098536225957168·integrated/entropy·
+actor LN·zero-Q/action-init·moving 상태당8/최대6상태를 유지하고 Q 내부 좌표만 변경했다.
+`branch100-launch.json`/`runner-launch.json`에 명령·PID, `sources/`에 실행 소스가 있다.
+100→저장 감사→고정4주행→회귀가 없으면 fresh1,000→저장/4주행/Q/coverage/분기 Q/수치
+진단을 순차 수행한다. 초기 학습 프로세스의 실제 종료를 기다린 뒤 평가하므로 GPU 작업은
+겹치지 않는다. 실행 상태는 `trial.json`, 현재 새 후보의 주행 개선은 아직 미확정이다.
+
+17:48 KST 새 physical 후보100회 학습과 저장 감사 완료. main52/branch48, 실제 종료8/
+nonterminal40, 고유 train2장면·6분기 상태이며 teacher0·원본 관측·raw/보상/종료 일치와
+전이당 update1을 확인했다. branch48개는 모두 거절됐다. 모델 SHA
+`61343fcf09b52dbe7c0d021095fcc60646ab1678a0cb23a6a9c988cf8240572e`, replay SHA
+`f87351f5453ed9b1f993da5e1bff8e0d5b786d71dd9df0ff356c4893754d1ea6`.
+factory/helper 합성 SHA `6e9bb1e31c01f1e8b9ea7b118d07329ef6bf798628a70a3f2ddc539df3882fc1`.
+core SHA는96fa1d…로 그대로다. 현재 고정4주행 평가 중이며 성능 개선은 아직 미확정이다.

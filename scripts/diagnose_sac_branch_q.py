@@ -75,6 +75,7 @@ def main():
                   scope="ACTUAL_CURRENT_POLICY_AT_COLLECTED_TRAIN_BRANCH_FAILURES",
                   versions=version, script_sha256=file_hash(__file__),
                   critic_factory_sha256=critic_factory_hash(),
+                  critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
                   diagnostic_sha256=file_hash(args.diagnostic / "report.json"),
                   model_sha256=file_hash(weights), replay_sha256=storage_check["replay_sha256"],
                   selected_trace_indices=selected, samples=args.samples, cases=[],
