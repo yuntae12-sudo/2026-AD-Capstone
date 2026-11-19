@@ -2673,3 +2673,40 @@ CPU추가 `all-terminal-values/report.json` SHA
 extension/audit5000을기다린다. 첫MCchild2530380은정상종료했다. 고정source hash전부유지,
 두번째arm은원래정한같은조건/예산으로진행한다. 두arm결과를검토한뒤다음조건을결정한다.
 현재문서기준HEAD `4c0b1fe`,runtime c3fe6a7 유지·안정정책미확보·전체목표active다.
+
+## 03:02 KST 같은 GPU/62배치 재검증 준비와 대기 실행
+
+추가CPU terminal진단의수치차이를덮어두지않고, 현재GPU실험과겹치지않는후속검증을
+로컬 `outputs/sac_collection_budget5000_20261120/`에준비했다. 이것은학습조건변경이나
+새학습실험이아니며 현재모델을고정한stored terminal행동의읽기전용추론이다.
+
+`audit_terminal_gpu62.py`는두arm의원래pipeline완료를먼저요구한다. 같은GPU·동일한
+62개배치에서기존warmup62개Q를원래atol3e-5/rtol3e-5로재현해야새terminal행통계를
+보고한다. 기준재현실패시FAILED로기록하며허용치를늘려통과시키지않는다. 모든행을
+같은62개씩계산하고마지막배치의반복padding은결과에서제외한다. 현재평균에stored reward를
+대응시키지않고각각실제로수집된raw행동에만그reward를사용한다.
+
+두script를AST검사하고완료된quota의실제402terminal행과기존62행prefix를CPU에서
+대조했다. 7배치·padding32행제외후실제402인덱스가중복/누락없이원래순서로한번씩
+남는것을확인했다. 이는실제입력분할검토이며 **GPU실행과수치일치검증은아직미실행**이다.
+extension최종모델의입력검토는해당모델이완료된뒤수행한다.
+
+preflight 상태는PREPARED_INPUTS_CHECKED_GPU_NOT_RUN,
+`terminal-gpu-preflight.json` SHA
+`478753636c8abd4671897dd9f80b5e360c5dcba6958afcfa4c47eb14fb5fbf3a`,
+`audit_terminal_gpu62.py` SHA
+`540a29d2a1a9fc2b82288a78e2d0c64e3a64ff35669c815c56997d4399943b5b`.
+
+03:01:51.891KST `run_terminal_gpu_review.py` PID2538421을시작했고실제생존과
+WAITING/MATCHED_PIPELINE_COMPLETION을확인했다. runner SHA
+`341b2d2086cff4a57077ceea5e833098417a358355c1dd3afcb758d1ae4d3a12`.
+두arm원래pipeline이끝나고 `nvidia-smi --query-compute-apps=pid`의살아있는CUDA
+계산process가없을때quota→extension순서로추론한다. 자동재시작/추가학습/정책채택은없다.
+기준재현·source hash·실행오류가나면실패기록을보존한다. 이추가검토가끝나기전까지
+기존core와GPU검증script를고정한다. 결과완료후원시배열/구성통계의독립검토가필요하다.
+
+현재학습runner2510498/extension child2532783·기존독립검토2517850은계속실행중이다.
+03:01:51에는extension2,579/5,000을확인했다. 상태는원래 `status.json`,
+`reviews-status.json`과새 `terminal-gpu-review-status.json`을구분해확인한다.
+문서기준HEAD17957b2·runtime c3fe6a7 유지. CPU수치문제해결/안정정책확보는아직아니며
+전체목표는active다.
