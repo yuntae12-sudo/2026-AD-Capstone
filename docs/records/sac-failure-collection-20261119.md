@@ -201,3 +201,118 @@ obs/mask·실제 행동/보상·종료·train 소속·중복/개수·moving 역�
 하지만 같은 최초 장면의40개 이동 분기도 모두 거절됐고, 각 상태8개 표본의 제어·보상은
 같았다. 상태 선택이 의도대로 바뀐 확인과 유효 경로/주행 개선을 구분한다.
 현재 고정4주행 평가 중이며 결과는 새 출력 디렉터리의 report에 기록한다.
+
+16:44 KST 새 moving 후보100회 평가도 완료했다: 고유2장면×KEEP/FOLLOW=4회,
+목표2/4·충돌2/4,216tick·거절58·제동46·정지22, 평균 보상-10.01539665다.
+기존 성공만 유지해 같은 조건 fresh1,000전이 비교를 시작했다. 후속 검증은 새 출력
+디렉터리의 `review-status.json`/`review-launch.json`에 연결했다. 구현·진단 보존 commit은
+`263097ac5af85a87e0493e9acac3b759ae71ba22`(push 확인), 이 중간 결과 추가 기록은 미커밋이다.
+Notion 첫 화면·02·03·04의 현재 상태/결과/commit/다음 작업을 갱신한 뒤 모두 다시 읽어
+반영과 과거 실패 이력 보존을 확인했다. 새 후보도 성능 확보·기본 채택은 미완료다.
+
+## 16:53 KST 추가 읽기 전용 점검과 진단 준비
+
+앞선 recent 모델의 실제2상태12분기 중 각 상태의 새4확률 표본과 평균 경로 차이를
+같은 앵커에서 decoder의 `3*tau^2*(u-mu)`로 계산했다. 회전은 Euclidean 길이를
+보존하므로 원본 yaw 없이도 XY 분리 거리를 계산할 수 있다. 표본별 경로 최대 분리는
+0.012~0.116mm인데, 표본 Q 범위는 KEEP9.9992점/FOLLOW4.3198점이었다.
+각 상태의 보상과 실제 다음 관측은 같았다. 로컬 recent 결과 디렉터리의
+`terminal-action-physical-scale.json`에 입력 보고서 hash·각 표본 수치를 보존했다.
+이는 두 상태의 국소 증거이며 모든 작은 경로 차이가 무의미하다는 주장은 아니다.
+critic이 실제 효과가 같은 저속 행동을 과하게 구분하는지 후속 보완 근거로 검토한다.
+
+현재 moving 후보의 학습/평가/Q 작업 뒤 최초 이동 중 거절 상태를 provider별로 선택해
+현재 평균·Gaussian32표본·raw0·동일 상태 Rule-based 경로를 실제 실행하는 추가
+**읽기 전용** 진단을 준비했다. Rule-based 자료는 replay나 학습에 넣지 않는다.
+`outputs/sac_moving_failure_collection_20261119/diagnose_moving_actions.py`와
+`probe_after_review.py`가 로컬 실행 소스이며, `moving-probe-status.json`과
+`moving-probe-launch.json`으로 확인한다. 실제 실행은 아직 미완료다. 상태 선택은
+Q/teacher 결과를 보기 전 첫 실패 episode의 가장 이른 이동 중 거절 tick으로 고정했다.
+선택 함수의 별도 검증은 통과했으며 저장소13개 pytest와 중복 계산하지 않는다.
+nonterminal 행동에서는 한 스텝 보상을 정확한 Q target으로 취급하지 않는다.
+
+## 17:07 KST moving1,000회 평가 및 초기 경험 구성 확인
+
+moving 후보1,000회 학습과 고정4주행 평가 완료. main664/branch336, 분기 정지72/336,
+분기 수락41/336이다. recent 후보352/384정지·0/384수락에 비해 이동 상태와 수락 경험은
+늘었지만, 목표0/4·충돌4/4로 기존2성공을 잃었다. 총156tick·거절98(62.82%)·
+제동86(55.13%)·정지32(20.51%), 평균 보상-20.27173457이다. 서로 다른 길이의
+실패 주행이므로 tick 비율 개선만으로 주행 개선을 주장하지 않는다. 기본 설정 미채택.
+모델 SHA `d3402ee234c99ce63be4970167fd5034f6ca8a80710c9cb0d67579a318961094`,
+replay SHA `48036622b117d3ddee03a0aa6befe27a3046bfa54ee948ce867319ae7a906430`.
+기존 고정 Q·coverage·실제 분기 재현·moving-state 읽기 전용 검사는 아직 진행 중이다.
+
+원본 seed0 초기5,000 자기 전이의 trace와 저장 replay를 raw_u/UID/tick으로 일치 확인한
+후 pre-step 속도로 다시 나눴다. 로컬 recent 출력의 `warmup-speed-acceptance.json`:
+
+| pre-speed | 전이 | 수락 | 양의 보상 | 실제 goal/collision |
+|---|---:|---:|---:|---:|
+| <0.1m/s | 3,347 | 2,484 | 0 | 0/42 |
+| 0.1~2m/s 미만 | 213 | 63 | 0 | 0/1 |
+| ≥2m/s | 1,440 | 662 | 594 | 6/1 |
+
+추가 종료는 정지 상태 RECORD_END10/TASK_LOST2다. 전체 수락3,209개 중2,484개가
+정지 상태이며 양의 보상은594/5,000개뿐이다. **경로 수락률64.18%를 유익한 이동
+경험64.18%로 해석하면 안 된다.** 초기 경험 편중과 신규 경험의 실제 batch 노출을
+함께 분석하되, 이 관찰만으로 curriculum이나 replay 가중치 변경을 채택하지 않는다.
+원본 초기 validation 기록도2/16goal·14/16collision이다(당시 core SHA c217dc…, 이번
+재실행 아님). 좁은 pilot의2/4초기 성공 유지는 회귀 방지이며 안정적 정책의 증거가 아니다.
+
+## 17:16 KST moving 후보 후속 검증 완료와 재개 검증
+
+저장 감사와 전체 replay coverage는 COMPLETE다. 실제256,000 batch 추출 중 기존
+warmup233,361(91.16%)·main12,920·branch9,719였다. branch336개 모두 적어도1회
+추출됐고 실제 종료56개의 추출은1,569회다. 그 저장 행동의 terminal MAE는0.572838로
+recent1.668666보다 작지만, 서로 방문한 상태가 달라 동일 상태의 인과 비교는 아니다.
+
+기존 고정2반례에서 현재 평균의 실제 terminal 과대평가는13.601100/15.133336으로
+남았다. 새로 수집한 최초 provider별 terminal2상태에서도 저장 행동 오차는
+KEEP0.010012/FOLLOW0.889326인데, 현재 평균은7.656383/6.047168,
+새4표본은1.440378~14.878970/8.064475~13.225845다.12실행 모두 실제 충돌이었다.
+현재 모델의 default fused/분리 target 최대 차이는1.83e-9, highest는8.82e-5였다.
+수치 정밀도 변경을 실패 해결책으로 채택할 근거는 이번에도 없었다.
+
+최초 이동 중 거절 상태2개를 Q/Rule-based 결과 전에 고정한 읽기 전용 검사가 완료됐다.
+각 상태의 stored/current mean/raw0/Rule-based 및Gaussian32표본, 총72actual step이다.
+
+| 상태 | 현재 평균 | 자기32표본 수락 | Rule-based 참조 수락 | 참조 Gaussian 거리(RMS sigma) |
+|---|---|---:|---|---:|
+| KEEP77ae… tick1,3.739m/s | 도로 이탈 예측 거절 | 0/32 | 통과 | 20.8669 |
+| FOLLOWbaac… tick5,6.857m/s | 도로 이탈 예측 거절 | 10/32 | 통과 | 15.1087 |
+
+KEEP32표본은 모두 같은REUSED·보상·다음 관측이었다. FOLLOW는 수락10/거절22로 실제
+다른 다음 상태가11개였다. Rule-based가 유효 경로를 제시한다는 것과 그것이 유일한
+해결 경로라는 주장은 다르다. Gaussian 거리는 성공 확률이 아니며 전체 주행 성공도
+검사하지 않았다. nonterminal이므로 여기서 Q와1step 보상의 차이를 정확한 Q 오차로
+계산하지 않는다. Rule-based 참조는 replay/학습에 넣지 않았고 모델/replay SHA 불변을
+재확인했다. 원본 `moving-actions1000.json`, 요약 `moving-actions1000-summary.json`.
+
+재개 진단을 위해 `--continue-from`, 총 예산 상한5,000, 별도 collection RNG seed를
+구현했다(기준HEAD263097a의 미커밋). 기존100/1,000 fresh 실행은 유지한다. 완료된 같은
+구조·수집/환경/규약·원본warmup lineage·hash만 받아 학습기/optimizer/targets/learner RNG와
+uniform replay RNG를 복원한다. learner의 전체 직렬화 바이트 일치도 확인한다. 이전
+trace/updates/episode 이력을 복사하고 누적1전이=1update를 유지한다. **환경과 scene/policy
+RNG는 명시적으로 다시 시작하는 collection fork**이며 exact rollout resume가 아니다.
+이전 예산 종료의 nonterminal 전이에 가짜 terminal을 넣지 않는다.
+
+관련18pytest 통과(기존13+재개 검증5), py_compile/diff check 통과. 실제 복원 검증은
+`outputs/sac_continuation_20261119/verification-status.json`으로 이어지는1,000→1,001회
+한 스텝 학습·저장 감사·replay RNG coverage 순서다. 아직 실제 검증은 진행 중이다.
+
+다음 제한 실험 계획: 실제 재개 검증 통과 시 moving1,000 모델을 총2,000회까지만 이어
+현재 정책 경험의 학습 노출을 늘려 본다. 모델/분포/보상/검사/PD/순수 SAC는 고정한다.
+새 architecture나 배율 변경 효과와 혼합하지 않는다. 이전 회귀를 공개한 채 시행하는
+학습량 진단이며 성능 gate를 통과한 본 실험 확대가 아니다. 같은 고정4주행·고정 Q2반례·
+coverage로 다시 판단하고, 추가 연장은 그 결과를 검토한 뒤 결정한다. 최종 주행 성능
+및 수집 방식의 인과 효과를 주장하려면 이후 같은 예산의 순차 수집 대조가 필요하다.
+
+17:17 KST 실제 재개 검증 완료: `verification-status.json` COMPLETE,
+`restored_learner_bytes_identical=true`, 승계1,000+실제 신규1=총1,001update.
+저장 감사와256,256회 replay 추출 RNG 재현 모두 통과했다. 원본 moving1,000모델은
+변경하지 않았다. 한 스텝 smoke 모델은 이어 학습할 모델로 선택하지 않는다.
+
+동일 원본 moving1,000모델에서 총2,000회로 이어지는 제한 실험을 시작했다.
+로컬 `outputs/sac_continuation_20261119/extended-status.json`, `extended-launch.json`,
+`extended-sources/`에 명령/PID/동결 소스가 있다. 실제 추가1,000전이→저장 감사→
+고정4주행→기존Q2반례→coverage→새 수집2상태Q 순서이며 그 후 자동 연장은 없다.
+정책/장면 RNG는1000으로 재시작하고 learner/replay RNG는 그대로 잇는다.

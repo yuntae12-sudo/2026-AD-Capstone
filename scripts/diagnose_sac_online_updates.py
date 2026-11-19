@@ -21,6 +21,10 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument("--continue-from", type=Path,
+                        help="Completed same-configuration diagnostic; --updates is the total target")
+    parser.add_argument("--collection-seed", type=int,
+                        help="Explicit scene/policy RNG restart seed for continuation only")
     parser.add_argument("--failure-branch-samples", type=int, default=0,
                         help="Extra real current-policy steps per recent train failure state")
     parser.add_argument("--failure-branch-window", type=int, default=6)
@@ -44,8 +48,10 @@ def main():
         help="Persist the actual replay for read-only coverage audits",
     )
     args = parser.parse_args()
-    if not 1 <= args.updates <= 1000:
-        parser.error("short diagnostic budget must be 1..1000 updates")
+    if not 1 <= args.updates <= (5000 if args.continue_from else 1000):
+        parser.error("fresh budget must be 1..1000; continuation total at most5000")
+    if args.collection_seed is not None and (not args.continue_from or args.collection_seed < 0):
+        parser.error("collection seed requires continuation and must be nonnegative")
     if args.mean_gain is not None and (
         not math.isfinite(args.mean_gain) or args.mean_gain <= 0
     ):
@@ -147,7 +153,6 @@ def main():
             )
         elif init_mode != "standard":
             raise ValueError("unknown critic action initialization")
-    policy, proposer = model_proposer(state.actor, seed, False, gpu)
     report = dict(
         status="RUNNING",
         scope="SHORT_ONLINE_SAC_DIAGNOSTIC",
@@ -179,9 +184,63 @@ def main():
         episodes=[],
         arms={},
     )
+    collection_seed = seed
+    inherited_updates = 0
+    if args.continue_from:
+        from scripts.sac_diagnostic_continuation import validate_source, continuation_lineage
+        expected_arm = dict(
+            mean_gain=variant["mean_gain"], mean_basis=variant["mean_basis"],
+            mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
+            actor_head_layer_norm=variant["actor_head_layer_norm"], zero_q=variant["zero_q"],
+            critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),
+            critic_action_kernel_init=init_mode,
+            critic_action_gain=variant.get("critic_action_gain", 1.0),
+            critic_factory_sha256=critic_factory_hash(),
+        )
+        source = validate_source(args.continue_from, version, expected_arm, report["collection"], args.updates)
+        if (source["seed"] != seed
+                or source["source_checkpoint_sha256"] != report["source_checkpoint_sha256"]
+                or source["configuration_sha256"] != report["configuration_sha256"]):
+            raise ValueError("continuation origin mismatch")
+        # Audit actual train-only lineage before trusting the inherited data.
+        from scripts.audit_sac_branch_replay import audit
+        audit(args.continue_from, args.manifest)
+        del replay
+        replay = Replay.load(args.continue_from / "replay.npz", version)
+        source_weights = (args.continue_from / "online-learner.msgpack").read_bytes()
+        with jax.default_device(gpu):
+            state = serialization.from_bytes(state, source_weights)
+            state = jax.device_put(state, gpu)
+        if serialization.to_bytes(state) != source_weights:
+            raise ValueError("restored learner/optimizer/target/RNG serialization differs")
+        inherited_updates = source["updates"]
+        if (int(state.updates) != inherited_updates or int(state.bc_updates) != 0
+                or replay.size != replay.cursor or replay.size != 5000 + inherited_updates
+                or np.any(replay.arrays["teacher_accepted"][:replay.size])):
+            raise ValueError("invalid restored learner/replay counters or teacher data")
+        collection_seed = args.collection_seed if args.collection_seed is not None else seed + inherited_updates
+        report.update(
+            scope="BOUNDED_ONLINE_SAC_CONTINUATION", new_transitions=inherited_updates,
+            updates=inherited_updates, collection=source["collection"], episodes=source["episodes"],
+            continuation_history=source.get("continuation_history", []) + [
+                continuation_lineage(args.continue_from, source, collection_seed)],
+            continuation_script_sha256=file_hash(Path(__file__).with_name("sac_diagnostic_continuation.py")),
+            restored_learner_bytes_identical=True,
+            note="Same learner and replay continue; scene/policy RNG explicitly restart. "
+                 "Cumulative histories include inherited own online experience. No validation/teacher/BC. "
+                 "Previous budget boundary is not an artificial terminal or success.",
+        )
+    report["inherited_online_updates"] = inherited_updates
+    report["collected_this_fork"] = 0
+    report["collection_seed"] = collection_seed
+    policy, proposer = model_proposer(state.actor, collection_seed, False, gpu)
     args.output.mkdir(parents=True)
+    if args.continue_from:
+        import shutil
+        for filename in ("ticks.jsonl", "updates.jsonl"):
+            shutil.copyfile(args.continue_from / filename, args.output / filename)
     candidates = selected_scenes(args.manifest, "train")
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(collection_seed)
     def train_actual_step(environment, current_boundary, lineage):
         nonlocal state
         policy.actor = state.actor
@@ -198,6 +257,7 @@ def main():
         if kind == "failure_branch":
             report["collection"]["branch_terminal_transitions"] += int(result.terminated or result.truncated)
         report["new_transitions"] += 1
+        report["collected_this_fork"] += 1
         report["updates"] = int(state.updates)
         with (args.output / "ticks.jsonl").open("a") as stream:
             stream.write(
