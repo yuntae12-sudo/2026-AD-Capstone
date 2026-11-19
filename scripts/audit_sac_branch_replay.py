@@ -32,6 +32,7 @@ def audit(directory, manifest):
     count = report["new_transitions"]
     assert count == len(rows) == len(updates) == report["updates"]
     parents, branch_pairs, branches = {}, [], []
+    branch_ids, states_per_trigger = set(), {}
     for i, (row, update) in enumerate(zip(rows, updates)):
         assert row["collection_id"] == row["update"] == update["update"] == i + 1
         assert row["policy_updates_before"] == i
@@ -44,14 +45,29 @@ def audit(directory, manifest):
             assert lineage["kind"] == "failure_branch"
             assert key == (lineage["parent_episode_uid"], lineage["parent_tick"])
             assert key in parents
+            branch_id = (*key, lineage["branch_sample"])
+            assert branch_id not in branch_ids
+            branch_ids.add(branch_id)
+            assert 0 <= lineage["branch_sample"] < report["collection"]["samples"]
             assert row["scene_id"] == rows[parents[key]]["scene_id"]
             assert row["provider"] == rows[parents[key]]["provider"]
             assert lineage["trigger_outcome"] in ("COLLISION", "OFFROAD")
             trigger_key = row["episode_uid"], lineage["trigger_tick"]
+            states_per_trigger.setdefault(trigger_key, set()).add(key)
+            assert len(states_per_trigger[trigger_key]) <= report["collection"]["window"]
             assert trigger_key in parents
             trigger = rows[parents[trigger_key]]
             assert not trigger["bootstrap"] and trigger["terminal_reason"] == lineage["trigger_outcome"]
-            assert 0 <= lineage["trigger_tick"] - row["pre_tick"] < report["collection"]["window"]
+            assert 0 <= lineage["trigger_tick"] - row["pre_tick"]
+            if report["collection"].get("selection", "recent") == "recent":
+                assert lineage["trigger_tick"] - row["pre_tick"] < report["collection"]["window"]
+            else:
+                assert lineage["state_selection"] == "moving_rejections"
+                assert lineage["selection_role"] in ("moving_rejection", "terminal", "recent")
+                if lineage["selection_role"] == "terminal":
+                    assert row["pre_tick"] == lineage["trigger_tick"]
+                if lineage["selection_role"] == "moving_rejection":
+                    assert not rows[parents[key]]["check_valid"]
             branch_pairs.append((i + 5000, parents[key] + 5000))
             branches.append(row)
         assert row["delta_ticks"] == 1 and row["tick"] == row["pre_tick"] + 1
@@ -77,6 +93,12 @@ def audit(directory, manifest):
             array = data[key]
             for branch, parent in branch_pairs:
                 np.testing.assert_array_equal(array[branch], array[parent])
+        # ego.speed is field2 after the three task fields, normalized by30.
+        if report["collection"].get("selection") == "moving_rejections":
+            obs = data["obs"]
+            for i, row in enumerate(rows):
+                if row["lineage"].get("selection_role") == "moving_rejection":
+                    assert obs[5000+i, 5] * 30 >= 0.1 - 1e-6
     main_count = len(rows) - len(branches)
     terminal_count = sum(not r["bootstrap"] for r in branches)
     assert main_count == report["collection"]["main_transitions"]

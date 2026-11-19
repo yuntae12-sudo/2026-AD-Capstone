@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--failure-branch-samples", type=int, default=0,
                         help="Extra real current-policy steps per recent train failure state")
     parser.add_argument("--failure-branch-window", type=int, default=6)
+    parser.add_argument("--failure-branch-selection", choices=("recent", "moving_rejections"), default="recent")
 
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")
@@ -55,7 +56,7 @@ def main():
         parser.error("critic action gain must be finite and positive")
     from scripts.sac_failure_branches import FailureBranches
     try:
-        FailureBranches(args.failure_branch_samples, args.failure_branch_window)
+        FailureBranches(args.failure_branch_samples, args.failure_branch_window, args.failure_branch_selection)
     except ValueError as exc:
         parser.error(str(exc))
     if args.output.exists():
@@ -169,6 +170,7 @@ def main():
         collection=dict(
             mode="actual_failure_branches" if args.failure_branch_samples else "sequential",
             samples=args.failure_branch_samples, window=args.failure_branch_window,
+            selection=args.failure_branch_selection,
             main_transitions=0, branch_transitions=0, branch_terminal_transitions=0,
             branch_script_sha256=file_hash(Path(__file__).with_name("sac_failure_branches.py")),
             fork_script_sha256=file_hash(Path(__file__).with_name("diagnose_sac_q_values.py")),
@@ -261,13 +263,14 @@ def main():
                     reasons={},
                 )
                 report["episodes"].append(episode)
-                branches = FailureBranches(args.failure_branch_samples, args.failure_branch_window)
+                branches = FailureBranches(args.failure_branch_samples, args.failure_branch_window, args.failure_branch_selection)
                 while int(state.updates) < args.updates:
                     with jax.default_device(cpu):
                         branches.remember(env, boundary)
                     step = train_actual_step(env, boundary, dict(kind="main"))
                     boundary = step.boundary
                     result = step.result
+                    branches.after_step(result)
                     episode["ticks"] += 1
                     episode["accepted"] += int(result.check_result.valid)
                     episode["return_training"] += step.reward.training

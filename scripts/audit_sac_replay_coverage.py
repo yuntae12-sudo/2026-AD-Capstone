@@ -61,6 +61,7 @@ def main():
         observation_speed,
     )
     from src.training.sac.learner import initialize
+    from scripts.sac_diagnostic_critic import diagnostic_critic, critic_factory_hash
 
     version = versions(args.manifest)
     source = json.loads((args.diagnostic / "report.json").read_text())
@@ -98,6 +99,19 @@ def main():
             )
     assert online.size - offset == source["new_transitions"] == source["updates"]
     assert not online.arrays["teacher_accepted"][: online.size].any()
+    lineage = None
+    if source.get("collection", {}).get("mode") == "actual_failure_branches":
+        if args.reconstructed:
+            raise ValueError("branch audit requires the original saved replay")
+        lineage = [json.loads(line) for line in
+                   (args.diagnostic / "ticks.jsonl").read_text().splitlines()]
+        if len(lineage) != source["new_transitions"]:
+            raise ValueError("incomplete branch collection trace")
+        for i, row in enumerate(lineage):
+            if row["collection_id"] != i + 1 or row["lineage"]["kind"] not in ("main", "failure_branch"):
+                raise ValueError("invalid branch collection lineage")
+        np.testing.assert_array_equal(online.arrays["raw_u"][offset:online.size],
+                                      np.asarray([r["raw_proposal"]["raw_u"] for r in lineage]))
     counts, rng_state, fresh = sampling_exposure(source["seed"], source["updates"])
     if not args.reconstructed:
         assert online.rng.bit_generator.state == rng_state
@@ -115,10 +129,7 @@ def main():
                 head_layer_norm=arm["actor_head_layer_norm"],
                 mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
             ),
-            critic=Critic(
-                zero_output=arm["zero_q"],
-                action_coordinates=arm.get("critic_action_coordinates", "raw"),
-            ),
+            critic=diagnostic_critic(arm, restoring=True),
         )
         state = jax.device_put(
             serialization.from_bytes(state, weights.read_bytes()), gpu
@@ -173,6 +184,8 @@ def main():
                 rows.append(
                     dict(
                         group=name,
+                        collection_kind=("warmup" if name == "warmup" else
+                                         lineage[index-offset]["lineage"]["kind"] if lineage else "main"),
                         index=global_index,
                         scene_id=str(arrays["scene_id"][index]),
                         tick=int(arrays["tick"][index]),
@@ -191,11 +204,17 @@ def main():
                     )
                 )
     summary = {}
-    for name, selected in [
+    groups = [
         ("warmup", rows[:5000]),
         ("online", rows[5000:]),
         ("online_last100", rows[5000:][-100:]),
-    ]:
+    ]
+    if lineage:
+        for kind in ("main", "failure_branch"):
+            selected = [r for r in rows[5000:] if r["collection_kind"] == kind]
+            if selected:
+                groups.append(("online_" + kind, selected))
+    for name, selected in groups:
         terminal = [r for r in selected if not r["bootstrap"] and r["reward"] <= -10]
         summary[name] = dict(
             count=len(selected),
@@ -214,6 +233,8 @@ def main():
             ).tolist(),
             severe_terminal_count=len(terminal),
             severe_terminal_training_draws=sum(r["training_draws"] for r in terminal),
+            training_draws=sum(r["training_draws"] for r in selected),
+            never_sampled=sum(r["training_draws"] == 0 for r in selected),
             severe_terminal_recorded_q_mae=(
                 float(np.mean([abs(r["q_recorded"] - r["reward"]) for r in terminal]))
                 if terminal
@@ -232,6 +253,8 @@ def main():
         versions=version,
         diagnostic_sha256=file_hash(args.diagnostic / "report.json"),
         script_sha256=file_hash(__file__),
+        critic_factory_sha256=critic_factory_hash(),
+        collection=source.get("collection"),
         learner_sha256=digest,
         online_replay_sha256=file_hash(replay_path),
         own_warmup_sha256=meta["hashes"]["replay.npz"],

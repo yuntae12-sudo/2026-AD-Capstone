@@ -7,10 +7,11 @@ from scripts.sac_failure_branches import FailureBranches
 
 
 class Environment:
-    def __init__(self, tick):
+    def __init__(self, tick, speed=1.0):
         self.token = NS(episode_uid="parent", sim_tick=tick)
         self.ledger = {"events": []}
         self._step_cache = {}
+        self.ego = NS(speed=speed)
         self.boundary = NS(token=self.token, needs_sac_action=True,
                            sac_observation=CoreObservation.empty())
 
@@ -60,3 +61,32 @@ def test_stale_boundary_and_invalid_counts_fail_before_collection():
     parent = Environment(10)
     with pytest.raises(ValueError, match="current policy"):
         FailureBranches(1).remember(parent, Environment(9).boundary)
+
+
+def test_moving_selection_keeps_earliest_rejections_and_terminal_with_same_budget():
+    buffer = FailureBranches(2, 3, "moving_rejections")
+    for tick in range(11):
+        parent = Environment(tick, speed=0.0 if tick == 1 else 1.0)
+        buffer.remember(parent, parent.boundary)
+        result = outcome("COLLISION")
+        result.pre_token = parent.token
+        result.check_result = NS(valid=tick not in (1, 2, 4, 7, 10))
+        buffer.after_step(result)
+    branches = list(buffer.generate(outcome("COLLISION")))
+    assert [lineage["parent_tick"] for _, _, lineage in branches] == [10, 4, 2, 10, 4, 2]
+    assert [lineage["selection_role"] for _, _, lineage in branches[:3]] == ["terminal", "moving_rejection", "moving_rejection"]
+
+
+def test_moving_selection_fills_missing_early_states_without_duplicate_ticks():
+    buffer = FailureBranches(1, 3, "moving_rejections")
+    for tick in range(11):
+        parent = Environment(tick, speed=0.0)
+        buffer.remember(parent, parent.boundary)
+        result = outcome("COLLISION")
+        result.pre_token = parent.token
+        result.check_result = NS(valid=False)
+        buffer.after_step(result)
+    branches = list(buffer.generate(outcome("COLLISION")))
+    assert [lineage["parent_tick"] for _, _, lineage in branches] == [10, 9, 8]
+    with pytest.raises(ValueError, match="selection"):
+        FailureBranches(1, 3, "unknown")
