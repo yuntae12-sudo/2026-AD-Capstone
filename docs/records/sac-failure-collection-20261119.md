@@ -1967,3 +1967,66 @@ runner2478192를00:34:02 KST에 대기시켰다. 두 runner와 train child의 �
 모델·배율·원래Gaussian·보상·검사·PD·uniform replay·실제step당 update1·BC/teacher0를
 유지하며 모든 현재 실행 소스를 마지막 검사까지 동결한다. 결과 검토 전 추가 학습 예산,
 전체16/new learner seed/독립 정책 평가는 연결하지 않았다. 안정 정책 목표는 계속 active다.
+
+## 00:45 KST 이전3,000모델의 실제 방문 상태와 replay를 대조
+
+현재 quota-extension1,000과 후속 MC의 실행 소스는 c3fe6a7로 동결돼 있다. 이 분석은 그
+미완료 모델의 성능 평가가 아니라, 이미 실패한 quota3,000 모델
+`77882fc7745de6ab3160527c049a5b8301e4177fd64a5fede556aff795780382`의 저장 자료를 읽은
+별도 진단이다. 학습/새 NN 추론/시뮬레이션/replay 삽입을 하지 않았다.
+
+이전 exact action replay로 복원한 KEEP29/FOLLOW60의 실제89상태(seed88019)를 사용했다.
+capture/원본 trace/관측 NPZ/model/replay hash와 기존 credit 검토 출처를 대조했다.
+자기 replay8,000행과 같은 seed의 실제 uniform sampling768,000인덱스를 독립 재구성해
+저장 RNG와 coverage CSV를 확인했다. 모든 행의 teacher flag는0이다.
+
+### 시작 상태를 보지 못했다는 설명의 범위
+
+KEEP77ae… tick0은 관측 특징과 field/item mask가 완전히 같은 replay 행이3개 있었다.
+index0(warmup)/5000(main)/5034(branch)이며 batch 추출은129/126/100, 합계355회였다.
+그러나 첫 두 행의 raw action도 동일하므로 **서로 다른 저장 행동은2개**다.355번 추출을
+355개의 새 환경 경험이나 충분한 action coverage로 바꾸어 해석하지 않는다.
+
+그 상태의 현재 평균 행동 Q는-0.714215인데, 같은 모델의 기존4개 실제 stochastic suffix
+return 평균은-12.760066±2.507637(표본SD)였고 모두 충돌했다. 즉 “이 KEEP 시작 관측이
+학습 데이터에 전혀 없었다”만으로 그 과대평가를 설명할 수 없다. 반대로 이것이 충분한
+행동/미래 상태 지원, 올바른 bootstrap target, 전체 수렴 또는 단일 실패 원인을 증명하지도
+않는다. 기록된 두 행동과 현재 평균 행동의 실제 미래 return을 동일시하지 않는다.
+
+FOLLOWbaac… tick4는 완전히 같은 packed 상태는 없었다. 같은 scene/command/tick 및
+동일 field/item mask의 후보7개 중 정규화된 packed 좌표 RMS가 가장 작은 상태의 차이는
+RMS3.7379e-7/최대4.7393e-6였다. 이는 입력 좌표의 서술적 차이이며 신경망 표현 거리,
+행동 지원 충분성 또는 OOD 임계값이 아니다. 기존 그 상태의 평균 행동 Q와4회 실제 return
+차이10.269454점은 그대로 남아 있다.
+
+### 전체 실제 경로와 비교 조건의 한계
+
+같은 scene/command의 replay 후보는 KEEP106/FOLLOW175행이었다. 실제89상태를 각각
+같은 simulation tick으로 제한해 비교하면, 동일 mask 후보가 존재하는 상태는
+KEEP29/29, FOLLOW38/60이었다. FOLLOW의 나머지22상태는 동일 mask 비교가 불가능하다고
+그대로 표시했다. 임의로 거리를0으로 채우거나 근접/안전 상태로 분류하지 않았다.
+
+완전히 같은 상태는 KEEP의 시작1/29뿐이며 FOLLOW0/60이다. 연속 상태에서 정확한 일치가
+없다는 사실만으로 모두 학습 분포 밖이라고 판단하지 않는다. 동일 mask 후보 내 최소 RMS
+상태와 각 feature block의 RMS/최대 차이를 함께 저장했다. KEEP초기에는 previous_plan
+차이가 가장 컸고, 일부 FOLLOW 후기에는 agent feature/slot 변화도 컸다. 전체5,975성분
+RMS는 차이를 희석할 수 있고 정규화 배율·slot 순서의 영향을 받으므로, 작은 RMS를 충분한
+일반화의 증거로 쓰지 않는다.
+
+로컬 `outputs/sac_current_state_coverage_20261120/`에서 실제 실행한 명령은
+`review_current_states.py`, `review_initial_state_exposure.py`, `plot_state_coverage.py`다.
+`state-coverage-review.json` SHA
+`31a23199f8ef4d65145599fb8e54d246505277987b9c7489635a68f4ef4eb7be`,
+`initial-state-exposure-review.json` SHA
+`cc8fe32bad71d00bbbcfe5074e10f01f98857c17f3dd7529e3740d41efcc410c`다.
+
+`state-visitation-and-value.png`(SHA
+`e08d93618f34c8b73bd6aea414612f575e3fc8b156c502d277900bbfd707b688`)를 생성하고 실제로
+열어 글자/범례/축/누락 구간을 확인했다. 위 패널의 return은 하나의 실현된 suffix이며 정확한
+기대 Q target이 아니다. 아래는 같은 tick/mask 입력 거리이고, 불일치 구간은 빈 값/별도 음영,
+정확히0인 차이는 symlog의0으로 유지했다. 독립 평가나 새 정책 성능 그림이 아니다.
+
+이 결과로 시작 상태 반복 수집만을 충분한 해결책으로 가정하지 않는다. 현재 실행 중인
+quota-extension1,000에서 종료 노출을 유지하며 실제 후속 경험을 늘렸을 때, 초기 Q와
+실제 미래 보상 차이가 함께 줄어드는지를 확인한다. 그 결과 전에는 수집 변경의 성공,
+학습 불가능성, 추가 학습 예산 또는 새 평가 확대를 미리 결론내리지 않는다.
