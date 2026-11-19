@@ -1014,3 +1014,75 @@ fresh seed0 실행이다. `review-decision1000.json`에 실패 판정·검토 �
 `reviewed1000-launch.json`·`reviewed1000-status.json`·`full-sources/`에 명령/PID/동결 소스를
 보존했다. 실제1,000전이→저장 감사→같은4주행→고정Q→replay 노출→새 분기Q 순서이며
 이후 자동 학습 연장은 없다. source는90c15a4와 동일하다. 안정적인 정책 확보는 미완료다.
+
+
+## 21:27 KST 수집량 통제1,000회 완료: 주행 지표 개선 없음
+
+실행 코드90c15a4와 모델/보상/검사/PD/원래 Gaussian/uniform replay/전이당update1/
+BC 및 teacher replay0 조건을 유지했다. seed0 fresh learner + 원래 자기 warmup5,000에서
+실제1,000회 수집·업데이트와 저장 감사, 같은 개발2장면×KEEP/FOLLOW4주행을 완료했다.
+새 수집은42개 root에서336개 분기 경험을 만들었고237개는 실제 후속 상태였다.
+전체는 main664/branch336, 고유 train10장면이다. root당8개 예산은 같지만 실제 종료를
+강제하지 않으므로 분기 terminal은 기존56→66개로 늘었다. 그 밖의270개는 실제
+nonterminal로 bootstrap을 보존했다. 관측/mask/계보/행동/보상/종료/train-only/teacher0
+저장 대조를 통과했다.100회 pilot의 실제 경로 재현과1,000회 저장 감사를 혼동하지 않는다.
+
+| 같은1,000회 수집 | main 통과/양의 보상/사전 정지 | branch 통과/양의 보상/사전 정지 |
+| --- | --- | --- |
+| 기존 독립1step | 333/100/359 | 136/81/96 |
+| 새 후속 수집량 통제 | 336/100/362 | 107/54/102 |
+
+전이 구성은 주행 성능이 아니다. 원본 trace의 모든 collection ID와 update 순서, 설정,
+warmup/seed/actor/Q 하이퍼파라미터의 동일성을 `review_collection1000.py`로 확인했다.
+시뮬레이션 방문 경로나 행동이 bit-identical이라는 주장은 하지 않는다.
+
+| 정책 | 목표/충돌 | tick | 거절 | 제동 | post-step 정지 | 평균 보상 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 초기 평균0 | 2/4·2/4 | 216 | 58 | 46 | 22 | -10.01539017 |
+| 기존 독립1step1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.98113283 |
+| 새 후속 수집1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.98123323 |
+
+`review_evaluation1000.py`를 실행해12개 원본 episode의 frame 지표와 최초 frame/map/seed
+4쌍을 다시 대조했다. 고유 장면은2개다. 양쪽1,000회 모델은 고속 KEEP/FOLLOW에서72tick
+목표 도달, 저속 KEEP/FOLLOW에서46tick 충돌이다. 충돌2회는 정지 뒤 뒤쪽 접촉 기하를
+기록했다. 책임/단일 원인 판정이 아니다. 초기 제안 경로의 두 학습 모델 간 최대점 차이는
+각각 약0.389~0.399mm로 작았다. **새로운 성공이나 기존 모델 대비 거절·제동·정지 개선은
+확인되지 않았다.** 초기 평균0 대비 비용 지표 개선은 기존1,000회에서도 있던 결과이며
+새 수집의 성과로 다시 계산하지 않는다. 추가 전체 개발 평가/다른 seed 확대는 미실행이다.
+
+고정 자체 warmup의 severe44개 저장 행동 Q MAE는 기존5.40649→새4.89673으로 줄었다.
+두 고정 terminal의 현재 평균 Q 오차는 KEEP5.98879/FOLLOW3.32578이고 실제 결과는
+여전히 EMERGENCY→COLLISION이다. 종료 적합의 소폭 개선과 주행 개선 부재를 함께
+보존하며 기본 채택이나 안정적인 정책 확보로 분류하지 않는다.
+
+로컬 `outputs/sac_failure_rollout_quota_20261119/` 증거:
+
+- 모델 `b32586d181f072a69baaa97539069ba056f0613e25594460dff7939b906e2708`.
+- replay `3246b1f9d3f5dc23ee680b5c7196878ebc9f7ec70ccf66ac6b27ea437e36c7fd`.
+- 학습 report `4537c814d2fddd5675786764774949731ba8c3ba56a356515872b72e9b459e33`.
+- `audit1000.json` SHA `688194dc8c78aa8bbcab5bcdf9e3bb8d29af7d2dfc064858a9fd1ed5070eff77`.
+- `collection1000-review.json` SHA `1475053927ae23eee6db2e406f6c72031ee10c5f4650f921e4e84b05500ee48a`.
+- `evaluation1000/report.json` SHA `d0b78c354d224d4d297f05f26d5dd055cedd001bc143a14741dc2f6bd54fb729`.
+- `evaluation1000-review.json` SHA `bede234511561aafb8c8e837a4ba288cfeab6490f0127bed47ca40ca97662285`.
+- `q1000.json` SHA `faa39ebf878dde7bc8b0d7229514e147d930ce30ccef11befb8097395d207a73`.
+
+21:27 현재 실행기2371489의 coverage→수집 상태 새 행동 Q가 남아 있다. 학습2371490은
+종료됐다. 이후 같은 두 train 상태에서4개 paired seed씩 frozen 정책의 실제 종료까지
+soft return을 검사한다. 실행기2376459는 WAITING이며 `soft-return-status.json`에
+소스/명령/PID를 남긴다. `run_soft_return_1000.py` SHA는
+`2d6f27dcb21f282a0ecd88e86583b6244a453e7c10a709dfeebe8fb7a53e5c4a`다.
+
+그 뒤 실행기2379547가 `profile_saved_bellman_chain.py`를 실행한다. 과거 실제 두 train
+충돌 경로에서 terminal까지 남은 tick0/1/3/7/15와 최초 상태를 Q값을 보기 전에 고른다.
+기존1,000/2,000 및 새1,000 모델을 같은 저장 행동/관측에서 비교하며 nonterminal마다
+동일 seed32개로 다음 원래 정책 행동을 표본화한다. 저장된 실제 보상에 대한 Bellman
+목표와 online/Polyak target의 차이를 기록한다. 현재 평균 Q는 별도 기술값이며 저장
+행동의 보상으로 평균 행동의 TD 오차를 계산하지 않는다. 실제 soft return 검사를
+대체하는 기대가치 정답이나 새 학습은 아니다. `chain-profile-status.json` WAITING,
+실행기 SHA `4ee0d5a61c787502056cfc8d80b40c3b21e60fb2068fe93723e0561d35b565bf`.
+
+두 검사는 구문 검사 및 실행기 대기 상태까지 확인했고 GPU 결과는 아직 미확정이다.
+원본/후보 모델과 replay를 읽기만 하고 GPU 작업은 순차 실행한다.1,000회 이후 학습은
+자동 연장하지 않는다. 다음 예산/수정은 실제 미래 비용과 Q 목표 전달 결과를 검토한 뒤
+정한다. 안정적인 KEEP/FOLLOW·새 seed·동일 조건 Rule-based 최종 비교·독립 test 확보
+목표는 계속 active이며, 주행 성능 미달을 기록 완료와 혼동하지 않는다.
