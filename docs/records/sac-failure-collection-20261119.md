@@ -842,3 +842,82 @@ GIF SHA `62b45ef25737a0f0fcc8fbd7c65223dd584146637b9b92fd60c88ee3e415aa89`.
 soft-return 실행기2342077은 순차 대기다. 후속 결과는 미확정이며 보상·안전검사·PD·
 원래 Gaussian·BC/teacher0은 그대로다. 안정적인 정책·다른 seed·동일 조건 Rule-based
 최종 비교·독립 평가는 미완료이고 목표는 계속 active다.
+
+## 20:28 KST 평균 조건화 실제56step 완료: 변경 자체를 해결책으로 채택하지 않음
+
+고정4train상태×1,000/2,000모델의 실제56step을 모두 완료했다. 최초 관측 fingerprint·
+같은 noise·g=1일 때 raw와 실제 결과의 완전 일치·모델/replay 불변을 확인했다.
+`review_mean_and_terminal_q.py`도 실제 실행해 raw 차이·27||u_last||·56개 분모·모델별
+Q/coverage 식별자를 독립 대조했다. 로컬 `mean-and-terminal-q-review.json` SHA
+`4cd9d8f9ce7b2908e0789ae8d277899fee3c10197467114076a77b058eb49f86`.
+
+정지 두 상태에서 원래 평균과4표본은 두 모델 모두30점 전체 정렬 후 속도≈0이었다.
+1,000모델의 mean/g는 전체 정렬이 없어지고 두 평균 모두 검사 통과했지만 post-step 속도는
+KEEP0.00006799m/s/FOLLOW0.00002965m/s에 불과했다. 같은 noise4표본씩도 통과했으나
+실용적인 출발이나 주행 성능으로 볼 수 없다. 2,000모델의 mean/g는 두 평균과8표본 모두
+curvature/curvature_rate 위반으로 거절돼 실제 속도는 그대로≈0이었다.
+
+가상 평균은 원래 분포에서1,000모델 약92~131 sigma RMS,2,000모델 약202 sigma RMS
+떨어져 있다. 이것은 동일한 실제 상태·잡음에서 평균 조건화의 제어 효과를 분리한
+out-of-distribution 개입이다. 새로운 학습 구조의 성능/Q 검증이나 채택 근거로 바꾸지 않는다.
+원래 정지 정렬·물리 검사·PD·sigma는 수정하지 않았고 가상 행동을 학습에 넣지 않았다.
+
+수집한 terminal 두 상태×저장/평균/4표본,12actual1step도 모두 충돌이었다.2,000모델의
+현재 평균 Q 오차는KEEP-0.20471/FOLLOW-0.38434로,1,000모델+3.28041/+4.32534보다
+실제 terminal 보상에 가까워졌다. 반면 앞선 KEEP상태의 완료된4개 확률 종료 표본에서는
+Q=-0.35950, soft-return평균=-14.14479, 차이13.78529가 남았다. FOLLOW4표본은 아직 진행
+중이므로2상태 전체 완료로 표현하지 않는다.
+
+다음 수집 후보는 같은 실패 직전 roots에서 최대8step 실제 후속 상태를 round-robin으로
+수집하는 방식이다. 기존6roots×8개 독립1step과 새6roots×1경로×최대8step을 비교해
+동일한 실패당 최대48전이·전체 학습 예산을 유지한다. 실제 조기 종료 시 해당 경로를 끝내고
+남은 예산은 원래 main 수집에 사용한다. 길이/예산 한계에서 가짜 terminal이나 truncation을
+추가하지 않으며 모든 실제 거절·실패 전이도 원래 replay에 넣는다. 보상·검사·PD·원래
+Gaussian·uniform replay·전이당update1·BC/teacher0은 유지한다. 효과는 아직 미검증이다.
+
+현재 미커밋 `sac_failure_rollouts.py`와 `sac_branch_reconstruction.py`에 실제 후속 상태
+연결·종료·예산·계보 복원 helper를 준비했고 새10pytest를 CPU로 실행해 통과했다.
+기존 실행 중인 MC 진단이 사용하는 파일은 변경하지 않았다. **학습 collector 연결·저장
+감사 확장·실제 새 수집/학습·주행 검증은 아직 미실행**이며 현 모델의 연장이 아니다.
+
+## 20:34 KST 앞선 상태 비용 검사 완료와 실제 후속 수집100회 시작
+
+2,000모델의 두 고정train상태×4seed soft-return 검사가 모두 끝났다. 원본8trace의
+hash·tick·첫 평균 행동의 entropy 제외·실제 종료·할인합을 독립 재계산했고,1,000모델과
+최초 관측 fingerprint·seed를 대조했다. 원본 보고서 SHA
+`df9e75030f8d6850dc234260b939ba5ad446432a6ab4c4c13aae596232f2b092`.
+
+| 상태 | 2,000모델 Q | 실제 soft return 평균±표본SD | Q−표본평균 |
+|---|---:|---:|---:|
+| KEEP77ae… tick0 | -0.35950 | -14.14479±1.09239 | 13.78529 |
+| FOLLOWbaac… tick4 | -0.16899 | -10.74943±0.38338 | 10.58044 |
+
+8/8 모두 충돌했으며 고유2상태의 반복이다.1,000모델 대비 paired return 차이 평균은
+KEEP-0.75024/FOLLOW+0.13363이고, 작은 표본에서 전체 주행 개선이나 정확한 기대 Q로
+해석하지 않는다. terminal 적합만 좋아지고 앞선 상태의 미래 실패 비용 차이는 남았다.
+기존2,000모델은 추가 연장하지 않는다. 평균/g도 단순 제어 개입 결과만 보존하고 채택하지 않는다.
+
+기존 진단 runner와 child가 모두 종료된 것을 확인한 뒤 후속 상태 수집을 연결했다.
+`--failure-branch-rollout-horizon 8 --failure-branch-samples 1` 옵션은 같은 최대6roots를
+한 경로씩 최대8step 이어간다. 원래 horizon1/독립표본 경로는 그대로 유지한다. 새 helper는
+실제 collector 결과와 실제 수집 ID를 받고, 경로별 직전 수집 ID·root fingerprint·현재
+관측 fingerprint를 기록한다. 실제 terminal 경로는 종료하고 길이/전체 예산 종료를
+가짜 terminal로 바꾸지 않는다. 한 실패당 상한48전이·전체100update 예산은 유지한다.
+
+`audit_sac_branch_replay.py`는 root 관측을 원래 main과, 이어지는 관측/field/item mask를
+직전 실제 next-state와 정확히 비교한다. `sac_branch_reconstruction.py`는 후속 Q 진단에서
+같은 tick의 main 행동으로 대체하지 않고 실제 branch raw 행동 이력을 복원한다.
+continuation 검사는 수집 길이/구현 hash 변경을 거절하며 과거1step 기록과 호환된다.
+
+새/기존 관련26pytest 통과(0.36초), 구문 검사·diff whitespace 검사 통과. 새 감사기로
+기존2,000개 실제 replay를 다시 검사해1347main/653branch·계보·raw·보상·종료·train-only·
+teacher0의 이전 결과가 유지됨을 확인했다. 출력은 기존 continuation폴더의
+`audit2000-rollout-compatible.json`이다. 새 실제 후속 수집 검증은 다음 pilot에서 확인한다.
+
+20:33:57 KST 로컬 `outputs/sac_failure_rollout_collection_20261119/run_pilot.py`를 실제
+시작했다. runner PID2355358·train PID2355359, `launch.json`·`pilot-status.json`·`sources/`에
+명령·동결 source hash·사본을 보존했다. seed0 fresh learner+원래 자체warmup5,000개에서
+100실제전이/update→저장 감사→같은2개개발장면×KEEP/FOLLOW4회 평가 순서다.
+현재 actor/Q 초기화·mean 배율·Gaussian·보상·안전검사·PD·uniform replay·BC/teacher0은
+직전1,000 비교와 같으며 실패2,000모델의 가중치는 이어받지 않는다.
+새100회의 결과는 아직 미확정이며1,000회로 자동 확대하지 않는다.

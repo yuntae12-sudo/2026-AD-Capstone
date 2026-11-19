@@ -58,6 +58,7 @@ def main():
     from scripts.sac_diagnostic_critic import diagnostic_critic, critic_factory_hash
     from scripts.diagnose_sac_q_values import fork_environment, observation_fingerprint
     from scripts.audit_sac_branch_replay import audit
+    from scripts.sac_branch_reconstruction import branch_history_indices
 
     version = versions(args.manifest)
     source = json.loads((args.diagnostic / "report.json").read_text())
@@ -74,6 +75,7 @@ def main():
     report = dict(status="RUNNING", qualified=False,
                   scope="ACTUAL_CURRENT_POLICY_AT_COLLECTED_TRAIN_BRANCH_FAILURES",
                   versions=version, script_sha256=file_hash(__file__),
+                  reconstruction_sha256=file_hash(Path(__file__).with_name("sac_branch_reconstruction.py")),
                   critic_factory_sha256=critic_factory_hash(),
                   critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
                   diagnostic_sha256=file_hash(args.diagnostic / "report.json"),
@@ -101,8 +103,7 @@ def main():
         for provider, trace_ix in selected.items():
             row = rows[trace_ix]
             ix = 5000 + trace_ix
-            parent_rows = [(i, r) for i, r in enumerate(rows) if r["lineage"]["kind"] == "main"
-                           and r["episode_uid"] == row["episode_uid"] and r["pre_tick"] <= row["pre_tick"]]
+            parent_rows = [(i, rows[i]) for i in branch_history_indices(rows, trace_ix)]
             assert parent_rows[0][1]["pre_tick"] == 0
             with jax.default_device(cpu):
                 env = SACPlanningEnvironment()
@@ -115,7 +116,7 @@ def main():
                     np.testing.assert_allclose(packed[0], a["obs"][pi], atol=1e-6, rtol=0)
                     np.testing.assert_array_equal(packed[1], a["fields"][pi])
                     np.testing.assert_array_equal(packed[2], a["items"][pi])
-                    if parent["pre_tick"] == row["pre_tick"]:
+                    if parent_i == trace_ix:
                         break
                     step = collect_step(env, boundary,
                                         lambda e, t: proposal_from_action(e, t, a["raw_u"][pi]))

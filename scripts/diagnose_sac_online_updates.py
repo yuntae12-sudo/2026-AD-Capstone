@@ -29,6 +29,8 @@ def main():
                         help="Extra real current-policy steps per recent train failure state")
     parser.add_argument("--failure-branch-window", type=int, default=6)
     parser.add_argument("--failure-branch-selection", choices=("recent", "moving_rejections", "moving_predecessors"), default="recent")
+    parser.add_argument("--failure-branch-rollout-horizon", type=int, default=1,
+                        help="Opt-in actual consecutive steps per root; 2..8 requires one sample and at most48 steps/trigger")
 
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")
@@ -67,6 +69,11 @@ def main():
         FailureBranches(args.failure_branch_samples, args.failure_branch_window, args.failure_branch_selection)
     except ValueError as exc:
         parser.error(str(exc))
+    if (not 1 <= args.failure_branch_rollout_horizon <= 8
+            or (args.failure_branch_rollout_horizon > 1 and
+                (args.failure_branch_samples != 1
+                 or args.failure_branch_window * args.failure_branch_rollout_horizon > 48))):
+        parser.error("rollout horizon must be1..8; multi-step requires one sample and at most48 steps/trigger")
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -180,6 +187,9 @@ def main():
             mode="actual_failure_branches" if args.failure_branch_samples else "sequential",
             samples=args.failure_branch_samples, window=args.failure_branch_window,
             selection=args.failure_branch_selection,
+            rollout_horizon=args.failure_branch_rollout_horizon,
+            rollout_script_sha256=(file_hash(Path(__file__).with_name("sac_failure_rollouts.py"))
+                                   if args.failure_branch_rollout_horizon > 1 else None),
             main_transitions=0, branch_transitions=0, branch_terminal_transitions=0,
             branch_script_sha256=file_hash(Path(__file__).with_name("sac_failure_branches.py")),
             fork_script_sha256=file_hash(Path(__file__).with_name("diagnose_sac_q_values.py")),
@@ -350,11 +360,23 @@ def main():
                             parent_token = env.token
                             from scripts.diagnose_sac_q_values import observation_fingerprint
                             parent_observation = observation_fingerprint(env._boundary().sac_observation)
-                            for branch_env, branch_boundary, lineage in branches.generate(result):
-                                if int(state.updates) >= args.updates:
-                                    break
-                                train_actual_step(branch_env, branch_boundary, lineage)
-                                write_report(args.output / "report.json", report)
+                            if args.failure_branch_rollout_horizon > 1:
+                                from scripts.sac_failure_rollouts import collect_failure_rollouts
+                                def rollout_step(branch_env, branch_boundary, lineage):
+                                    actual = train_actual_step(branch_env, branch_boundary, lineage)
+                                    write_report(args.output / "report.json", report)
+                                    return actual, report["new_transitions"]
+                                collect_failure_rollouts(
+                                    branches, result, horizon=args.failure_branch_rollout_horizon,
+                                    train_step=rollout_step,
+                                    can_step=lambda: int(state.updates) < args.updates,
+                                )
+                            else:
+                                for branch_env, branch_boundary, lineage in branches.generate(result):
+                                    if int(state.updates) >= args.updates:
+                                        break
+                                    train_actual_step(branch_env, branch_boundary, lineage)
+                                    write_report(args.output / "report.json", report)
                             if env.token != parent_token or observation_fingerprint(env._boundary().sac_observation) != parent_observation:
                                 raise RuntimeError("branch changed parent environment")
                         break

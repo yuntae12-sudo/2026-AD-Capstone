@@ -66,3 +66,16 @@ def test_rejects_corrupted_artifact_or_missing_history(completed):
     (path/"ticks.jsonl").write_text('{"update":2}\n')
     with pytest.raises(ValueError, match="history"):
         check(completed)
+
+
+def test_rollout_horizon_and_implementation_cannot_change_on_resume(completed):
+    completed[3]["rollout_horizon"] = 1
+    completed[3]["rollout_script_sha256"] = None
+    check(completed)  # Historical files omitted both optional fields.
+    completed[3]["rollout_horizon"] = 8
+    with pytest.raises(ValueError, match="rollout_horizon"):
+        check(completed)
+    completed[3]["rollout_horizon"] = 1
+    completed[3]["rollout_script_sha256"] = "different implementation"
+    with pytest.raises(ValueError, match="rollout_script_sha256"):
+        check(completed)

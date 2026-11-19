@@ -31,8 +31,14 @@ def audit(directory, manifest):
     updates = [json.loads(line) for line in (directory / "updates.jsonl").read_text().splitlines()]
     count = report["new_transitions"]
     assert count == len(rows) == len(updates) == report["updates"]
-    parents, branch_pairs, branches = {}, [], []
+    parents, branch_pairs, successor_pairs, branches = {}, [], [], []
     branch_ids, states_per_trigger = set(), {}
+    horizon = report["collection"].get("rollout_horizon", 1)
+    assert isinstance(horizon, int) and 1 <= horizon <= 8
+    if horizon > 1:
+        assert report["collection"]["samples"] == 1
+        assert report["collection"]["window"] * horizon <= 48
+        assert report["collection"].get("rollout_script_sha256")
     for i, (row, update) in enumerate(zip(rows, updates)):
         assert row["collection_id"] == row["update"] == update["update"] == i + 1
         assert row["policy_updates_before"] == i
@@ -43,42 +49,63 @@ def audit(directory, manifest):
         else:
             lineage = row["lineage"]
             assert lineage["kind"] == "failure_branch"
-            assert key == (lineage["parent_episode_uid"], lineage["parent_tick"])
-            assert key in parents
-            branch_id = (*key, lineage["branch_sample"])
+            root_key = (lineage["parent_episode_uid"], lineage["parent_tick"])
+            assert row["episode_uid"] == root_key[0] and root_key in parents
+            depth = lineage.get("branch_step", 0)
+            assert isinstance(depth, int) and 0 <= depth < horizon
+            assert row["pre_tick"] == root_key[1] + depth
+            branch_id = (*root_key, lineage["branch_sample"], depth)
             assert branch_id not in branch_ids
             branch_ids.add(branch_id)
             assert 0 <= lineage["branch_sample"] < report["collection"]["samples"]
-            assert row["scene_id"] == rows[parents[key]]["scene_id"]
-            assert row["provider"] == rows[parents[key]]["provider"]
+            assert row["scene_id"] == rows[parents[root_key]]["scene_id"]
+            assert row["provider"] == rows[parents[root_key]]["provider"]
+            if depth == 0:
+                assert lineage.get("previous_collection_id") is None
+                branch_pairs.append((i + 5000, parents[root_key] + 5000))
+                if horizon > 1:
+                    assert lineage["root_observation_sha256"] == lineage["observation_sha256"]
+            else:
+                previous_id = lineage["previous_collection_id"]
+                assert isinstance(previous_id, int) and 1 <= previous_id <= i
+                previous = rows[previous_id - 1]
+                pl = previous["lineage"]
+                for field in ("kind", "parent_episode_uid", "parent_tick", "branch_sample", "trigger_tick",
+                              "trigger_outcome", "state_selection", "selection_role", "root_observation_sha256"):
+                    assert pl[field] == lineage[field]
+                assert pl.get("predecessor_rejection_tick") == lineage.get("predecessor_rejection_tick")
+                assert pl["branch_step"] + 1 == depth
+                assert previous["bootstrap"] and not previous["terminated"] and not previous["truncated"]
+                assert previous["pre_tick"] + 1 == row["pre_tick"]
+                assert previous["episode_uid"] == row["episode_uid"]
+                successor_pairs.append((i + 5000, previous_id - 1 + 5000))
             assert lineage["trigger_outcome"] in ("COLLISION", "OFFROAD")
             trigger_key = row["episode_uid"], lineage["trigger_tick"]
-            states_per_trigger.setdefault(trigger_key, set()).add(key)
+            states_per_trigger.setdefault(trigger_key, set()).add(root_key)
             assert len(states_per_trigger[trigger_key]) <= report["collection"]["window"]
             assert trigger_key in parents
             trigger = rows[parents[trigger_key]]
             assert not trigger["bootstrap"] and trigger["terminal_reason"] == lineage["trigger_outcome"]
-            assert 0 <= lineage["trigger_tick"] - row["pre_tick"]
+            assert 0 <= lineage["trigger_tick"] - root_key[1]
             if report["collection"].get("selection", "recent") == "recent":
-                assert lineage["trigger_tick"] - row["pre_tick"] < report["collection"]["window"]
+                assert lineage["trigger_tick"] - root_key[1] < report["collection"]["window"]
             else:
                 selection = report["collection"]["selection"]
                 assert selection in ("moving_rejections", "moving_predecessors")
                 assert lineage["state_selection"] == selection
                 assert lineage["selection_role"] in ("moving_rejection", "moving_predecessor", "terminal", "recent")
                 if lineage["selection_role"] == "terminal":
-                    assert row["pre_tick"] == lineage["trigger_tick"]
+                    assert root_key[1] == lineage["trigger_tick"]
                 if lineage["selection_role"] == "moving_rejection":
-                    assert not rows[parents[key]]["check_valid"]
+                    assert not rows[parents[root_key]]["check_valid"]
                 if lineage["selection_role"] == "moving_predecessor":
                     assert selection == "moving_predecessors"
-                    assert rows[parents[key]]["check_valid"]
+                    assert rows[parents[root_key]]["check_valid"]
                     rejected_tick = lineage["predecessor_rejection_tick"]
-                    assert 0 < rejected_tick - row["pre_tick"] < report["collection"]["window"]
+                    assert 0 < rejected_tick - root_key[1] < report["collection"]["window"]
                     rejected_key = row["episode_uid"], rejected_tick
                     assert rejected_key in parents
                     assert not rows[parents[rejected_key]]["check_valid"]
-            branch_pairs.append((i + 5000, parents[key] + 5000))
             branches.append(row)
         assert row["delta_ticks"] == 1 and row["tick"] == row["pre_tick"] + 1
         assert row["bootstrap"] == (not (row["terminated"] or row["truncated"]))
@@ -103,12 +130,16 @@ def audit(directory, manifest):
             array = data[key]
             for branch, parent in branch_pairs:
                 np.testing.assert_array_equal(array[branch], array[parent])
+            next_array = data["next_" + key]
+            for branch, previous in successor_pairs:
+                np.testing.assert_array_equal(array[branch], next_array[previous])
         # ego.speed is field2 after the three task fields, normalized by30.
         if report["collection"].get("selection") in ("moving_rejections", "moving_predecessors"):
             obs = data["obs"]
             for i, row in enumerate(rows):
                 if row["lineage"].get("selection_role") in ("moving_rejection", "moving_predecessor"):
-                    assert obs[5000+i, 5] * 30 >= 0.1 - 1e-6
+                    root = (row["lineage"]["parent_episode_uid"], row["lineage"]["parent_tick"])
+                    assert obs[5000+parents[root], 5] * 30 >= 0.1 - 1e-6
                 if row["lineage"].get("selection_role") == "moving_predecessor":
                     rejected_key = row["episode_uid"], row["lineage"]["predecessor_rejection_tick"]
                     assert obs[5000+parents[rejected_key], 5] * 30 >= 0.1 - 1e-6
@@ -122,12 +153,13 @@ def audit(directory, manifest):
                 new_transitions=count, main_transitions=main_count, branch_transitions=len(branches),
                 branch_terminal_transitions=terminal_count, branch_bootstrap_transitions=len(branches)-terminal_count,
                 unique_train_scenes=len({r["scene_id"] for r in rows}),
-                branch_unique_parent_states=len({(r["episode_uid"],r["pre_tick"]) for r in branches}),
+                branch_unique_parent_states=len({(r["lineage"]["parent_episode_uid"],r["lineage"]["parent_tick"]) for r in branches}),
+                branch_continuation_transitions=len(successor_pairs), rollout_horizon=horizon,
                 main_provider_counts=dict(Counter(r["provider"] for r in rows if r["lineage"]["kind"]=="main")),
                 branch_provider_counts=dict(Counter(r["provider"] for r in branches)),
                 branch_rejections=sum(not r["check_valid"] for r in branches),
                 branch_outcomes=dict(Counter(r["terminal_reason"] or "NONTERMINAL" for r in branches)),
-                checks="One actual logged step per update; exact replay action/reward/termination/lineage; branch obs/masks equal actual parent; teacher0; all replay scenes and new scene/provider pairs in hash-verified train manifest.")
+                checks="One actual logged step per update; exact replay action/reward/termination/lineage; branch root obs/masks equal main parent; continuation obs/masks equal previous actual next state; teacher0; all replay scenes and new scene/provider pairs in hash-verified train manifest.")
 
 
 if __name__ == "__main__":
