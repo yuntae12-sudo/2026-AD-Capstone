@@ -2596,3 +2596,80 @@ branch Q→동일2train상태×4seed 실제종료return 검토가 남았고 exte
 이 시점에 두 arm 전체 비교나 Q/MC 검토를 완료했다고 주장하지 않는다. 그 결과 뒤에
 다음 조건을 결정하며 전체validation/새seed/별도평가/기본채택은 진행하지 않았다.
 문서 기준 HEAD `b7aec2e`, runtime c3fe6a7 유지. 안정정책 미확보·전체목표 active다.
+
+## 02:54 KST quota5,000 최종 Q/미래보상 검토와 extension 실행 전환
+
+첫 quota arm의 예정된 학습·저장·4주행·Q·coverage·실제 종료 MC와 독립 검토를 마쳤다.
+`quota/reviewed-status.json`은 REVIEWED_DRIVING_REGRESSION/qualified=false로 기록했다.
+이는 첫 arm의 근거 검토 완료이며 안정 정책이나 두 arm 전체 비교 완료가 아니다.
+
+고정된 초기 자기 경험의 terminal62행 중 severe44행 Q MAE는2,000회의0.742834에서
+5,000회의0.293067로 감소했다. 실제 고정 종료 상태에서 현재 평균을 실행한 KEEP65tick은
+Q−19.877012/reward−20.014/error+0.136988, FOLLOW72tick은Q−20.272860/
+reward−20.017/error−0.255860이며 둘 다 COLLISION/bootstrap=false였다.
+수집 branch 상태에서도 현재 평균의 terminal 오차는 KEEP28tick+0.308922/
+FOLLOW63tick+0.212333이다. `review_terminal_fits.py --arm quota`를 실제 실행해
+고정62행 정체성·raw 분기 행동/reward/terminal과 실제replay 인덱스를 대조했다.
+서로 다른 수집 모드의 분기 상태를 동일 상태라고 비교하지 않는다.
+
+그러나 같은 두 train 상태×4 paired seed88019~88022의 실제 종료까지 실행은8/8충돌이다.
+원래 Gaussian 후속 행동을 사용한 원본 trace의 SHA·첫 평균 행동 entropy 제외·gamma0.99·
+terminal/bootstrap·return 구성과 표본 통계를 `review_arm.py value`에서 대조·재계산했다.
+
+| 현재5,000회 | KEEP tick0 | FOLLOW tick4 |
+| --- | --- | --- |
+| 현재 평균 첫 행동 Q | -0.722204 | -0.437663 |
+| 실제 soft return 평균±표본SD | -14.123892±1.501068 | -11.909348±0.173563 |
+| Q−실제 평균 | 13.401688 | 11.471685 |
+| 이전2,000회의 Q−실제 평균 | 12.587732 | 10.367984 |
+| paired return 차이 평균±표본SD | -1.062866±0.702300 | -1.259763±1.070685 |
+
+각행동4개의paired차이가모두음수이며 주행 개선이 없다. 평균종료시점은KEEP5tick,
+FOLLOW5.25tick 빨라졌고, return 차이는 각각 종료보상 할인−0.622182/−0.557434,
+종료전보상+0.006949/−0.026679, entropy기여−0.447633/−0.675651로 구성된다.
+할인하지않은reward합차이는+0.026732/−0.007181이다. 이러한 작은 보상 성분 차이를
+개발0/4성공·4충돌이나8/8 MC충돌보다 우선하지 않는다. 소수 train 표본이며 독립 test가 아니다.
+
+uniform replay1,280,000draw도 원시배열/CSV와 저장 RNG를 독립 재현했다. severe
+terminal 추출은34,064회(warmup7,734/main2,729/branch23,601)이며 이전2,000은9,680회다.
+추가3,000update의768,000draw는 warmup455,945/main214,098/branch97,957이다.
+이 중 새로 수집한 severe186행(새main19+branch167)은7,302회추출됐고8행은한번도
+추출되지 않았다(main1/branch7). 새row는시간이늦게추가되어노출기회가다르며 표본횟수가
+충분한 상태/행동 coverage나 인과적 해결의 증거는 아니다. 실패 경험과 종료적합이 늘어도
+초기 미래비용과 실제주행은현재예산에서미달이라는범위로해석한다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/quota/`의
+`terminal-independent-review.json` SHA
+`fe34a5919eec5fbc69f38d0a907e063902df83c7d2eb81fbd97dc7b3406639a4`,
+`sampling-independent-review.json` SHA
+`e783e15a86f1d3a6736967b970cffbea61212101f1922d30c5b68868a865f5b9`,
+`value-independent-review.json` SHA
+`dd18b5b9759119d2ccabe29dd3b6688cbd50e443eb3e1dcf5740ecd9fd9fc344`,
+MC `soft-returns5000/report.json` SHA
+`1f9220052cb2f47c188b69a71a6abf09be8d7b53e03327c25c33545f6c94b7f3`.
+
+### 추가 CPU terminal 진단의 수치 대조 실패 — 별도 한계 보존
+
+초기warmup62행만으로새terminal행의적합을대표할수없어 저장된모든실제terminal행을
+CPU에서평가하는 `audit_all_terminal_values.py --arm quota`를추가했다. stored행동에만
+그행의실제reward를대응시키며 현재평균의반사실적reward로사용하지않는다. 환경/학습은0이다.
+
+첫시도는CPU와기존GPU Q의atol3e-5/rtol3e-5 대조에서실패하고exit1로종료했다.
+첫불일치절대차0.00010729이며 initial script/log/미완료디렉터리를보존했다. 허용치를넓혀
+통과처리하지않았다. 실제62행obs/field/item/raw_u입력을원본warmup과바이트대조하고,
+CPU에서도같은62배치로재계산해배치크기차이와플랫폼차이를분리해서기록했다.
+
+최종CPU계산에서원래엄격한기준은124개Q값중41개미달이다. 같은62배치CPU/GPU 최대차는
+0.004009247이며 CPU전체terminal배치와CPU62배치간최대차는1.907349e-6이다.
+가중치와입력동일성을확인했지만차이의구체적인연산/하드웨어원인을확정하지않았고,
+새online행의GPU차이는아직미측정이다. **CPU추가통계는잠정자료로보존하고 이번주행/
+가치판정의확정근거로채택하지않는다.** 현재GPU pipeline이끝난뒤같은GPU/62배치의
+기준재현과새terminal행검토를수행해야한다. 학습/물리검사 허용치는변경하지않았다.
+CPU추가 `all-terminal-values/report.json` SHA
+`a4847a981a44a0556844a1acaa003a04036743f67cfd699e6d55a0416cd7ec9a`.
+
+02:53:55KST 기존runner2510498은extension/train5000 child2532783으로전환했다.
+실제총2,004/추가4update·learner복원바이트동일을확인했고,독립검토2517850은
+extension/audit5000을기다린다. 첫MCchild2530380은정상종료했다. 고정source hash전부유지,
+두번째arm은원래정한같은조건/예산으로진행한다. 두arm결과를검토한뒤다음조건을결정한다.
+현재문서기준HEAD `4c0b1fe`,runtime c3fe6a7 유지·안정정책미확보·전체목표active다.
