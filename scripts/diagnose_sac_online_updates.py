@@ -21,6 +21,10 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument("--failure-branch-samples", type=int, default=0,
+                        help="Extra real current-policy steps per recent train failure state")
+    parser.add_argument("--failure-branch-window", type=int, default=6)
+
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")
     parser.add_argument(
@@ -49,6 +53,11 @@ def main():
         not math.isfinite(args.critic_action_gain) or args.critic_action_gain <= 0
     ):
         parser.error("critic action gain must be finite and positive")
+    from scripts.sac_failure_branches import FailureBranches
+    try:
+        FailureBranches(args.failure_branch_samples, args.failure_branch_window)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -157,12 +166,80 @@ def main():
         updates=0,
         budget=args.updates,
         note="Fresh learner; first 5000 old own-policy warmup only. Scene/policy RNG restart: a new diagnostic branch, not exact continuation. Each new transition is inserted before one update. Validation never enters replay. Mid-episode budget endings are not successful episodes.",
+        collection=dict(
+            mode="actual_failure_branches" if args.failure_branch_samples else "sequential",
+            samples=args.failure_branch_samples, window=args.failure_branch_window,
+            main_transitions=0, branch_transitions=0, branch_terminal_transitions=0,
+            branch_script_sha256=file_hash(Path(__file__).with_name("sac_failure_branches.py")),
+            fork_script_sha256=file_hash(Path(__file__).with_name("diagnose_sac_q_values.py")),
+            note="Uniform replay. Branches retain parent episode UID/tick; collection_id identifies independent actual steps. Branches are not full evaluation episodes. Nonterminal branch steps retain bootstrap; no artificial truncation.",
+        ),
         episodes=[],
         arms={},
     )
     args.output.mkdir(parents=True)
     candidates = selected_scenes(args.manifest, "train")
     rng = np.random.default_rng(seed)
+    def train_actual_step(environment, current_boundary, lineage):
+        nonlocal state
+        policy.actor = state.actor
+        before_updates = int(state.updates)
+        with jax.default_device(cpu):
+            step = collect_step(environment, current_boundary, proposer, replay)
+        result = step.result
+        if step.transition is None:
+            raise RuntimeError("invalid diagnostic transition; stop")
+        with jax.default_device(gpu):
+            state, metrics = update(state, replay.sample(256), replay.size)
+        kind = lineage["kind"]
+        report["collection"]["branch_transitions" if kind == "failure_branch" else "main_transitions"] += 1
+        if kind == "failure_branch":
+            report["collection"]["branch_terminal_transitions"] += int(result.terminated or result.truncated)
+        report["new_transitions"] += 1
+        report["updates"] = int(state.updates)
+        with (args.output / "ticks.jsonl").open("a") as stream:
+            stream.write(
+                json.dumps(
+                    dict(
+                        update=int(state.updates),
+                        scene_id=row["scene_id"],
+                        provider=row["provider"],
+                        tick=environment.tick,
+                        episode_uid=result.pre_token.episode_uid,
+                        pre_tick=result.pre_token.sim_tick,
+                        collection_id=report["new_transitions"],
+                        policy_updates_before=before_updates,
+                        lineage=lineage,
+                        raw_proposal=to_wire(result.raw_proposal),
+                        check_valid=result.check_result.valid,
+                        check_reason=result.check_result.reason,
+                        violations=list(result.check_result.violations),
+                        source=result.source.value,
+                        actual_control=to_wire(result.actual_control),
+                        reward=step.reward.training,
+                        bootstrap=step.transition.bootstrap,
+                        delta_ticks=step.transition.delta_ticks,
+                        terminal_reason=result.terminal_reason.value if result.terminal_reason else None,
+                        terminated=result.terminated,
+                        truncated=result.truncated,
+                    ),
+                    allow_nan=False,
+                )
+                + "\n"
+            )
+        with (args.output / "updates.jsonl").open("a") as stream:
+            stream.write(
+                json.dumps(
+                    dict(
+                        update=int(state.updates),
+                        **{k: float(v) for k, v in metrics.items()},
+                    ),
+                    allow_nan=False,
+                )
+                + "\n"
+            )
+        return step
+
     try:
         while int(state.updates) < args.updates:
             for index in rng.permutation(len(candidates)):
@@ -184,60 +261,35 @@ def main():
                     reasons={},
                 )
                 report["episodes"].append(episode)
+                branches = FailureBranches(args.failure_branch_samples, args.failure_branch_window)
                 while int(state.updates) < args.updates:
-                    policy.actor = state.actor
                     with jax.default_device(cpu):
-                        step = collect_step(env, boundary, proposer, replay)
+                        branches.remember(env, boundary)
+                    step = train_actual_step(env, boundary, dict(kind="main"))
                     boundary = step.boundary
                     result = step.result
-                    if step.transition is None:
-                        raise RuntimeError("invalid diagnostic transition; stop")
-                    with jax.default_device(gpu):
-                        state, metrics = update(state, replay.sample(256), replay.size)
                     episode["ticks"] += 1
                     episode["accepted"] += int(result.check_result.valid)
                     episode["return_training"] += step.reward.training
                     reason = result.check_result.reason
                     episode["reasons"][reason] = episode["reasons"].get(reason, 0) + 1
-                    report["new_transitions"] += 1
-                    report["updates"] = int(state.updates)
-                    with (args.output / "ticks.jsonl").open("a") as stream:
-                        stream.write(
-                            json.dumps(
-                                dict(
-                                    update=int(state.updates),
-                                    scene_id=row["scene_id"],
-                                    provider=row["provider"],
-                                    tick=env.tick,
-                                    raw_proposal=to_wire(result.raw_proposal),
-                                    check_valid=result.check_result.valid,
-                                    check_reason=reason,
-                                    violations=list(result.check_result.violations),
-                                    source=result.source.value,
-                                    actual_control=to_wire(result.actual_control),
-                                    reward=step.reward.training,
-                                    terminated=result.terminated,
-                                    truncated=result.truncated,
-                                ),
-                                allow_nan=False,
-                            )
-                            + "\n"
-                        )
-                    with (args.output / "updates.jsonl").open("a") as stream:
-                        stream.write(
-                            json.dumps(
-                                dict(
-                                    update=int(state.updates),
-                                    **{k: float(v) for k, v in metrics.items()},
-                                ),
-                                allow_nan=False,
-                            )
-                            + "\n"
-                        )
                     if result.terminated or result.truncated:
                         episode["outcome"] = result.terminal_reason.value
                     write_report(args.output / "report.json", report)
                     if result.terminated or result.truncated:
+                        # The main trajectory is finished. Branches are extra actual
+                        # off-policy train experience, never invented full episodes.
+                        with jax.default_device(cpu):
+                            parent_token = env.token
+                            from scripts.diagnose_sac_q_values import observation_fingerprint
+                            parent_observation = observation_fingerprint(env._boundary().sac_observation)
+                            for branch_env, branch_boundary, lineage in branches.generate(result):
+                                if int(state.updates) >= args.updates:
+                                    break
+                                train_actual_step(branch_env, branch_boundary, lineage)
+                                write_report(args.output / "report.json", report)
+                            if env.token != parent_token or observation_fingerprint(env._boundary().sac_observation) != parent_observation:
+                                raise RuntimeError("branch changed parent environment")
                         break
                 if episode["outcome"] == "IN_PROGRESS":
                     episode["outcome"] = "DIAGNOSTIC_BUDGET"
