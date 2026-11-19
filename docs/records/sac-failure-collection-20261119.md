@@ -2942,3 +2942,62 @@ runner SHA `ce102fa1e5b933a92c11588944df0e8bbc4c57d27ba5913fb7a10aaaf9bd114a`.
 04:12:03 runner2560409 생존·train child2560430 시작 기록과RUNNING/train1000을 확인했다.
 source snapshot/hash/정확한 명령은decision.json·status.json·sources/에 보존한다.
 기준 HEAD35dd60e에서 이번 진단CLI·테스트·문서 수정은 미커밋이며 실제 학습 성능은 아직 미검증이다.
+
+
+## 04:33 KST fresh1,000회 수집 완료와 실제 학습 노출 검토
+
+저속 평균 g 분리 후보는 새 전이/업데이트1,000회와 저장을 완료했다.
+완료 학습 모델 SHA `9cdced951a997905c32ab8ea18c7b9da9866b27c81e8f8de23da06728bd6883c`,
+report SHA `2094681254b5f02287baea6f92212a35b4d47e777355b9904ea1c8d599394697`,
+replay SHA `792420fef4bb6052c52b158772609bc51338aa9236f99ad65635bef0534a86cf`.
+같은 seed0/자기warmup5,000/BC·teacher0/보상·검사·PD·원래Gaussian 조건을 유지했다.
+실제 train9장면에서 main712/branch288전이, branch36개 시작상태×8step과 실제충돌48개를
+수집했다. 기존 auditor는 전이·행동·보상·종료·부모/연속 관측·train manifest를 대조해
+통과했고, warmup17배열5,000행 byte-prefix도 동일했다. 학습 완료는 정책 성능 입증이 아니다.
+
+별도 CPU 검토 `review_fresh_sampling.py`에서 매 삽입 후 uniform256 추출을 다른
+NumPy index 연산으로 재현하고 최종 saved RNG와 전이별 scene/pre_tick/reward/bootstrap을
+대조했다. 두 fresh1,000의 총256,000draw 중 warmup233,361/new22,639는 동일하지만,
+각 시점에 실제 수집한 경험은 서로 다르다. 기존 continuation 전용 검토기를 잘못 재사용하지 않았다.
+
+| 실제 경험·추출 | 기존 entropy 평균1,000 | raw 평균 후보1,000 |
+| --- | ---: | ---: |
+| main 행 / branch 행 | 664 / 336 | 712 / 288 |
+| main 추출 / branch 추출 | 13,409 / 9,230 | 13,909 / 8,730 |
+| main severe 종료 / branch severe 종료 | 7 / 66 | 6 / 48 |
+| main severe 추출 / branch severe 추출 | 220 / 1,488 | 190 / 1,416 |
+| branch severe 미추출 행 | 2 | 0 |
+| 새 경험의 step 전 정지(<0.1m/s) | 464/1,000 | 440/1,000 |
+
+두 모델 모두 기존warmup severe44행은2,018회 추출됐다. 새 경험 노출은 전체추출의
+8.84%이며 warmup 비중91.16%다. 이는 현재1,000회 uniform replay의 계산 결과이며
+경험 재가중을 시행하거나 수집비율만으로 주행 개선을 주장하지 않는다.
+독립검토의 첫 시도는 replay의 행동 전 tick을 trace의 행동 후 tick과 비교해 실패했다.
+기존 auditor와 필드를 대조해 pre_tick으로 검토기만 수정하고 다시 실행해 통과했다.
+첫 실패와 원본 script는 `fresh-sampling-initial-review-failure.json`에 보존했다.
+실제 replay/학습 코드/검사 허용치는 바꾸지 않았다.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/fresh-sampling-review.json` SHA
+`af0f42011fb8bfadb866e367c4e502177161afbee6c6fdfeb470c7cdc217f1e6`.
+04:32:45 실제 evaluation child2567386 생존·주행평가3/4완료를 확인했다.
+완료한3주행은 모두충돌이며 나머지1주행, 별도정지출발 비교, Q/coverage/MC가 남아 있다.
+고정 source hash 변경0. 기준 HEAD556fc3d에서 이번 로컬검토·문서만 추가했으며,
+성능 미달 후보 채택/전체validation 확대/새seed 실행은 하지 않았다. 전체목표는 active다.
+
+
+### 04:34 KST 기존 평가4주행 완료: 기존 두 성공을 잃음
+
+같은2개 개발 장면×KEEP/FOLLOW4주행의 초기frame/map/seed를 기준1,000·후보·mean0와
+대조한 독립 검토가 완료됐다. 후보는0/4성공·4충돌이고 기준1,000은2/4성공·2충돌이다.
+양쪽총236tick에서 거절44→92(18.64→38.98%), 제동36→84(15.25→35.59%),
+step후정지12→30(5.08→12.71%), 평균return-9.981233→-20.225907로 악화됐다.
+후보KEEP/FOLLOW는 각각0/2성공·2충돌이며, 원본상4회 모두정지중뒤쪽차량접촉이다.
+접촉기하만으로 단독 과실을 판정하지 않는다. 수집·노출 개선과 실제주행 개선을 구분한다.
+
+이 예산의 후보를 채택하거나 전체validation/다른seed로 확대하지 않는다.
+평균g제거가 저속이동에 미치는 영향은 사전지정 정지출발cohort와 Q/MC 검토가 남아 있어
+아직 별도로 판단하지 않는다. 04:34:09 runner2560409와 stopped-baseline child2568843의
+실제 생존, RUNNING/stopped-baseline을 확인했다. 기존 학습·고정설정 변경0.
+
+독립 frame 검토 SHA `d3ccd2c4065b6f7aabccc851df257b59ca11d8b8e1484f828aeafeb0441a2c4a`,
+평가 report SHA `0ce4f29b1d3e9b421a66f415c1a8d64b15af615009f0cd7437ff52331eb30ab0`.
