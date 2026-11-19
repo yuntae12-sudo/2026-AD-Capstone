@@ -1545,3 +1545,69 @@ sigma단위 RMS 중앙값은 전체0.6724/정지0.9862/이동하며 양의보상
 runner2414683의12상태 Q/TD목표 비교, 그 뒤 자료 확장2419579가 대기한다.3,000이후 학습·
 새seed·채택은 시작하지 않았다. 기존 실패를 보존하고 실제 미래 비용과 국소 TD목표 결과를
 대조해 다음 보완을 정한다. 안정적인 정책 목표는 계속 active다.
+## 23:23 KST 후속 3,000회 미래 비용 검토 완료와 현재 정책 경로 진단 준비
+
+실행 코드 `90c15a4`, 브랜치 `feature/yuntae-sac-training`, 기록 직전 HEAD
+`41b072839fe40317fc44efa92bf654304d25fe59`다. 보상·검사·PD·원래 Gaussian·BC/teacher 0·
+uniform replay·실제 전이당 1 update를 유지했고, 총3,000회 이후 학습은 추가하지 않았다.
+3,000 후보의 개발6주행은 이미 목표0/6·충돌6/6으로 미채택이다.
+
+같은 두 train 상태에서 현재 평균 첫 행동을 실행한 뒤 원래 확률 정책으로 실제 종료까지
+진행한 4개 seed(88019~88022) 검사를 완료했다. 독립 test가 아니고 반복은 고유 장면 수가 아니다.
+
+| 상태 | 현재 첫 행동 Q | 실제 soft return 평균 ± 표본 SD | Q−평균 |
+| --- | --- | --- | --- |
+| KEEP, 77ae312df21e80b9 tick0 | -0.714215 | -12.760066 ± 2.507637 | 12.045851 |
+| FOLLOW, baac7893b025167a tick4 | -0.385449 | -10.654902 ± 0.529056 | 10.269454 |
+
+8회 모두 충돌했다. 2,000 후보 대비 paired return 차이는 KEEP 평균+0.300960이지만
+4쌍 중3쌍은 악화했고 한 쌍의+1.540899가 평균을 올렸다. FOLLOW 평균 차이는-0.005318이다.
+소표본 실제 return을 정확한 기대 Q나 주행 개선으로 주장하지 않는다.
+
+과거 경로의12고정 상태에서 1,000/2,000/3,000 모델을 대조한 검사도 완료했다.
+3,000 KEEP tick0의 저장 행동 Q/TD목표는-0.808517/-0.476721,
+online−target 다음 soft value는-0.197494다. FOLLOW tick0은-0.846657/-0.326707,
+차이-0.110853이다. FOLLOW의 이 tick0과 위 MC tick4는 다른 상태다.
+현재 Q와 target Q가 모두 초반 미래 비용에 낙관적이므로 target 갱신 지연만으로 설명하지 않는다.
+저장 행동의 보상을 현재 평균 행동에 잘못 붙이지 않는다.
+
+`outputs/sac_failure_rollout_quota3000_20261119/review_value3000.py`를 실제 실행해 통과했다.
+8개 실제 trace hash, 첫 행동/관측/seed, 엔트로피 제외·할인, 실제 종료, profile12상태의
+계산 항등식과 terminal 반례를 재계산했다. 로컬 원본/검토 SHA:
+
+- `soft-returns3000/report.json`: `9dadda2d21e119f5c8361847b046df4ade64b2b7fb62b1c1c90623caa5777de3`
+- `saved-bellman-chain.json`: `770b185610eba2db2d0bff90936c70341665d6af70636ffd65195c44e6076d81`
+- `value3000-review.json`: `d50e168348cbbf48e18c381c6c80bb8da19a73230002e2c027a6745f05a52fe9`
+
+다음 원인 분리는 **현재 정책의 실제 동일 주행에서 매 시점의 행동 Q·즉시 보상·다음 가치·
+남은 실제 return을 함께 추적**한다. 기존 MC의 사전 지정 첫 seed88019, 두 train 상태를
+그대로 재현하며 trace 바이트 일치를 요구한다. 각 상태의 다음 원래 Gaussian32표본
+(99019~99050)을 online/target에 공통 사용한다. 매 suffix에서 현재 행동 엔트로피를 제외하고
+미래 엔트로피만 포함한다. 한 실제 suffix는 정확한 조건부 기대값이 아니며, 평균 행동 Q는
+별도 기술 통계다. 진단 관측 snapshot은 학습 replay에 넣지 않는다.
+
+로컬 `outputs/sac_current_policy_credit_20261119/`에 진단기4개를 구현·구문 검사했다.
+`return-arithmetic-review.json`은 기존8trace의442suffix를 독립 forward sum과 대조했고
+최대 차이1.42e-14로 통과했다. CPU 합성1/2상태 검사도 종료 bootstrap0, 다음 Gaussian
+엔트로피 목표, 현재 엔트로피 제외, learner 배열 불변을 확인했다. 최초 합성 실행은 두
+profile 파일만 남고 완료 review/복구 가능한 stderr가 없어 전체 통과로 취급하지 않았다.
+별도 `review_synthetic_profile.py`를 실행하여 기존 산출물과 결과를 대조하고 exit0을 확인했다.
+`synthetic-review/review.json`은 합성 수치 검증이며 실제 주행 성능이 아니다.
+
+runner2435604는23:15:02 KST에 시작해 자료 확장 종료를 기다리는 `WAIT_RAW_INVENTORY`다.
+23:22:37에 실제 PID와 WAITING 상태를 확인했다. 이 경로 진단의 실제 환경 실행은 아직
+미실행이다. 추가 학습·새 seed·기본 채택은 결정하지 않았다. 진단/실행 소스와 모델을 동결했다.
+
+자료 확장에서는 추가800raw 파일·56,375record를 실제 읽어 전체1,000source의
+70,541고유 scene·프로젝트 hash-test7,040후보를 확정했다. `review_metadata.py`를 실제
+실행해 metadata hash, raw 파일 fingerprint, split·고정 hash 순서·기존1,417후보 포함·
+개발 manifest와 ID/group/raw hash 불중복을 대조했다. 중복 scene0, 정책 실행0이다.
+이 재검토는 raw 전체를 다시 읽은 검사가 아니며 적격/성능은 metadata에서 추론하지 않는다.
+order SHA `c3b1aaf25a909afb415ca7db95886007b0056d02f2520cc9e7715c63f00b3dfc`.
+
+23:22:37 현재 runner2419579/child2437167의 실제 reset 검사는3,750/7,040후보,
+고유13장면·24provider쌍 통과이며 진행 중이다. 장면별 양쪽 행동 통과 여부가 다를 수 있다.
+32장면 확보를 선언하지 않는다. 완료 후 전체 제외/오류/원본 cache hash와 manifest를
+`outputs/sac_heldout_expansion_20261119/review_reset_inventory.py`로 재검토한다(현재 미실행).
+공식 training의 프로젝트 hash-test이며 공식 Waymo test와 다르다. drive/시간구간 독립성은
+미확인이고 기존 개발 데이터·학습 loader는 변경하지 않았다.
