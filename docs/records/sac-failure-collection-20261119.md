@@ -3786,3 +3786,68 @@ restart-terminal·uniform replay50k·원래 Gaussian·SAC 목적함수/lr/tau·B
 검토 순서는 실제 저장/audit/자기 warmup17배열prefix→두 주행 cohort→Q/coverage/실제branchQ
 →같은2train상태×4seedMC다. 초기1000의 실패만으로 장기 수렴 불가능을 단정하지 않지만
 진행 중 조건이나 예산을 바꾸지 않고 완료 결과를 검토한다. 새 PR·merge는 하지 않는다.
+
+## 2026-11-20 08:46 KST — 고정밀 B 1,000회 학습·두 주행 cohort 완료
+
+실행 코드 c4babca·core96fa1d6, 고정32소스 유지. 로컬
+`outputs/sac_mean_basis_f64_20261120/`의 train1000/audit1000은 정상 종료했다.
+실제 새 전이/update1,000, train10고유장면·teacher0, 기존 자기 warmup5,000행17배열
+바이트 동일성을 확인했다. 모델 SHA
+`904ca431f8f383e8e2fdaae89543c37abe03ed2f7b4131724e83c1d2f6a5babe`,
+replay6,000행 SHA `649325520266255e318cdf34af62764bd8a371c8f6bd33b21870857b16cdf1ff`,
+report SHA `5f0cde10d7a587d090e0c6fa3d8cfc6b688caab4eff5624d8537f3532ac8db9f`.
+
+### 같은 기존4주행은 회복됐지만 새 성공은 미확인
+
+초기frame/map/seed와 원본 frame/hash를 독립 대조한 결과다.
+
+| 지표 | default raw1,000 | float64 B raw1,000 |
+| --- | ---: | ---: |
+| 목표 / 충돌 | 0/4 / 4/4 | 2/4 / 2/4 |
+| 전체 tick | 236 | 236 |
+| 거절 | 92 (38.98%) | 44 (18.64%) |
+| 제동 | 84 (35.59%) | 36 (15.25%) |
+| 정지 | 30 (12.71%) | 12 (5.08%) |
+| 평균 return | -20.225907 | -9.981245 |
+
+8b4c1e7e09f5f4c3의 KEEP/FOLLOW는 각각72틱 ROUTE_GOAL, 다른 장면
+8a4fba3463c6c62d의 KEEP/FOLLOW는 각각46틱 COLLISION이다. 초기 mean0도 같은
+성공2/4였으므로 새 성공을 얻었다고 쓰지 않는다. mean0 참고는216틱·거절58·제동46·
+정지22로, 현재 후보의 해당 비중은 줄었지만 전체 안정 주행의 증명은 아니다.
+주행 검토 SHA `8e677c31acc554f922016ff907201ec8a378a1c1d7aafd2cadb221710a1ec548`.
+
+### 정지4주행은 모두 실패하며 거절·제동 증가
+
+같은2정지장면×KEEP/FOLLOW에서 두 모델 모두0성공·4충돌,328/328틱 정지다.
+거절124→146틱(37.80→44.51%), 제동98→108틱(29.88→32.93%), 평균return
+-20.540071→-20.595124로 악화됐다. 후보의 최대 위치 변위는 각 주행2.25~3.88mm,
+최대 속도는0.00142~0.00145m/s였다. 미세한 움직임이나 부분 경로 수락을 출발 성공으로
+세지 않는다. 모두 정지 중 뒤쪽 차량과 접촉했으며 과실 판정이 아니다.
+정지 검토 SHA `2c08ffb0fea6455098d26aaec6303da3e436ed824a0e8529bd27272f722a1e66`.
+
+### 수집·실제 학습 노출
+
+main616/branch384이며 branch48개 root에서 각각8step을 실행했다. 분기 후속상태272개,
+실제 종료74개·bootstrap310개, main은8충돌/1기록끝/1예산경계다. 기록끝과 예산경계를
+목표 성공으로 세지 않는다. 원래raw1,000 main712/branch288과는 방문 상태가 다르다.
+현재 main 수락270/정지354, branch 수락104/정지124로 합계수락374/정지478이다.
+
+uniform replay RNG를 재구성해 전체256,000추출 중 warmup233,361·main12,527·
+branch10,112를 확인했다. warmup severe44개는2,018회, 새 main severe8개는216회,
+branch severe74개는1,619회 추출됐고 branch severe5행은 아직 미추출이었다.
+이 노출량은 현재 행동 Q 적합이나 정책 성능의 충분성을 뜻하지 않는다.
+fresh sampling 검토 SHA `956607f5ab95cee15fa87740979793089e1e382147f170741c2ee7240329fad4`.
+
+과거raw1,000을 이용한 검토기 사전검증에서는 수치·원본hash를 재현했다. 첫 전체dict
+비교는 상대/절대 경로 문자열 차이로 실패했고 resolve한 파일과 hash가 같음을 확인했다.
+숫자나 허용치를 바꾸지 않았으며 실패/정정은 sampling-preflight-review.json에 보존했다.
+최종 검토기의11개 job 목록과 실행 중 거절 검사를 확인했다. 후보 최종 검토는 미실행이다.
+
+08:45:23 runner2656472/q1000 child2667013 실제 생존, Q→coverage→실제branchQ→
+같은2train상태×4seedMC가 진행 중이다. 전부 끝나면 같은 저장 관측에서 실제 Policy
+batch1과 진단 batch100/256의 수치 일치도 추가 확인한다. 이는 아직 검증하지 않은
+가설이며 현재 분포 차이를 batch 문제라고 단정하지 않는다. 해당 읽기 전용 도구의
+구문/active-run 차단 검사만 통과했고 NN/환경 실행은0이다.
+후속 검토기 준비 SHA `0489e3b556b82588ea18b93def0e444fede06fc7c2608efa0cfcef8ddf454436`.
+**안정 정책 미확보·기본 미채택**을 유지하며, 다음 예산/손실/수집 변경이나 평가 확대는
+남은 실제 결과를 검토한 뒤 결정한다. 현재 실행의 source/runner/decision은 바꾸지 않는다.
