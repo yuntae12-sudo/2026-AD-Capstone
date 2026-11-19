@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--failure-branch-samples", type=int, default=0,
                         help="Extra real current-policy steps per recent train failure state")
     parser.add_argument("--failure-branch-window", type=int, default=6)
-    parser.add_argument("--failure-branch-selection", choices=("recent", "moving_rejections"), default="recent")
+    parser.add_argument("--failure-branch-selection", choices=("recent", "moving_rejections", "moving_predecessors"), default="recent")
 
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")

@@ -410,3 +410,157 @@ nonterminal40, 고유 train2장면·6분기 상태이며 teacher0·원본 관측
 `f87351f5453ed9b1f993da5e1bff8e0d5b786d71dd9df0ff356c4893754d1ea6`.
 factory/helper 합성 SHA `6e9bb1e31c01f1e8b9ea7b118d07329ef6bf798628a70a3f2ddc539df3882fc1`.
 core SHA는96fa1d…로 그대로다. 현재 고정4주행 평가 중이며 성능 개선은 아직 미확정이다.
+
+## 17:58 KST physical100회 평가 실패와 동일 예산 진단 결정
+
+첫100회 평가도 **목표0/4·충돌4/4**였다. 총228tick·거절110·제동98·정지46,
+평균 보상-20.26424405. 빠른 장면78tick씩, 느린 장면36tick씩 충돌했다.
+`trial.json`은 COMPLETE_WITH_REGRESSION/STOPPED_AFTER_100으로 끝났고 프로세스 종료를
+확인했다. 코드 보존 commit `dc0fd000e68e32b27507d91ffa7723f92aa6df70`(push 확인).
+위 실행은 기준2fb3e4c의 미커밋 변경으로 시작했으며 보존된 코드는 같은 내용이다.
+
+고정 충돌2상태의 저장/평균 과대평가는18.281221/18.281210,18.332859/18.332913이었다.
+행동 간 차이는 작지만 두 값 모두 실제 terminal 보상과 멀다. 이후 같은100회 시점의
+기존 moving과 새 physical 모델을 같은 원본 terminal62관측에서 읽기 전용 비교했다.
+`matched100-fit.json` COMPLETE; `--reproduce-count 0`으로 새 rollout은 하지 않았다.
+severe44개 저장 행동 MAE18.463951/18.372970으로 양쪽 모두 아직 크다. 고정 두 관측의
+기존 stored/mean Q 간격은0.105260/0.156643, 새 후보는-0.000011/0.000054다.
+이 간격 감소만으로 Q 정확도나 주행 개선을 주장하지 않는다.
+
+100회 비용 gate 실패를 보존한 채, 기존 대조군과 같은 fresh1,000회 예산으로 Q 적합·
+새 행동 일반화·주행을 비교하는 제한 진단을 별도로 시작했다. 100회 결과를 통과로
+변경하거나 본 실험으로 확대하는 것이 아니다. 동일 설정의 반복 실험에서 양쪽 Q가
+아직 적합하지 못한 시점만으로 좌표 가설을 판정하지 않기 위한 결정이다.
+`reviewed1000-status.json`에 이유·원본 실패/비교 보고서 hash·실행 명령·소스 hash를
+기록했다. 실행기 PID2286883, 학습 PID2286884이며 코드 dc0fd00을 사용한다.
+추가 자동 연장은 없다. 학습→저장→고정4주행→고정Q→coverage→새 분기Q→수치 진단 후
+검토하며 평가 최초 프레임/지도/seed도 이전 대조와 대조한다. 현재 성능 결과는 미확정이다.
+
+## 18:17 KST 기존 고속 KEEP 주행의 실패 순서 재분석
+
+새 rollout 없이 같은 개발 장면 `8b4c1e7e09f5f4c3`의 고정 KEEP 기록을 비교했다.
+초기 평균0·physical100·moving1000·moving2000의 최초 frame/지도/seed/versions가 같음을
+확인했다. 서로 다른 정책의 같은 한 장면이므로 독립 장면4개로 집계하지 않는다.
+3회 연속 거절이 시작되는 tick → 첫 BRAKE → 실제 정지 → 종료 순서는 다음과 같다.
+
+| 정책 | 연속 거절 시작 | 첫 BRAKE | 속도<0.1m/s | 종료 |
+| --- | ---: | ---: | ---: | --- |
+| 초기 평균0 | 63 | 65 | 없음 | 72 ROUTE_GOAL |
+| physical100 | 44 | 46 | 68 | 78 COLLISION |
+| moving1000 | 20 | 22 | 45 | 47 COLLISION |
+| moving2000 | 21 | 23 | 45 | 47 COLLISION |
+
+세 학습 정책은 모두 정지 후 차량4877과 충돌했다. 충돌 frame에서 그 차량의 중심은
+자차 진행 방향으로 각각 -4.678/-5.257/-5.297m 뒤쪽, 횡방향 -0.186/-0.330/-0.329m였고,
+자차 속도0, 상대 속도7.342/9.912/9.912m/s였다. 로그대로 움직이는 주변 차량과의
+후방 접촉이라는 근거이며 환경 전체의 사고 원인을 일반화한 결론은 아니다.
+physical100의 첫 연속 거절 tick44에서 초기 평균0 주행 대비 실제 XY 차이는1.24cm,
+제안한 미래 경로의 최대 XY 차이는5.53cm였다. moving1000의 tick20은 각각1.20cm/16.23cm다.
+정책별 이후 방문 상태가 다르므로 이 차이를 동일 상태의 행동 인과 효과로 취급하지 않는다.
+검사·PD를 낮추거나 바꾸지 않고, 거절 이전 상태의 자기 경험 확보 가능성을 조사한다.
+
+로컬 `outputs/sac_physical_q_20261119/analyze_failure_timeline.py`로 재분석했고
+`failure-timeline.json`에 원본 보고서/rollout hash·차량 위치·시계열을 저장했다.
+`failure-timeline.png`를 실제로 열어 확인했다. 아래 두 패널은 작은 초기 차이를 보려는
+축 확대이며 전체 거리 범위를 뜻하지 않는다. 기준 코드dc0fd00 이후 분석 스크립트는
+로컬 산출물, 이 문서 변경은 미커밋이다.
+
+현재 physical1000 학습/저장 감사는 완료했다. 후속4주행/Q/coverage/분기Q/수치 진단은
+아직 실행 중이다. 종료 뒤 같은4주행의 초기 frame/지도/seed를 다시 확인하고,
+최초 이동 거절 상태와 바로 이전에 통과했던 상태에서 현재 평균·32표본을 실제 실행하는
+읽기 전용 검사를 예약했다. 상태는 결과/Q/Rule-based를 보기 전에 고정하며,
+Rule-based 참조는 학습/replay에 넣지 않는다. 학습 수집 방식은 아직 바꾸지 않았다.
+실행기 `run_predecessor_probe.py` PID2294028, 상태 `predecessor-probe-status.json`,
+분석 `diagnose_predecessor_actions.py`, 결과 예정 `predecessor-actions1000.json`이다.
+
+## 18:35 KST physical1,000회 후속 검증 완료와 수집 위치 비교
+
+코드 dc0fd00의 physical1,000회 파이프라인과 후속 predecessor probe는 모두
+`COMPLETE_PENDING_REVIEW`로 종료됐다. 지정 프로세스의 실제 종료를 확인했고, 현재 모델의
+성능을 달성/채택으로 바꾸지 않는다. 모델 SHA
+`1c1dcc8443a6fa245a17170f53c727ebdc46145af0d2795eae218e39ebbbd7c9`, replay SHA
+`e438109b34666174c6201b471a7d98651d9c20f70bf2321f9b2b899faf33d425`.
+
+실제 main664/branch336, 고유 train10장면·분기 원본42상태, 분기 통과38/336·실제 종료56·
+nonterminal280이다. 저장 감사에서 원본 raw/보상/관측/mask/종료·teacher0·전이당 update1을
+확인했다. 고정4주행은 **목표0/4·충돌4/4**,276tick·거절104(37.68%)·제동96(34.78%)·
+정지44(15.94%), 평균 보상-20.23615458이다. 빠른 장면92tick씩, 저속46tick씩 충돌했다.
+초기 frame/지도/seed/versions도 기존 고정 대조와 네 쌍 모두 같았다. 더 늦게 충돌하거나
+tick 비율이 낮아진 것을 목표 성공으로 취급하지 않는다.
+
+기존 고정 두 충돌 상태에서 현재 평균 행동의 실제 과대평가는6.143699/4.173077이다.
+같은1,000회 moving 대조의13.601100/15.133336보다 작지만 아직 크다. 저장 행동의 오차는
+6.129748/4.166669로 현재 평균과 비슷하다. 원본 severe44개 저장 행동 MAE는5.082724로
+대조의1.184733보다 나빠져, 저장 적합과 새 행동 일반화를 함께 판단해야 한다.
+새 수집 첫 terminal2상태(KEEP77ae… tick28/FOLLOWbaac… tick63)의12실제 분기는 모두
+충돌했다. 저장/평균 오차는3.011593/3.018532와4.677645/4.656944,
+새4표본 범위는3.013680~3.025696와4.639962~4.671277이었다.
+FOLLOW의 원본 상태 tick은 기존 moving의68과 다르므로 동일 상태 인과 비교가 아니다.
+
+coverage는256,000 batch 추출 중 warmup233,361·main13,409·branch9,230을 실제 replay RNG로
+검증했다. 마지막 수집 분기4개는 아직 batch에서 추출되지 않았다. 분기 정지112/336,
+최종 정책95% Gaussian 영역 포함313/336이다. 원본 warmup의 높은 비중은 계속 남는다.
+고정 nonterminal20상태×2key 수치 대조에서 default fused/분리 target 최대차이는
+4.95e-10이었다. precision 변경을 채택하지 않았다. 실제 수치는 `numerics1000.json`에 있다.
+초기 평균0과 physical1,000의 빠른 KEEP 실제 기록을 기존 renderer로 다시 그려
+`review/fast.gif`(32frame,1440×900,실시간9.2초+종료1.5초 hold)를 저장하고 PNG를 열어
+확인했다. 이는 Rule-based 비교가 아니며 새 주행을 추가 집계하지 않는다.
+
+### 읽기 전용: 거절 상태와 직전 통과 상태
+
+현재 physical1,000 모델을 고정하고 각 provider의 첫 실패 episode에서 첫 이동 거절 상태와
+바로 전 통과 상태를 결과/Q/참조 생성 전에 골랐다. 동일 Gaussian seed77119의32표본을
+각 상태에서 실제 실행했다. 평균·raw0·저장 행동·Rule-based 참조까지4상태×36=144실제
+1step을 실행했고 모델/replay hash 불변을 확인했다. 모두 nonterminal이며1step 보상을
+정확한 Q target으로 간주하지 않는다. 참조는 학습/replay에 넣지 않았다.
+
+| train 장면·행동 | 원본 tick | 현재32표본 통과 | 현재 평균 통과 | 표본 다음 관측 고유 수 |
+| --- | ---: | ---: | --- | ---: |
+| 77ae312df21e80b9 KEEP 거절 상태 | 1 | 0/32 | 아니오 | 1 |
+| 같은 KEEP 직전 통과 상태 | 0 | 32/32 | 예 | 32 |
+| baac7893b025167a FOLLOW 거절 상태 | 5 | 9/32 | 아니오 | 10 |
+| 같은 FOLLOW 직전 통과 상태 | 4 | 16/32 | 예 | 17 |
+
+고유 train2장면의 paired4상태이며, 전체 주행 성공이나 다른 장면 일반화의 증거는 아니다.
+다만 같은 현재 정책으로 거절 이전 상태에서 다양한 실제 유효 경험을 얻을 수 있음을
+보였다. `predecessor-actions1000.json`/`predecessor-actions1000-summary.json`,
+`predecessor-probe-status.json`에 선택 상태·행동·실제 결과·명령·해시가 있다.
+
+## 18:35 KST 다음 제한 비교: 통과했던 이동 상태를 우선 포함
+
+기준 HEAD dc0fd00 이후 미커밋 변경으로 `moving_predecessors` 선택 옵션을 추가했다.
+`FailureBranches.after_step`에서 실제 이동 거절이 발생하면 그 직전5tick 안에서
+통과했던 이동 상태를 가까운 순서로 최대5개 보존한다. 최종 실제 실패 직전1상태는
+유지한다. 부족하면 기존 최초 이동 거절 상태, 최근 상태로 채워 고유 최대6상태×8표본을
+유지한다. 동일 상태의 중복 슬롯을 만들지 않으며 전체1,000전이 예산을 공유한다.
+
+**수집 분포만 바꾸는 별도 진단**이다. 실제 COLLISION/OFFROAD 뒤에만 분기를 실행하고,
+분기에서는 당시 최신 정책의 원래 Gaussian 행동을 실제 collector로 실행해 결과 전부를
+저장한다. 새 분기의 통과 결과를 보고 좋은 행동만 골라 replay에 넣지 않는다.
+branch nonterminal의 bootstrap은 유지하며 부모 UID/tick·PD memory·관측을 보존한다.
+전이당 update1·uniform replay·BC/teacher0·보상·검사·PD·sigma·physical Q는 동일하다.
+`predecessor_rejection_tick`으로 어떤 실제 후속 거절 때문에 선택됐는지 기록하고 감사한다.
+
+관련25pytest 통과. 새3검사는 유효 이동 이력·실제 최종 실패 상태·동일 최대 예산,
+중복 없는 fallback, 정지/오래된 상태 제외와 window1 경계를 확인했다. 첫 실행은
+fixture가 두 번째 최초 거절 tick3을 tick5로 잘못 기대해24통과/1실패였고, 실제 이력을
+대조해 기대값을 수정한 뒤25통과했다. 기존 두 선택 모드도 기록된7실패 episode의
+main 판정/속도로 재생해 이전 보존 소스와 선택 tick이 모두 같음을 확인했다.
+이 선택 전용 점검은 시뮬레이션 재실행이 아니다(`legacy-selection-check.json`).
+구문 검사와 `git diff --check`도 통과했다.
+
+새 실행은 `outputs/sac_predecessor_collection_20261119/`, 실행기 PID2305535,
+첫100학습 PID2305536이다. `launch.json`과 `trial.json`에 명령/소스 hash/PID/판단 근거,
+`sources/`에 동결 실행 소스를 보존했다. **첫100회는 저장·통합 검증만** 수행한다.
+기존 physical100의 주행 gate 실패를 통과로 재분류하지 않는다. 실제 predecessor 전이가
+저장·검증되면 기존 physical1,000 대조와 같은 fresh1,000회 예산의 수집 비교를 실행한다.
+학습→저장→같은4주행/초기조건 대조→고정Q→coverage→새분기Q→수치 진단 뒤 검토하며
+1,000회 이상 자동 연장은 없다. 전체 validation/새seed/독립평가/정책 확보는 미완료다.
+
+18:39 KST 첫100회 실제 저장 검증 완료: main52/branch48, 분기40거절·8통과,
+실제 종료8/nonterminal40. moving_predecessor8개는 모두 실제로 통과했고 원본 관측·raw·
+보상·종료·후속 거절의 lineage·teacher0을 대조했다. 고유 train2장면·분기 원본6상태다.
+모델 SHA `88687235d206c4b5e6bd132e9101c22c8ad68bd3e0bc03253f18bfbd6389cf85`,
+replay SHA `a09d39f0fd1e68bfe8fa7962ed85351f0b77c60888b575addb6d9ff0b59ccf33`.
+100회 주행 평가는 이번 수집 비교에서 미실행이다. 학습/저장 통과를 성능 통과로
+기록하지 않는다. 현재 같은 설정 fresh1,000회 학습 PID2309042로 진행 중이다.

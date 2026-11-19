@@ -90,3 +90,47 @@ def test_moving_selection_fills_missing_early_states_without_duplicate_ticks():
     assert [lineage["parent_tick"] for _, _, lineage in branches] == [10, 9, 8]
     with pytest.raises(ValueError, match="selection"):
         FailureBranches(1, 3, "unknown")
+
+
+def collect_selected_history(window, accepted, moving, samples=1):
+    buffer = FailureBranches(samples, window, "moving_predecessors")
+    for tick in range(11):
+        parent = Environment(tick, speed=1.0 if tick in moving else 0.0)
+        buffer.remember(parent, parent.boundary)
+        result = outcome("COLLISION")
+        result.pre_token = parent.token
+        result.check_result = NS(valid=tick in accepted)
+        buffer.after_step(result)
+    return list(buffer.generate(outcome("COLLISION")))
+
+
+def test_predecessors_preserve_valid_moving_history_and_terminal_budget():
+    branches = collect_selected_history(6, set(range(5)), set(range(6)), samples=2)
+    first = [meta for _, _, meta in branches[:6]]
+    assert [m["parent_tick"] for m in first] == [10, 4, 3, 2, 1, 0]
+    assert first[0]["selection_role"] == "terminal"
+    assert all(m["selection_role"] == "moving_predecessor" for m in first[1:])
+    assert all(m["predecessor_rejection_tick"] == 5 for m in first[1:])
+    assert len(branches) == 12
+    assert len({(m["parent_tick"], m["branch_sample"]) for _, _, m in branches}) == 12
+
+
+def test_predecessors_fill_with_rejections_without_duplicate_parent_states():
+    branches = collect_selected_history(6, {0, 1, 4}, set(range(6)))
+    selected = {m["parent_tick"]: m for _, _, m in branches}
+    assert len(branches) == len(selected) == 6
+    assert set(selected) == {0, 1, 2, 3, 4, 10}
+    assert selected[0]["predecessor_rejection_tick"] == 2
+    assert selected[1]["predecessor_rejection_tick"] == 2
+    assert selected[4]["predecessor_rejection_tick"] == 5
+    assert selected[2]["selection_role"] == selected[3]["selection_role"] == "moving_rejection"
+
+
+def test_stopped_and_stale_accepted_states_are_not_moving_predecessors():
+    # Tick0 is accepted/moving but too old; tick4 is recent/accepted but stopped.
+    branches = collect_selected_history(3, {0, 4}, {0, 5})
+    assert [m["parent_tick"] for _, _, m in branches] == [10, 9, 5]
+    assert all(m["selection_role"] != "moving_predecessor" for _, _, m in branches)
+    # A one-state window reserves its only state for the actual terminal step.
+    one = collect_selected_history(1, set(range(5)), set(range(6)), samples=2)
+    assert [m["parent_tick"] for _, _, m in one] == [10, 10]

@@ -62,12 +62,22 @@ def audit(directory, manifest):
             if report["collection"].get("selection", "recent") == "recent":
                 assert lineage["trigger_tick"] - row["pre_tick"] < report["collection"]["window"]
             else:
-                assert lineage["state_selection"] == "moving_rejections"
-                assert lineage["selection_role"] in ("moving_rejection", "terminal", "recent")
+                selection = report["collection"]["selection"]
+                assert selection in ("moving_rejections", "moving_predecessors")
+                assert lineage["state_selection"] == selection
+                assert lineage["selection_role"] in ("moving_rejection", "moving_predecessor", "terminal", "recent")
                 if lineage["selection_role"] == "terminal":
                     assert row["pre_tick"] == lineage["trigger_tick"]
                 if lineage["selection_role"] == "moving_rejection":
                     assert not rows[parents[key]]["check_valid"]
+                if lineage["selection_role"] == "moving_predecessor":
+                    assert selection == "moving_predecessors"
+                    assert rows[parents[key]]["check_valid"]
+                    rejected_tick = lineage["predecessor_rejection_tick"]
+                    assert 0 < rejected_tick - row["pre_tick"] < report["collection"]["window"]
+                    rejected_key = row["episode_uid"], rejected_tick
+                    assert rejected_key in parents
+                    assert not rows[parents[rejected_key]]["check_valid"]
             branch_pairs.append((i + 5000, parents[key] + 5000))
             branches.append(row)
         assert row["delta_ticks"] == 1 and row["tick"] == row["pre_tick"] + 1
@@ -94,11 +104,14 @@ def audit(directory, manifest):
             for branch, parent in branch_pairs:
                 np.testing.assert_array_equal(array[branch], array[parent])
         # ego.speed is field2 after the three task fields, normalized by30.
-        if report["collection"].get("selection") == "moving_rejections":
+        if report["collection"].get("selection") in ("moving_rejections", "moving_predecessors"):
             obs = data["obs"]
             for i, row in enumerate(rows):
-                if row["lineage"].get("selection_role") == "moving_rejection":
+                if row["lineage"].get("selection_role") in ("moving_rejection", "moving_predecessor"):
                     assert obs[5000+i, 5] * 30 >= 0.1 - 1e-6
+                if row["lineage"].get("selection_role") == "moving_predecessor":
+                    rejected_key = row["episode_uid"], row["lineage"]["predecessor_rejection_tick"]
+                    assert obs[5000+parents[rejected_key], 5] * 30 >= 0.1 - 1e-6
     main_count = len(rows) - len(branches)
     terminal_count = sum(not r["bootstrap"] for r in branches)
     assert main_count == report["collection"]["main_transitions"]
