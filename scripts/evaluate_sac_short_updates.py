@@ -41,6 +41,7 @@ def main():
     tf.config.set_visible_devices([], "GPU")
     import jax
     from flax import serialization
+    from scripts.sac_diagnostic_actor import diagnostic_actor
     from src.training.sac.runtime import versions, selected_scenes, write_report
     from src.training.sac.checkpoint import file_hash
     from src.training.sac.networks import Actor, Critic
@@ -70,12 +71,7 @@ def main():
         initial = initialize(
             tensor_observation(CoreObservation.empty()),
             seed,
-            actor=Actor(
-                mean_gain=arm["mean_gain"],
-                mean_basis=arm.get("mean_basis", "direct"),
-                head_layer_norm=arm.get("actor_head_layer_norm", False),
-                mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
-            ),
+            actor=diagnostic_actor(arm, restoring=True),
             critic=diagnostic_critic(arm, restoring=True),
         )
         trained = serialization.from_bytes(initial, weights.read_bytes())

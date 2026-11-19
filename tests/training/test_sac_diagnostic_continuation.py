@@ -77,6 +77,13 @@ def test_rejects_changed_model_or_collector(completed):
         check(completed)
 
 
+@pytest.mark.parametrize("key,value", [("mean_basis_precision", "float64"), ("actor_factory_sha256", "new")])
+def test_precision_change_is_not_silent_continuation(completed, key, value):
+    completed[2][key] = value
+    with pytest.raises(ValueError, match=key):
+        check(completed)
+
+
 def test_rejects_corrupted_artifact_or_missing_history(completed):
     path = completed[0]
     p = path/"replay.npz"

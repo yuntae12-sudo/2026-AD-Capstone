@@ -38,6 +38,9 @@ def validate_source(directory, version, variant, collection, total_budget):
     for key in ARM_FIELDS:
         if arm.get(key) != variant.get(key):
             raise ValueError(f"continuation cannot change model setting: {key}")
+    for key, default in (("mean_basis_precision", "default"), ("actor_factory_sha256", None)):
+        if arm.get(key, default) != variant.get(key, default):
+            raise ValueError(f"continuation cannot change model setting: {key}")
     for key in ("mode", "samples", "window", "selection", "branch_script_sha256", "fork_script_sha256"):
         if source["collection"].get(key) != collection.get(key):
             raise ValueError(f"continuation cannot change collection setting: {key}")

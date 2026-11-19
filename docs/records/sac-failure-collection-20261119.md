@@ -3751,3 +3751,38 @@ target fused/분리 계산 검사는 다른 연산을 다뤘으므로 당시 정
 
 로컬 `basis-numerics.json`·`basis-numerics.npz`·두 진단 스크립트에 모델/입력/소스 hash와
 원본 배열을 보존했다. 규약10절의 손실을 바꾸는 CQL·actor 지연·lr 변경은 선택하지 않았다.
+
+## 2026-11-20 08:17 KST — 고정밀 B 옵션 구현·초기 검증과 fresh1,000 비교 준비
+
+기록 직전 HEAD03e1521에서 `scripts/sac_diagnostic_actor.py`를 추가했다. 원본 Actor의
+동일 NN head를 capture하여 gain은기존float32, B 곱만float64로 수행한다. 파라미터·NN·
+분산 head·원래 sampler·보상·검사·PD·학습 수식은 바꾸지 않는다. 코어96fa1d6 유지.
+기본 factory는 과거 Actor 그대로이며 float64만 명시적으로 선택하고 복원 시 factory
+hash를 검사한다. 학습 CLI, 평가/Q/coverage 진단 복원 경로에 이를 연결했다.
+continuation에서는 정밀도/actor factory hash 변경을 거절한다. 과거 로컬 MC 스크립트는
+보존하고, factory를 사용하는 `scripts/diagnose_sac_soft_returns.py`를 별도 입구로 추가했다.
+
+실행한 검증:
+
+- CPU: mean precision 초기3개·continuation·action coordinates 합계34pytest 통과(25.46초).
+- GPU: mean precision4pytest 통과(53.62초). 추가한 전체 learner 초기 직렬화 동일성,
+  복원 후 실제 `update_checked`·유한 gradient/update·원본 learner 불변성 검사 포함.
+- compileall, git diff --check, CLI help 확인 통과. 전체 테스트 suite는 미실행이다.
+- 실제 자기 warmup에서 균등 간격으로 고른256관측(정지171/저속13/이동72)에서 두
+  fresh learner의 optimizer/target/learner RNG 포함 byte 동일, 초기mu0·rho·동일key의
+  raw표본/ell/log_pi 동일 확인. 학습 후 동등성이나 실제 주행 성능 검증은 아니다.
+
+로컬 `outputs/sac_mean_basis_f64_20261120/preflight.json`과 배열/로그에 입력과 소스 hash를
+보존했다. actor factory SHA
+`15bbb08bbe17f3e526bab7689be0c1453317170a9c14cee55fb23db40be9a785`.
+검사 stdout에서 기록한 `targeted-tests.json`은 요약이며 원본 stdout 파일로 주장하지 않는다.
+
+다음 제한 실험은 같은 seed0·자기 warmup5,000에서 **fresh1,000 실제 전이/update**다.
+기존raw1,000 모델 `9cdced951a997905c32ab8ea18c7b9da9866b27c81e8f8de23da06728bd6883c`와
+같은 기존2개 개발장면×2명령4주행, 같은 정지2장면×2명령4주행을 대조한다.
+정지 baseline은 기존 완료 frame을 재사용하며 초기frame/map/seed를 다시 대조한다.
+gain0.0001·physical Q·zero-action 초기화·quota8/window6/moving_predecessors/horizon8/
+restart-terminal·uniform replay50k·원래 Gaussian·SAC 목적함수/lr/tau·BC/teacher0 유지.
+검토 순서는 실제 저장/audit/자기 warmup17배열prefix→두 주행 cohort→Q/coverage/실제branchQ
+→같은2train상태×4seedMC다. 초기1000의 실패만으로 장기 수렴 불가능을 단정하지 않지만
+진행 중 조건이나 예산을 바꾸지 않고 완료 결과를 검토한다. 새 PR·merge는 하지 않는다.

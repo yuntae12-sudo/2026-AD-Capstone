@@ -98,6 +98,7 @@ def main():
     import jax
     import numpy as np
     from flax import serialization
+    from scripts.sac_diagnostic_actor import diagnostic_actor
     from src.contracts.observation import CoreObservation
     from src.training.sac.runtime import versions, selected_scenes, write_report
     from src.training.sac.checkpoint import file_hash
@@ -134,12 +135,7 @@ def main():
         initial = initialize(
             tensor_observation(CoreObservation.empty()),
             source["seed"],
-            actor=Actor(
-                mean_gain=arm["mean_gain"],
-                mean_basis=arm["mean_basis"],
-                head_layer_norm=arm["actor_head_layer_norm"],
-                mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
-            ),
+            actor=diagnostic_actor(arm, restoring=True),
             critic=Critic(
                 zero_output=arm["zero_q"],
                 action_coordinates=arm.get("critic_action_coordinates", "raw"),

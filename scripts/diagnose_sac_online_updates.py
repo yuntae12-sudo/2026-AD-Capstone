@@ -57,6 +57,10 @@ def main():
         help="Explicit mean-coordinate comparison within the approved B-mean experiment; sampler is unchanged",
     )
     parser.add_argument(
+        "--mean-basis-precision", choices=("default", "float64"),
+        help="Opt-in B contraction precision; NN and original Gaussian are unchanged",
+    )
+    parser.add_argument(
         "--save-replay",
         action="store_true",
         help="Persist the actual replay for read-only coverage audits",
@@ -120,12 +124,15 @@ def main():
     from src.environment.womd_control.environment import SACPlanningEnvironment
     from scripts.sac_experiment_runtime import model_proposer
     from scripts.sac_diagnostic_critic import diagnostic_critic, critic_factory_hash
+    from scripts.sac_diagnostic_actor import diagnostic_actor, actor_factory_hash
 
     config = json.loads((args.configuration / "report.json").read_text())
     variant = dict(config["arms"][args.variant])
     overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
     if args.mean_coordinate_scale is not None:
         overrides["mean_coordinate_scale"] = args.mean_coordinate_scale
+    if args.mean_basis_precision is not None:
+        overrides["mean_basis_precision"] = args.mean_basis_precision
     if args.critic_action_gain is not None:
         overrides["critic_action_gain"] = args.critic_action_gain
     if args.critic_action_coordinates is not None:
@@ -171,12 +178,7 @@ def main():
         state = initialize(
             tensor_observation(CoreObservation.empty()),
             seed,
-            actor=Actor(
-                mean_gain=variant["mean_gain"],
-                mean_basis=variant["mean_basis"],
-                head_layer_norm=variant["actor_head_layer_norm"],
-                mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
-            ),
+            actor=diagnostic_actor(variant),
             critic=diagnostic_critic(variant),
         )
         init_mode = variant.get("critic_action_kernel_init", "standard")
@@ -246,6 +248,8 @@ def main():
             critic_action_kernel_init=init_mode,
             critic_action_gain=variant.get("critic_action_gain", 1.0),
             critic_factory_sha256=critic_factory_hash(),
+            mean_basis_precision=variant.get("mean_basis_precision", "default"),
+            actor_factory_sha256=(actor_factory_hash() if variant.get("mean_basis_precision", "default") != "default" else None),
         )
         source = validate_source(args.continue_from, version, expected_arm, report["collection"], args.updates)
         if (source["seed"] != seed
@@ -438,6 +442,8 @@ def main():
             mean_gain=variant["mean_gain"],
             mean_basis=variant["mean_basis"],
             mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
+            mean_basis_precision=variant.get("mean_basis_precision", "default"),
+            actor_factory_sha256=(actor_factory_hash() if variant.get("mean_basis_precision", "default") != "default" else None),
             actor_head_layer_norm=variant["actor_head_layer_norm"],
             zero_q=variant["zero_q"],
             critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),

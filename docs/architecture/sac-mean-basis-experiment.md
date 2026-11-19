@@ -238,3 +238,23 @@ fresh상한1,000 및 실제 replay50k는 그대로다. 코어 모델/학습 수�
 현재 수집 코드의 정책 갱신 경로를 점검한 뒤, 같은 저장 learner에 대한 한 번 update의
 행동 변화량을 읽기 전용으로 진단한다. 학습 규약·모델·운영 checkpoint 변경이 아니며
 상세 근거와 한계는 `docs/records/sac-failure-collection-20261119.md`에 남긴다.
+
+### 2026-11-20 B 평균의 float64 곱셈 비교
+
+동일10,000 모델의 NN head를 고정한 검사에서 GPU default B 곱과 독립 float64 기준의
+raw 차이는 최대1.40e-6이었다. 정지20관측에서 원래 Gaussian 좌표로 환산한 RMS 중앙값은
+279.46이었다. B 곱만float64로 수행하면 독립 NumPy 계산과 최대6.51e-19로 일치했다.
+이는 이전 Q target fused/분리 수치 진단과 다른 연산이며, 주행 성공을 증명하지 않는다.
+
+`scripts/sac_diagnostic_actor.py`의 opt-in factory가 원본 Actor의 동일 NN head를 재사용한다.
+NN 파라미터와 gain 곱은float32, B 곱은float64, mean은float64로 전달하며 원래 sampler는
+그대로다. production Actor의 기본값과 코어 파일은 변경하지 않는다. default 모델은
+원본 Actor로 복원하고, float64 모델은 actor factory hash를 검증한다. continuation은
+정밀도/해시 변경을 거절하므로 과거 checkpoint의 계산을 조용히 바꿔 이어가지 않는다.
+
+새 옵션 `--mean-basis-precision float64`를 fresh raw gain0.0001·동일 quota 수집·physical Q의
+1,000회 실험에만 우선 적용한다. 동일 자기 warmup5,000·seed0·초기 learner 전체 byte와
+256개 실제 관측의 초기 mu/rho/표본/ell/log_pi 동일성을 확인했다. 보상/검사/PD/원래
+Gaussian·SAC 손실/lr/tau·uniform replay·전이당1update·BC/teacher0 유지. 자신의 과거
+default raw1,000과 동일 기존4·정지4주행 및 Q/coverage/실제 미래 보상을 비교한다.
+큰 예산·기본 채택·전체개발/seed/독립test 확대는 실제 결과 검토 이후 판단한다.
