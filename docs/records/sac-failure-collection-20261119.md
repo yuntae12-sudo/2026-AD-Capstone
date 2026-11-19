@@ -2495,3 +2495,49 @@ SHA `53b7f1bfcd708141468c35f3f7bff78dab1bd4870e2ca965402554d176b2004d`다.
 진행 상태는 `status.json`, `reviews-status.json`에서 각각 구분한다.
 현재 코드 기준은 `feature/yuntae-sac-training`의 HEAD `9f92284`이며 이 절은 문서 추가다.
 목표는 active, 안정 정책과 전체 validation/새 seed/Rule-based 최종 비교/별도 평가는 미완료다.
+
+## 02:12 KST 복원된 Adam까지 포함한 격리 1회 업데이트 진단
+
+앞선 Q→mean head 기울기만으로 실제 optimizer의 정책 변화까지 판단하지 않기 위해,
+완료된 quota2,000/extension2,000 snapshot을 CPU에 바이트 동일하게 복원했다. 각자 저장된
+replay RNG의 복사본으로 기존7,000행에서256개를 uniform 추출하고, 기존 SAC의
+Q→actor→alpha→target 순서와 clip·Adam 상태를 유지한 **격리된 가상 update 1회**를 계산했다.
+새 transition을 넣지 않았으므로 다음 실제 online update의 재현이나 학습 연장이 아니다.
+새 가중치는 저장/채택하지 않았고 원본 가중치·replay·진행 중인5,000회 실행은 바꾸지 않았다.
+
+평균 경로 변화는 이전과 같은47개 train 장면의312상태에서 측정했다. 이동≥2m/s135개,
+0.1~2m/s21개, 정지<0.1m/s156개이며 실제 저장 관측과 마스크를 사용한다.
+고정 anchor에서 `max_t ||3*t²*(mu_after−mu_before)||`를 계산한 값으로,
+차량이 실제로 이동한 거리나 안전 검사·PD 추종 오차가 아니다.
+
+| frozen snapshot | actor 전체 gradient norm | actor clip 배율 | mean head parameter Δ L2 | 이동 경로 변화 중앙값(m) | 정지 경로 변화 중앙값(m) |
+| --- | --- | --- | --- | --- | --- |
+| quota2,000 | 2.048942 | 1.0 | 0.037207 | 2.721501e-5 | 3.258043e-7 |
+| extension2,000 | 0.063141 | 1.0 | 0.032303 | 2.228744e-5 | 7.503245e-8 |
+
+이 두 batch에서 actor clipping은 작동하지 않았고 mean head parameter가 실제로 변했다.
+Adam 이후에도 정지 상태의 물리적 경로 변화가 작았지만, 서로 다른 상태/batch의 단회
+진단이므로 원인 분리나 장기 학습 불가능성을 입증하지 않는다. 앞서 본 기울기 크기의
+비율을 실제 parameter/경로 변화의 비율로 그대로 해석해서는 안 된다.
+
+새 gradient를0으로 놓고 저장된 actor Adam momentum만 한 번 적용한 별도 대조값도
+계산했다. 정지 상태 경로 변화 중앙값은 quota4.282407e-8m/extension7.299836e-8m이며,
+full update와 이 대조 출력의 차이 중앙값은 각각3.562259e-7m/9.845817e-9m다.
+이는 optimizer 기억과 새 gradient의 차이를 관찰하는 가상 비교이며 가산적인 원인 분해나
+독립된 학습 정책이 아니다. 실제 sample/보상/안전검사/PD/BC·teacher0 조건을 변경하지 않았다.
+
+실제 실행 명령은 로컬 `outputs/sac_actor_optimizer_response_20261120/`의
+`audit_snapshot_update.py`, `review_arrays.py`다. 두 모델의 source SHA·복원 바이트·원본
+in-memory state 불변·copied batch indices·312선택 관측·출력 배열 통계를 확인했다.
+기존 eager CPU와 이번 JIT CPU의 초기 mu 최대 차이는 quota2.3283e-10/
+extension2.9104e-10이며 명시한 atol2e-9/rtol2e-5 이내다. 정지 그룹의 해당 경로 차이
+최댓값은1.2278e-11m/1.8984e-11m로 측정한 update 변화보다 작다. 이 검토는
+parameter gradient를 별도 수식으로 다시 미분한 검증은 아니며 기존 canonical update를 썼다.
+
+`report.json` SHA `f6303cb1f1dacb917c4294fda3d9669682c80a108f1d25a1817b36a687415787`,
+`array-review.json` SHA `8a0d88778bca25049fb3c53c05433efa92631f22332c9d2ffedfbf7164210a6e`.
+diagnostic 프로세스2519233은 exit0으로 종료했다. 진행 중인 matched5,000 비교는
+02:12:20에 첫 quota3,537/5,000, extension대기이며 학습 runner2510498/child2510518과
+독립검토 runner2517850의 실제 생존·모든 고정 소스 SHA 불변을 확인했다.
+다음 결정은 현재5,000회 두 arm의 실제 주행/실패 경험/미래 보상 검토 후 내린다.
+현재 코드 기준 HEAD `bca1f12`, runtime c3fe6a7 유지. 안정 정책은 미확보이며 목표는 active다.
