@@ -2541,3 +2541,58 @@ diagnostic 프로세스2519233은 exit0으로 종료했다. 진행 중인 matche
 독립검토 runner2517850의 실제 생존·모든 고정 소스 SHA 불변을 확인했다.
 다음 결정은 현재5,000회 두 arm의 실제 주행/실패 경험/미래 보상 검토 후 내린다.
 현재 코드 기준 HEAD `bca1f12`, runtime c3fe6a7 유지. 안정 정책은 미확보이며 목표는 active다.
+
+## 02:40 KST 첫 quota5,000회 완료 — 저장 검토 통과, 실제4주행 모두 충돌
+
+동일 총5,000회 비교의 첫 quota arm이 학습을 완료했다. source2,000에서 실제3,000개의
+자기 경험과3,000update를 추가했으며 총 online5,000/replay10,000이다. full learner 복원,
+상속7,000행의17배열과 tick/update prefix 바이트 동일, collection RNG restart2000,
+BC/teacher0을 기존 감사와 독립 `review_arm.py collection`에서 실제 확인했다.
+모델 SHA `4d30fbb35b9201a30cfeed45c05c076ea4544ac6d176ae5d0b91522109940fbd`,
+replay SHA `166a27a86a0abd2429375e838689cd6c9b792c2153b354928b8cb7574e4fe5ac`.
+보상·검사·PD·원래Gaussian·모델/배율·uniform replay·실제전이당1update는 유지했다.
+
+수집은 main3,456/branch1,544, 고유train37장면·198roots·branch terminal296개다.
+main은 통과2,152/양의reward349/pre-step정지2,299이며, branch는 통과391/양의reward286/
+pre-step정지477이다. 추가3,000분은 main2,107/branch893, 고유24장면·114roots·
+branch terminal167개다. 전체 수집전이의 pre-step정지는2,776/5,000(55.52%)이다.
+
+main 실제종료44개는 COLLISION33/ROUTE_GOAL2/RECORD_END8/TASK_LOST1이다.
+보고서의 별도 DIAGNOSTIC_BUDGET1개는 원래 bootstrap을 유지한 과거 예산경계 기록이며
+실제 terminal로 세지 않는다. 새3,000분의 main 종료는 COLLISION19/RECORD_END5/
+ROUTE_GOAL1/TASK_LOST1이다. 새 FOLLOW train 성공은946ee2be6c924b68의update2627,
+tick55에서 수집됐다. **학습 중 계속 변한 정책의 자기 경험이며 고정 모델 평가 성공이 아니다.**
+
+같은 개발2장면×KEEP/FOLLOW의 초기 frame/map/seed4쌍과3개 모델의 원본12episode를
+독립 재계산했다. 이전quota2,000의 고속 KEEP/FOLLOW 두 성공을 모두 잃었다.
+
+| 같은4개 개발 주행 | quota2,000 | quota5,000 |
+| --- | --- | --- |
+| 목표 / 충돌 | 2/4 · 2/4 | 0/4 · 4/4 |
+| 전체 tick | 236 | 210 |
+| 경로 거절 | 48(20.34%) | 89(42.38%) |
+| 제동 | 37(15.68%) | 78(37.14%) |
+| post-step 정지 | 13(5.51%) | 25(11.90%) |
+| 평균 training return | -9.992331 | -20.233012 |
+
+고속KEEP/FOLLOW는58/62tick에충돌했고 중속KEEP/FOLLOW는46/44tick에충돌했다.
+네번 모두 정지 상태에서 뒤쪽 객체와 접촉한 기하 기록이 있으나 귀책/유일원인으로 해석하지
+않는다. 초기 mean0도같은4주행에서2성공이므로 새성공확보가아니며 현재후보는미달이다.
+고속KEEP 원본에서 첫제동31/첫정지54/최종충돌58tick, 종료직전30tick 연속새경로거절을
+확인했다. 이 성공 회귀를 Q 적합 개선으로 상쇄하거나 감추지 않는다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/quota/`의
+`collection-independent-review.json` SHA
+`8e60cbdffeb795bd2b49e390767d25eca1ddb95098b8ede3660b7212f1c223ab`,
+`prefix-review.json` SHA
+`ca00a67ebfefb8f410d08210cc616afcb16c62b81b46066528bc0c3349535107`.
+`review_arm.py evaluation`도 실제완료됐으며 provider별 지표와 원본 frame 해시를 보존했다.
+`evaluation-independent-review.json` SHA
+`2305fbbc386d1efe97a4b269e236ce7dddce5f827a6264344b97528d0acb88e8`.
+
+02:40:13KST 학습 child2510518/평가 child2524893은 종료하고 첫Q child2526236으로
+전환했다. runner2510498과 독립검토2517850의 실제생존을확인했다. 현재 Q→coverage→
+branch Q→동일2train상태×4seed 실제종료return 검토가 남았고 extension5,000은대기다.
+이 시점에 두 arm 전체 비교나 Q/MC 검토를 완료했다고 주장하지 않는다. 그 결과 뒤에
+다음 조건을 결정하며 전체validation/새seed/별도평가/기본채택은 진행하지 않았다.
+문서 기준 HEAD `b7aec2e`, runtime c3fe6a7 유지. 안정정책 미확보·전체목표 active다.
