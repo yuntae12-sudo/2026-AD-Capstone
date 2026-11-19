@@ -2739,3 +2739,26 @@ integrated/gain0.01/whitened Q다. 당시 문서의 raw B 평균 실험·주행 
 독립 검토2517850, 대기 GPU 검토2538421의 생존을 확인했다. 두 arm 비교와 후속 GPU
 검토 완료 전까지 runtime/script 고정을 유지한다. 문서 기준 HEAD1824ebe, 실행 코드
 c3fe6a7이며 이번 변경은 기록뿐이다. 안정 정책은 아직 미확보다.
+
+## 03:27 KST terminal 저장 배열의 별도 통계 검토
+
+후속 GPU 결과를 검토할 로컬 `review_terminal_arrays.py`를 준비하고, 먼저 완료된
+quota CPU 자료에 `--arm quota --cpu-statistics-only`로 실제 실행했다(exit0).
+원본 report/source/model/array 해시를 대조하고 replay의 실제 terminal 인덱스402개,
+scene/tick/reward, teacher0, coverage의 종류/추출 횟수를 확인했다. Python statistics와
+직접 percentile 보간으로 기존 그룹 통계를 다시 계산해 절대오차1e-12 이내로 일치했다.
+severe는373개다. 기존 provisional CPU 수치를 바꾸거나 GPU 일치로 재분류하지 않았다.
+
+검토는 저장된 Q 배열의 통계·행 대응 검토이며 신경망 추론의 독립 재실행이 아니다.
+GPU용 분기는 기존62행의 원래 atol3e-5/rtol3e-5와 전체 terminal 배열 통계, CPU 차이를
+확인하도록 준비했으나 GPU 결과가 아직 없어서 미실행이다. 새 학습/시뮬레이션0,
+현재 pipeline의 core/source hash 변경0이며 추가 reviewer는 기존 runner에 연결하지 않았다.
+두 arm GPU 검증 완료 후 `--arm quota`, `--arm extension`을 각각 수동 실행해야 한다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/`:
+`review_terminal_arrays.py` SHA
+`ad08716ee15b8da66e5457730501ad09427d78b0afc1dfcd92f40ad7c341bebf`,
+`quota/all-terminal-values/independent-array-review.json` SHA
+`08ddbbfb1b6400e05cfb02cad5764b5b0d0edbb0cb184d052d63a24f0ff4944f`.
+03:26:22 extension 학습4,323/5,000·child2532783 생존 확인. GPU 수치 차이 해소와
+안정 정책 확보는 아직 미완료다. 문서 기준 HEAD1d47763, 실행 runtime c3fe6a7 유지.
