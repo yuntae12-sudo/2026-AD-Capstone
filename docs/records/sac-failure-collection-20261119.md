@@ -2812,3 +2812,38 @@ branchQ→실제종료MC 및 단계별 독립 검토→두 arm GPU62/배열 검�
 복구 검증이 끝나기 전까지 현재 core·검사·recovery/reviewer/GPU 스크립트를 고정한다.
 학습 runtime c3fe6a7은 유지하며 기록 기준 HEADbb64ec4에서 검사/테스트 수정은 미커밋이다.
 안정 정책 미확보·두 arm의 최종 주행/가치 비교 미완료·전체 목표 active.
+
+## 03:47 KST 두5,000회 모델의 같은4주행 비교 — 모두 미달
+
+복구한 extension의 평가와 독립 원시 frame 검토가 완료됐다. 같은 두 개발 장면×
+KEEP/FOLLOW의4주행이며 독립 test가 아니다. 이전2,000·현재5,000·초기mean0의
+각12episode 검토에 더해 quota5,000/extension5,000의 초기frame·map·seed가
+4쌍 모두 정확히 같음을 별도로 대조했다. 각 review의 원본 source SHA도 재확인했다.
+
+| 지표 | quota5,000 | extension2,000 | extension5,000 |
+| --- | --- | --- | --- |
+| 목표 / 충돌 | 0/4 · 4/4 | 0/4 · 4/4 | 0/4 · 4/4 |
+| tick | 210 | 220 | 171 |
+| 거절 | 89(42.38%) | 87(39.55%) | 98(57.31%) |
+| 제동 | 78(37.14%) | 77(35.00%) | 86(50.29%) |
+| post-step 정지 | 25(11.90%) | 25(11.36%) | 32(18.71%) |
+| 평균 training return | -20.233012 | -20.222395 | -20.266951 |
+
+extension5,000은 고속 KEEP/FOLLOW52/51tick, 중속34/34tick에 충돌했다. 고속의
+첫 제동26/25·첫 정지49/48tick이며 마지막29tick 연속 새 경로 거절이다. 중속은
+둘 다 첫 제동19·첫 정지23tick, 마지막18tick 연속 거절이다. 모두 정지 중 뒤쪽 객체와
+접촉했지만, 이는 기하/시간 기록이며 귀책 또는 유일 원인 확정은 아니다.
+quota5,000과 자신의2,000 대비 모두 aggregate 거절·제동·정지 비중이 늘었다.
+**실패 경로 연장만으로 현재 설정/예산에서 주행 개선을 확보하지 못했으며 미채택이다.**
+초기mean0의2/4성공도 회복하지 못했다. 전체 validation/새seed/별도정책test로 확대하지 않는다.
+
+로컬 `outputs/sac_collection_budget5000_20261120/`의
+`extension/evaluation5000/report.json` SHA
+`9d9244d6bfa665e5734740588bba92b3a392b323246d2d73204943d75131a53c`,
+`extension/evaluation-independent-review.json` SHA
+`00fde9afa9a14c4d68107ace761ae05e0de2f09a10e16d990b29e663f0db19ae`,
+`driving-paired5000-review.json` SHA
+`363095e8236a93ffa2a5e0522bcf66e3b2d10f0201f3450c87eff2f53b3eff98`.
+03:47:15 recovery runner2547534 및 q5000 child2548836 실제 생존 확인.
+extension의 Q/coverage/branchQ/MC와 두 arm GPU62 검토는 아직 남았다.
+다음 학습 조건은 미선택이며 현재 소스 고정을 유지한다. 기준 HEADf4ce66c.
