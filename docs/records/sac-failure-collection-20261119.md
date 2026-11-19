@@ -1260,3 +1260,60 @@ manifest·진행 중 실험 조건은 변경하지 않았고 학습 loader의 te
 이번 추가 작업은 실행 코드90c15a4를 유지한 로컬 분석/실험 준비이며 새 PR/병합은 없다.
 안정적인 KEEP/FOLLOW, 새 seed, 같은 조건 Rule-based 최종 비교, 별도 성능 평가와32개
 적격 장면 확보는 여전히 미완료다. 전체 목표는 계속 active다.
+
+## 22:23 KST 후속 수집2,000회 미래 비용 검토 완료, 전체 개발 평가 실행
+
+실제 종료 보상 실행기2392865와 저장 경로 Q 검사2393214는 완료 후 종료됐다.
+코드90c15a4와 모델7c898963…를 유지한 읽기 전용 검사다. 새 `review_value2000.py`로
+8개 원본 trace hash, 최초 평균 행동·첫 entropy 제외, 실제 terminal, gamma0.99 할인합,
+기존 quota1,000과 같은 관측/seed,12개 고정 상태의 저장 행동 TD 항등식을 재확인했다.
+분석기 첫 실행은 `rollout2000`이라는 잘못된 로컬 경로로 실패했고, 실제 `online2000`으로
+수정한 뒤 통과했다. 학습/정책 코드나 실행 중 source에는 변경이 없다.
+
+| 고정 train 상태 | 새2,000 평균 첫 행동 Q | 실제 soft return 평균±표본SD | Q−표본평균 |
+| --- | --- | --- | --- |
+| KEEP77ae… tick0 | -0.473294 | -13.061026±2.165930 | 12.587732 |
+| FOLLOWbaac… tick4 | -0.281600 | -10.649584±1.000974 | 10.367984 |
+
+두 상태 각각4seed88019~88022, 총8/8충돌이다. quota1,000 대비 같은 seed의 return 차이는
+KEEP 평균+0.333425/표본SD0.431348, FOLLOW+0.327337/0.787263이다. 표본 수가 작고
+충돌을 피하지 못했으므로 안정 주행이나 유의한 성능 개선으로 채택하지 않는다.
+현재 자기 평균 첫 행동 이후 원래 확률 정책의 실제 return 표본이며 정확한 기대 Q가 아니다.
+
+수집한 첫 terminal 상태 현재 평균의 정확한 Q−reward는 quota1,000→2,000에서
+KEEP2.504419→-0.336740, FOLLOW4.592690→-0.231936으로 개선됐다. 그러나 초기 미래 비용
+과대평가10~13점은 남았다. 저장 행동 기준 최초 KEEP Q/TD목표는-0.627577/-0.279360,
+FOLLOW tick0은-0.514988/-0.235144다. 다음 online−target soft value는-0.042101/-0.057151로
+작아, target 지연 하나만 고치면 된다는 증거는 없다. 저장 행동 TD 적합과 현재 평균의 실제
+미래 보상 오차를 섞지 않는다. 종료15tick 앞의 저장 Q는 KEEP-13.944/FOLLOW-16.801이다.
+
+로컬 `outputs/sac_failure_rollout_quota_continuation_20261119/`:
+
+- `soft-returns2000/report.json` SHA `54fd7ec54304a4251749f4127b22cdbbebf4aa87ad3aaf22a469c0cbe7ab3135`.
+- `saved-bellman-chain.json` SHA `60f5d3edf5f1f9c4b313872c345fcbdbef2346996e7ab4fe63813e4fe9688bf4`.
+- `value2000-review.json` SHA `bee059d9ef16e3eb82a55bf1ca873b4ff445096e52ec29f05feb282753a6583d`.
+
+### 별도 평가 reset 검사 실제 완료:3장면 확보,29장면 부족
+
+준비 실행기2397055/child2408542는 실제 raw 로딩/초기화 뒤 종료됐다. 봉인된1,417개
+후보의 원본 SHA와 ID/hash split을 대조했다. 기존 route prefilter에서1,413개 제외,
+후보4장면의 KEEP/FOLLOW8회 reset 중2회거절/6회수락으로 **고유3장면·6쌍**이다.
+데이터/reset 오류0이며 정책 실행0, 장면 선택에 주행 성능을 사용하지 않았다.
+목표32장면에는29개가 부족하다. 약127초의 실제 처리 결과로 미실행 준비 기록을 보완한다.
+
+Storage의 `.../sac_heldout_20261119/reset_first200/`에 report와 test_reset_manifest,
+4개 도로 후보의 원본 proto를 보존했다. `review_reset_inventory.py`를 실제 실행하여
+전체 후보 집합/고정 순서, 제외·reset 분모, manifest6쌍, cached proto SHA, 기존 개발
+manifest와 scene/group/raw SHA 분리를 다시 확인했다. 결과는 로컬
+`outputs/sac_heldout_preparation_20261119/reset-inventory-review.json`,
+SHA `1e1eb16c38083c6be51ba0a08630af476ae099f333a6186b90781112c32ae457`이다.
+공식training 원본의 프로젝트 hash-test이며 drive/시간구간 독립성은 미확인이다.
+32개로 부풀리거나 실패 장면/검사 기준을 제외하지 않는다. 향후 성능과 무관한 추가 원본
+범위 확장이 필요하며, 현재 학습 loader의 test 거절과 train/validation 자료는 그대로다.
+
+후속 전체 개발 평가 runner2401291/child2410243은 실제 RUNNING/EVALUATING이다.
+기존8개 장면×KEEP/FOLLOW16회이며 추가 학습/held-out 성능 평가가 아니다.
+`review_full_validation.py`의 전체16쌍·4정책 비교와 provider/초기속도별 재계산을 준비해
+구문 검사는 통과했으나 전체 결과가 아직 없어 실행하지 않았다. 완료 후 초기mean0,
+기존independent1,000/2,000과 모든 실패를 포함해 대조한다. 전체 결과를 검토하기 전
+새 seed·추가 학습·기본 채택으로 확대하지 않는다. 안정적인 정책 목표는 계속 active다.
