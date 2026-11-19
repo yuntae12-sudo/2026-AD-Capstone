@@ -758,3 +758,87 @@ warmup이었다. 새 경험 노출에 따라 Q/주행이 변하는지 분리하�
 고정 Q 반례→coverage→수집 상태의 새 행동 Q 순서다. 규약·보상·안전검사·PD·sigma·
 uniform replay·전이당update1·BC/teacher0은 유지한다. 총2,000회 뒤 자동 연장은 없다.
 기본 채택·새seed·Rule-based 최종 비교·독립 평가와 안정적인 정책 확보는 계속 미완료다.
+
+## 20:02 KST 추가 수집 중간 구성과 후속 원인 분리 검사 준비
+
+현재 추가 학습 PID2335764는 살아 있으며 누적1,806회(이번 재개806개)를 확인했다.
+추가 첫500전이만 고정 prefix로 보면 main356개(통과187·pre-step 정지208·양의 보상37),
+branch144개(통과77·정지24·양의 보상77)다. main 고유5장면·branch3장면이고 전체 replay
+저장 감사나 주행 성능 판정은 아직 아니다. prefix 원본1,500줄 hash와 분석 구간
+update1001~1500을 로컬 `first500-additional-review.json`에 보존했다.
+
+정지 경험의 움직임 부족을 더 분리할 읽기 전용 `probe_mean_conditioning.py`를 같은
+continuation 폴더에 준비했다. 현재 평균과 `mean/g` 가상 평균을 같은 실제 상태에서
+비교하되, 원래 Gaussian 잡음·rho/sigma·검사·PD는 유지한다. **가상 평균은 원래 정책과
+다르며, 학습된 새 구조나 채택된 정책이 아니다.** 결과는 replay/learner에 넣지 않는다.
+
+결과/Q를 보기 전에 predecessor1,000의 실제 main에서 provider별 최초 통과 상태 중
+정지(speed≤0.001, |a|≤0.01)와 이동(speed≥2)을 각각 선택했다. 고정된 상태는 KEEP
+fcbcfcb416ca17c0 tick54와77ae312df21e80b9 tick0, FOLLOW1bedf33cd20c1e7b tick3와
+baac7893b025167a tick0다. 원본 trace index는693/0/837/271이다. `mean-probe-selection.json`에
+원본/소스 hash와 선택 시각을 보존했다. validation이나 teacher로 상태를 고르지 않았다.
+
+각 정지 상태에서 두 평균과 동일 noise의4표본씩, 이동 상태에서는 두 평균과1표본씩
+실제1step을 비교한다. 모델당28개, 1,000/2,000모델 총56개이며 고유4train상태의 반복이다.
+평균만 바꾼 뒤 보간 정렬·제안 목표 속도·실제 수락/거절·제동/가속도·post-step 속도·
+보상/종료를 분리한다. 이동g=1에서는 raw와 실제 결과가 같아야 한다. CPU 산술 검사로
+동일 noise·자기 평균 기준 entropy/density 유지·g=1 raw 일치를 확인했고 구문 검사도 통과했다.
+**이 새 probe의 GPU/Waymax 실행은 아직 미실행**이다.
+
+실행기 `run_mean_conditioning.py` PID2341308은 현재 WAITING이며2,000회 학습·저장 감사·
+전체16평가·Q/coverage 검사가 끝나면1,000→2,000모델을 순서대로 검사한다.
+`mean-probe-status.json`·`mean-probe-launch.json`에서 확인한다. 이 검사도 전체 주행 평가나
+새 평균 구조의 학습 성능으로 취급하지 않는다.
+
+그 뒤 같은 원래 두 train 상태 KEEP77ae… tick0/FOLLOWbaac… tick4에서2,000모델의 평균
+첫 행동→원래 확률 정책→실제 종료의4seed(88019~88022) soft return도 재측정한다.
+1,000모델과 같은 입력 fingerprint·seed·첫 entropy 제외·할인율0.99를 대조하고 trace를
+다시 계산한다. 앞선 상태의 미래 실패 비용 적합이 나아졌는지 확인하기 위한 작은 MC
+검사이며 정확한 기대 Q가 아니다. `run_soft_return_2000.py` PID2342077,
+`soft-return-status.json` WAITING, `soft-return-launch.json`에 식별자를 보존했다.
+두 후속 검사는 GPU 작업이 겹치지 않게 순차 실행하며 학습을 자동으로 더 늘리지 않는다.
+현재 실행 코드는3180615와 동일하며 추가 로컬 진단/기록은 HEADcf3dbca 이후 미커밋이다.
+
+## 20:20 KST 총2,000회 주행 회귀 확정과 종료 Q 적합 개선의 분리
+
+추가1,000개 실제 전이/update와 전체 저장 감사, 개발8장면×KEEP/FOLLOW16회 평가를
+완료했다. 모델 SHA `1b9655222ee7c8f435e9cee9b5e23e9bc3beeb6b81d8c3af55e7e329716443be`,
+replay SHA `393f520c8452590bfbfa65d712aa911cc9d9344d76c51418fdd54d7728291f2b`,
+평가 원본 SHA `76f2d4eb68946d880a7e1122db5868b854b538063bbaf41c996a1fdf77b11cb0`.
+실행 코드3180615·core/계약/manifest는 직전 비교와 같다. seed0 learner를 이어받고
+수집 RNG만1000으로 재시작한 동일 실험이며 새로운 seed 검증이 아니다.
+
+| 정책 | 목표/충돌 | tick | 거절 | 제동 | post-step 정지 | 평균 보상 |
+|---|---|---:|---:|---:|---:|---:|
+| predecessor1,000 | 2/16, 14/16 | 908 | 340(37.44%) | 322(35.46%) | 424(46.70%) | -17.75719 |
+| 같은 learner2,000 | 0/16, 16/16 | 814 | 388(47.67%) | 364(44.72%) | 436(53.56%) | -20.32969 |
+
+`review_evaluation2000.py`를 실제 실행해 초기 평균0/1,000/2,000의48개 원본 episode를
+다시 계산하고 초기 frame·지도·seed의 동일성을 확인했다. 고유 장면은 여전히8개다.
+`evaluation2000-review.json`에 원본 hash·개별 episode·속도 구분·paired 차이를 보존했다.
+기존 빠른 장면8b4c1e7e09f5f4c3의 KEEP/FOLLOW 성공2개를 모두 잃었고 새로운 성공은 없다.
+KEEP/FOLLOW는 각각tick21/20부터 연속 거절,23/22부터 제동,45부터 정지해47에 충돌했다.
+16충돌 모두 정지 상태 뒤쪽 접촉 기하를 기록했으며 책임/유일 원인 판정은 아니다.
+
+추가1,000개는 main683개(통과401·양의 보상37·pre-step 정지514), branch317개(통과86·
+양의 보상85·정지93)다. 합계 정지607/1,000으로 이전455/1,000보다 늘었다.
+`completed-collection-review.json`에 구간과 원본 hash를 보존했다. 실패 직전 분기만
+늘려도 유용한 출발/주행 경험이 충분해지는 것은 아니었다.
+
+반면 고정 warmup severe-penalty44개의 저장 Q MAE는1,000회5.40649에서2,000회0.92579로
+감소했다. 같은 두 train terminal 반례의 현재 평균 행동 Q 오차도6.10726/4.13873에서
+1.36683/0.87655로 줄었으며 실제 결과는 여전히 EMERGENCY→COLLISION이다. 이 수치는
+terminal 훈련자료 적합이지 앞선 상태의 미래 비용이나 주행 성공 개선을 뜻하지 않는다.
+원본 `q2000.json`과 실제 환경 재실행 결과에 근거한다. 동일 조건의 무조건 추가 연장은
+하지 않고 후속 branch Q·평균 조건화·실제 종료 soft-return 검사를 마친 뒤 원인을 분리한다.
+
+실제 프레임으로 `review/fast-1000-vs-2000.gif`와 PNG를 생성했다. PNG를 열어 도로·차량·
+제안/실행 궤적·속도·거절·제동·종료 후 held 표기를 확인했다. 동일 최초 상태의1,000/2,000
+SAC 비교이며 Rule-based 비교가 아니다. GIF는25frame,1440×900,7.2초 주행 시간이다.
+GIF SHA `62b45ef25737a0f0fcc8fbd7c65223dd584146637b9b92fd60c88ee3e415aa89`.
+원시 자료/진단/GIF는 모두 로컬 `outputs/sac_predecessor_continuation_20261119/`에 있다.
+
+20:20 관측 상태는 main pipeline의 branch-q2000 진행, 평균 조건화 실행기2341308과
+soft-return 실행기2342077은 순차 대기다. 후속 결과는 미확정이며 보상·안전검사·PD·
+원래 Gaussian·BC/teacher0은 그대로다. 안정적인 정책·다른 seed·동일 조건 Rule-based
+최종 비교·독립 평가는 미완료이고 목표는 계속 active다.
