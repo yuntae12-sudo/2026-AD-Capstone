@@ -2444,3 +2444,54 @@ uniformcoverage→수집terminalQ→같은2train상태×4seed실제종료MC를�
 오류/해시/비유한/lineage불일치는batch를중단한다. 총5,000초과추가학습·전체validation/
 새seed/독립정책평가는자동연결하지않는다. 모델선정/평가확대는실제다중주행지표를검토한뒤판단한다.
 현재 안정정책은미확보이며전체목표는active다.
+
+## 02:05 KST 같은2,000회 실제 미래 보상의 구성과 후속 독립 검토
+
+같은 두 train 상태×4 paired seed88019~88022의 quota2,000/extension2,000 원본
+MC trace를 다시 읽어, soft return을 종료 보상의 할인값·종료 전 보상의 할인합·
+entropy 기여로 분해했다. 첫 평균 행동의 entropy 제외, gamma0.99와 실제 terminal을
+그대로 사용했고 추가 시뮬레이션이나 학습은 하지 않았다. 모델/관측 식별자는 앞선
+최종2,000 검토와 같으며 두 모델 모두8/8충돌이다.
+
+| extension − quota, 같은2,000회 | KEEP 평균 차이 | FOLLOW 평균 차이 |
+| --- | --- | --- |
+| 종료까지 tick | -2.50 | +3.25 |
+| 할인하지 않은 실제 reward 합 | +0.017722 | -0.008112 |
+| 종료 reward의 할인값 | -0.310483 | +0.362641 |
+| 종료 전 reward 할인합 | +0.007664 | +0.004326 |
+| entropy 기여 | -0.016618 | +0.024767 |
+| soft return | -0.319437 | +0.391735 |
+
+FOLLOW의 soft return 개선 중 약92.6%는 종료 보상의 할인값 차이이며,
+할인하지 않은 reward 합은 오히려0.008112 나빠졌다. 따라서 작은 FOLLOW soft-return
+개선을 안전한 주행 확보나 실패 해결로 보지 않는다. 같은2개 train 상태의 소수 표본이며,
+정책이 의도적으로 보상을 악용했다거나 할인율 자체가 유일 원인이라는 주장은 하지 않는다.
+보상/discount/검사 조건은 변경하지 않았다. 개발4주행0성공·4충돌과 미채택 판단도 유지한다.
+
+근거는 로컬 `outputs/sac_collection_budget5000_20261120/reviewer-paired2000-components.json`,
+SHA `53b7f1bfcd708141468c35f3f7bff78dab1bd4870e2ca965402554d176b2004d`다.
+각 모델의 실제8trace SHA·reward·bootstrap·최종 outcome과 합계/표본표준편차를 재검산했다.
+
+진행 중인5,000회 실험의 결과를 단계별로 검토하는 로컬 `review_arm.py`도 준비했다.
+이미 완료된 extension2,000에 collection/sampling/evaluation/value 네 단계를 실제 실행해
+기존 독립 검토와 주행 지표·수집 구성·512,000 batch draw·종료 Q/MC가 일치함을 확인했다.
+초기 reviewer가 행동 이름을 KEEP/FOLLOW로 가정해 빈집단 나눗셈 오류로 종료한 기록은
+`review_arm_initial.py`와 초기 log에 보존했다. 실제 fixed_keep/fixed_follow 이름을
+원본에서 읽고 각2episode인지 확인하도록 수정했다. 학습/환경 runtime 변경은 없다.
+
+최종 reviewer SHA `91727c50ad71b1f7ccc35a0b0cca44c4ad3ddafdce79e5c55ad67ed1de4507b9`,
+실제 과거 자료 검증 `reviewer-ready.json` SHA
+`850d667ef525af364d6c570dbbe125d5321cda066459c540289765e69408ec4a`.
+5,000회 결과는 이전7,000행17배열과 이력 prefix, 실제4주행 frame,
+1,280,000 uniform draw와 저장 RNG, 같은 train 상태의 실제 종료 return을 확인한다.
+추가3,000 update 동안 새로 모은 severe transition이 실제 몇 번 추출됐는지도 별도로 계산한다.
+이는 검토 준비 완료이며 아직 끝나지 않은5,000회 결과를 검증했다고 기록하지 않는다.
+
+02:04:55.314KST 독립 CPU 검토 runner2517850을 시작했다. 로컬 `run_reviews.py` SHA
+`0be0609702b06278ae5e35fa06efd05a9431a96b8f6611b08ed1882e659cb363`.
+기존 학습 runner2510498/child2510518은 계속 실행 중이고 extension arm은 대기다.
+독립 검토 runner는 완료된 원본 phase만 읽으며 오류/해시 불일치 시 자체 검토를 멈춘다.
+모델/수집 코드·학습 예산·채택 조건을 변경하지 않고 새 GPU 작업도 만들지 않는다.
+진행 상태는 `status.json`, `reviews-status.json`에서 각각 구분한다.
+현재 코드 기준은 `feature/yuntae-sac-training`의 HEAD `9f92284`이며 이 절은 문서 추가다.
+목표는 active, 안정 정책과 전체 validation/새 seed/Rule-based 최종 비교/별도 평가는 미완료다.
