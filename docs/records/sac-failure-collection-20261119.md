@@ -1389,3 +1389,62 @@ quota1,000/2,000/3,000의 저장 경로 Q·TD목표를 비교한다. 후속 실�
 `restored_learner_bytes_identical=true`, `inherited_online_updates=2000`을 확인했다.
 학습 PID와 두 후속 대기 실행기도 살아 있음을 확인했다. 단순 실행기 생성만을 학습 시작으로
 대신하지 않았으며 완료 성능은 아직 주장하지 않는다.
+
+## 22:46 KST 학습 중 읽기 전용 관측 점검과 별도 자료 확장 준비
+
+총3,000회 학습 runner2414118/train2414120은 실제 살아 있으며22:45:49 KST에 누적2,604
+actual transition/update를 확인했다. source/배율/보상/검사/PD/모델/수집을 변경하지 않았다.
+이번 작업은 이전2,000의 동결 replay와 자료 준비 코드만 다룬다.
+
+### 관측 단위 누락 가설은 현재 근거로 지지되지 않음
+
+`src/environment/womd_control/observation.py`는 기하를 현재 ego 좌표로 변환하고, v1.2
+관측 단위별 scale로 나눈 뒤[-5,5]로 clip하며 mask를 전달한다. 전역 좌표가 정규화 없이
+입력된다는 가설은 코드와 맞지 않는다. 실제7,000행 replay의 hash를 확인하고 CPU에서
+유효/무효 필드와11개 관측 그룹의 범위를 독립 계산했다. 무효값의 비영0개, 전체 최대절대값5,
+모든 유한성 검사를 통과했다. ego speed 역변환은 기존 coverage7,000행과 완전히 일치했다.
+
+같은 raw 행동을 규약 B로 역변환하고 다시 복원해 최대오차<1e-12를 확인했다. 현재
+physical Q 입력 사본의 RMS 중앙값은 정지4,427행에서0.000499625, 이동2,573행에서
+0.249813이다. 원래 entropy 좌표 사본은 각각0.249812/0.258857이다. 정지에서g=0.002인
+현재 특징식의 결과이며 잘못된 전역 단위·실제 신경망의 gradient 소실·추가 정규화의 필요성을
+입증하지 않는다. NN 추론/학습/환경step/원본행동·replay 변경은 없었다.
+
+로컬 continuation 폴더의 `review_observation_action_scale.py` 실제 실행이 통과했고
+`observation-action-scale-review.json` SHA는
+`31485adbbf5b12a89d6fd749e371d833603400fe6131631ec19742f9d58f744f`다.
+이 근거로 불필요한 관측 정규화 변경을 추가하지 않았다.
+
+### 남은800원본 파일의 정책과 무관한 후보 봉인·reset 검사 대기
+
+현재 별도 reset 적격은3장면으로32목표에29개 부족하다. 같은 raw training_20s의 아직
+검사하지 않은 shard200~999에서 ID/raw SHA만 읽어, 기존 first200 메타데이터와 합친
+전체1,000파일의 hash-test 후보를 같은 고정 hash 순서로 봉인하는 로컬 도구를 만들었다.
+이 단계는 도로/초기화/정책 성능을 검사하지 않으며 train/validation manifest를 수정하지 않는다.
+그다음 동일한 기존 route prefilter와 environment reset만 적용한다. 모든 제외·오류를 보존하고
+모델 결과로 장면을 선택하지 않는다. 전체32개가 확보된다고 가정하지 않는다.
+
+원본 shard00200 한 개로 메타데이터 코드를 실제 검증했다. CPU/TF thread1로75개 record의
+ID/바이트SHA를 읽고 새 test13개를 확인했다. 기존1,417후보와 합집합은1,430개, source201개,
+정책/route/reset 실행0이다. 고정순서·기존 후보 보존·중복·개발 manifest 분리를 대조했다.
+약0.956초의 metadata pass이며, 실제 학습과 별도의 데이터 읽기 검증이다. 새13개는
+reset 적격/성공 장면13개가 아니다. 스모크 산출물은 Storage의
+`.../sac_heldout_20261119/metadata_smoke_00200/`에 있다.
+
+로컬 `outputs/sac_heldout_expansion_20261119/metadata-smoke-review.json` SHA
+`7f2b5d90d70055c32f4803b9da985d92ad2d09004b77224f6bf9e867f1f104e3`.
+`freeze_expanded_candidates.py` SHA
+`5046c1c50d0172306f40f35a6c5d56113e50ca520e2bad48ee3c4409ad236ab1`,
+`prepare_reset_inventory.py` SHA
+`c142642064447c5d3b81bff726b7a4ff516fc7b41bb4d7d232ccd92a86794d9d`.
+후자는 기존 정책과 무관한 reset 검사와 같고 보고서 저장만50후보/도로후보마다 모아
+반복 대용량 쓰기를 줄인다. 구문 검사는 통과했으나 확장 pool의 실제 reset은 아직 미실행이다.
+
+runner2419579를22:42:55.130201 KST 시작했고 실제 WAITING을 확인했다. 현재3,000학습과
+실제 미래 보상·저장 경로Q 검사가 모두 끝난 후 metadata800→reset1000을 CPU로 순차 실행한다.
+실행기 SHA `604f85b579c45146114a5bcc75a19b12f8756198ef74c1188b34c9fd953d3c7b`.
+Storage 예상 출력은 같은 상위 폴더의 `metadata_first1000/`와 `reset_first1000/`이다.
+전체 실행은 아직 미실행이며, 다음 학습/성능 평가를 시작하기 전에 이 준비 작업 상태를 확인해
+원본 스캔과 겹치지 않게 한다. 현재 소스도 준비 검사 종료까지 동결한다. 부족 수·오류·실제
+적격 수는 완료 후 별도로 검토한다. 프로젝트 hash-test와 공식Waymo test를 구분하고
+기존 drive/시간구간 독립성 미확인도 유지한다. 전체 안정 정책 목표는 계속 active다.
