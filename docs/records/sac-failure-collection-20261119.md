@@ -1611,3 +1611,89 @@ order SHA `c3b1aaf25a909afb415ca7db95886007b0056d02f2520cc9e7715c63f00b3dfc`.
 `outputs/sac_heldout_expansion_20261119/review_reset_inventory.py`로 재검토한다(현재 미실행).
 공식 training의 프로젝트 hash-test이며 공식 Waymo test와 다르다. drive/시간구간 독립성은
 미확인이고 기존 개발 데이터·학습 loader는 변경하지 않았다.
+
+## 23:39 KST 실제 실패 경로 검토 완료와 종료까지 수집하는 제한 비교 구현
+
+추가 자료 검사는 전체7,040후보를 처리했다. prefilter 탈락6,991·도로 후보32·데이터 오류17,
+reset64회 중 통과56/탈락8이다. 최종 고유29장면(KEEP29/FOLLOW27), 양쪽 통과27장면으로
+최소32개 목표에3개 부족하다. 고유 초기속도 분포는 정지2·0.1~2m/s2·2m/s이상25장면이다.
+정책 실행은0이고 학습 loader·개발 manifest는 그대로다.
+
+첫 reset 검토는 오류0을 요구하는 조건에서 실패했다. 원본과 실패 기록을 보존하고,
+검토기는 `COMPLETE_WITH_UNRESOLVED_DATA_ERRORS`로 분모·manifest·cache hash를 대조했다.
+17오류는 별도 원본 재로딩/SHA 확인에서도 모두 재현됐다. 각 scene의 모든 track과 SDC 상태
+길이가 timestamps 길이와 다르고 dynamic-map 길이는 timestamps와 같았다. 단순 빈 객체
+하나의 문제가 아니며 원인·시간 정렬은 미확정이다. padding/잘라내기/객체 제거로 임의 복구하지
+않았고 일반 ODD 탈락으로 바꾸지 않았다. 공식 training의 프로젝트 hash-test라는 한계도 유지한다.
+
+로컬 `outputs/sac_heldout_expansion_20261119/reset-inventory-review.json` SHA
+`a5105287234e6a5564e6e227b7326b24346176d7482f000b67b474f27e4733c0`,
+`raw-shape-review.json` SHA `10818f9420917268cfd1bcb250bff81adbb150234ee7f0182d7d849e4138c925`.
+자료 실행기2419579/child2437167은 종료됐다. 32장면 확보와 데이터 오류 해결은 미완료다.
+
+### 재현 실패를 보존하고 동일 자기 행동의 실제 경로를 복원
+
+첫 경로 진단2435604/2446002는 KEEP29tick에서 원본과 바이트 동일성 검사를 실패했다.
+같은 모델/seed를 재계산했지만 raw action 최대 차이1.851e-7m, reward 최대 차이2.0e-12,
+ell 최대 차이1.065e-8이 있었고 다음 관측 hash가 달랐다. 첫 행동 차이는4.83e-8m였다.
+모든 이산 검사/출처/종료와29tick충돌은 같았으나 동일 재현으로 취급하지 않았다.
+수치 차이의 정확한 발생 원인은 분리하지 않았으며 임의 tolerance로 trace 검사를 통과시키지 않았다.
+
+별도 `outputs/sac_current_policy_credit_replay_20261119/`에서 기존 MC의 seed88019가 만든
+원본 자기 raw action/ell을 읽기 전용으로 재실행했다. 실제 reward와 다음 관측 hash 및 전체
+trace 바이트 일치를 요구해 KEEP29/FOLLOW60tick을 모두 복원했다. 새 확률 표본 재생성이
+아니라 이미 저장된 자기 정책 행동의 실제 환경 재실행이며 학습 replay/learner 갱신은0이다.
+runner2447272/child2447275는 완료 후 종료됐다. 현재 모델의 Q와 다음 Gaussian32표본
+online/target 값은 복원된 매 관측에서 계산했다. 이 두 경로는 기존 MC에 포함된 train 경로다.
+
+| 경로 | 시작 실제 행동 Q | 한 실제 경로의 남은 soft return | 차이 |
+| --- | --- | --- | --- |
+| KEEP tick0, 29tick충돌 | -0.714319 | -15.171351 | 14.457033 |
+| FOLLOW tick4, 60tick충돌 | -0.385501 | -11.071767 | 10.686266 |
+
+각 suffix의 독립 할인합, 실제 상태/행동/보상, 종료 bootstrap0과 TD 항등식을 재계산했다.
+Q(actual action)−한 실제 suffix return은 경로상의 한 단계 TD차이를 할인하여 합한 값과도
+일치했다. 이 항등식은 단일 확률 경로의 분해이며 기대 Bellman 오차나 단일 인과 증명이 아니다.
+종료15step 이상 전 구간의 할인 TD 합은 KEEP+15.0022/FOLLOW+12.1785였고 가까운 종료
+구간은 음의 합이었다. KEEP tick10에서는 Q-16.413/남은return-16.762로 이미 가까워졌다.
+두 경로 모두 감속·정지 이후에 큰 비용을 반영하며, 초반 Q와 학습 목표는 낙관적으로 남았다.
+
+batch로 계산한 원본 행동 Q와 scalar로 재계산한 평균 행동 Q는 각각-0.000104/-0.000052
+차이가 있어 별도로 공개했다. 서로 다른 추론 문맥의 값을 바이트 동일하다고 주장하지 않는다.
+전체 경로/실제 관측 바이트 검사는 그대로 유지했다. 89시점의 검토와 그래프 저장·이미지 육안
+검토를 완료했다. `credit-review.json` SHA
+`0151a7d389670f6eb0fcbd38eca54ba7ce0c164f37eb72d42a07596ce8c8af2e`,
+`capture/report.json` SHA `43eb472db0d88cb5b772be20c9ac6e3ca0eedd124a009471ec42d974be3f6230`,
+`credit-paths.png` SHA `81449cd4737bfc000818625eeaebaa67d6e6642f8275f31e141d987e50d0422d`.
+
+### 수집 길이의 구체적인 한계와 다음 비교
+
+3,000수집의987branch에서 실제 연결 후속701개·126roots·종료경로185개·nonterminal 끝101개를
+원시 lineage로 대조했다. moving_predecessor51roots/408steps와 moving_rejection44roots/
+334steps는 **95roots 모두 실제 종료를 하나도 수집하지 못했고 최대 길이가8**이었다.
+terminal21roots는165step을 종료 상태에 사용했다. 이는 명시적인 branch 연결의 한계이며
+주변 replay 지원이 전혀 없거나 Q 오류의 유일 원인이라는 뜻은 아니다. 원본 bootstrap은 정상이다.
+첫 검토기는 예산 중단이 마지막 root 하나에만 생긴다고 잘못 가정해 실패했다. 기존2,000예산의
+round-robin 중단으로1995/1996/1997/1999/2000의5roots가 남는 것을 확인하고 실패 기록을
+보존했다. 실제 수집/원본 데이터를 수정한 것은 아니다.
+`branch-endpoints-review.json` SHA `7d82c057db98273ea0ae169a0393fd15ad0d5d1547df74e52f7bff13324d4955`.
+
+이 근거로 `scripts/sac_failure_complete_path.py`와 진단 CLI의 opt-in
+`--failure-branch-complete-path`를 구현했다. 과거 main 실패 직전의 가장 이른 accepted moving
+predecessor 하나를 우선하고, 없으면 가장 이른 moving rejection→recent→terminal 순서다.
+기존6개 후보 중 하나를 고르며 새 행동의 통과 여부로 학습 경험을 필터링하지 않는다.
+한 실제 경로를 원래 환경 종료까지 이어가고 종료 후 같은 root를 반복하지 않는다.
+200step은 기존 환경 상한 확인용이며 가짜 terminal을 만들지 않는다. 전체 수집 예산이 먼저
+끝나면 마지막 실제 transition의 bootstrap을 그대로 남긴다. 원래 확률 정책·보상·검사·PD·
+uniform replay·1actual step/1update·BC/teacher0·모델 구조/배율은 바꾸지 않았다.
+
+CLI·저장 auditor·continuation 설정 검증에 새 모드를 분리했다. 기존8step/default 동작은
+유지한다. 새 mode로 기존3,000을 조용히 이어받지 않고 같은 자기 warmup5,000·새 learner seed0의
+별도 비교를 한다. 전체 완료 경로 수집으로 장면 다양성/종료 반복 노출도 달라지는 trade-off를
+기록하며 길이 하나만 바뀐 통제 실험이라고 주장하지 않는다.
+
+관련7개 pytest 파일의34개 테스트를 실제 통과했다(새 파일5개 test 중 terminal/truncated
+매개변수로6case). 이후 continuation 모드 변경 거절 검증을 추가해 해당6개를 재실행·통과했다.
+실제 신규모드 학습/주행은 현재 미실행이다. 다음은100actual step의 저장·연결·종료 smoke와
+같은4개 개발 주행, 검토 후 같은예산1,000회 기존 수집 비교다. 구현 통과를 주행 개선으로
+취급하지 않으며 새 기본 채택·새 seed·독립 정책 평가는 아직 없다.

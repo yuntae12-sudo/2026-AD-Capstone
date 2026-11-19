@@ -35,10 +35,16 @@ def audit(directory, manifest):
     branch_ids, states_per_trigger = set(), {}
     horizon = report["collection"].get("rollout_horizon", 1)
     restart = report["collection"].get("restart_terminal", False)
-    assert isinstance(restart, bool)
-    assert isinstance(horizon, int) and 1 <= horizon <= 8
+    complete_path = report["collection"].get("complete_path", False)
+    assert isinstance(restart, bool) and isinstance(complete_path, bool)
+    assert isinstance(horizon, int) and 1 <= horizon <= (200 if complete_path else 8)
     assert not restart or horizon > 1
-    if horizon > 1:
+    if complete_path:
+        assert not restart and horizon == 200
+        assert report["collection"]["samples"] == 1 and report["collection"]["window"] == 6
+        assert report["collection"]["selection"] == "moving_predecessors"
+        assert report["collection"].get("rollout_script_sha256")
+    elif horizon > 1:
         assert report["collection"]["samples"] == (horizon if restart else 1)
         assert report["collection"]["window"] * horizon <= 48
         assert report["collection"].get("rollout_script_sha256")
@@ -102,6 +108,9 @@ def audit(directory, manifest):
             trigger_key = row["episode_uid"], lineage["trigger_tick"]
             states_per_trigger.setdefault(trigger_key, set()).add(root_key)
             assert len(states_per_trigger[trigger_key]) <= report["collection"]["window"]
+            if complete_path:
+                assert len(states_per_trigger[trigger_key]) == 1
+                assert lineage["root_selection_rule"] == "earliest_predecessor_then_rejection_then_recent"
             assert trigger_key in parents
             trigger = rows[parents[trigger_key]]
             assert not trigger["bootstrap"] and trigger["terminal_reason"] == lineage["trigger_outcome"]
@@ -174,7 +183,7 @@ def audit(directory, manifest):
                 unique_train_scenes=len({r["scene_id"] for r in rows}),
                 branch_unique_parent_states=len({(r["lineage"]["parent_episode_uid"],r["lineage"]["parent_tick"]) for r in branches}),
                 branch_continuation_transitions=len(successor_pairs), rollout_horizon=horizon,
-                restart_terminal=restart,
+                restart_terminal=restart, complete_path=complete_path,
                 root_step_counts=list(root_counts.values()) if restart else None,
                 main_provider_counts=dict(Counter(r["provider"] for r in rows if r["lineage"]["kind"]=="main")),
                 branch_provider_counts=dict(Counter(r["provider"] for r in branches)),

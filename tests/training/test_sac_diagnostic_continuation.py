@@ -83,3 +83,7 @@ def test_rollout_horizon_and_implementation_cannot_change_on_resume(completed):
     completed[3]["restart_terminal"] = True
     with pytest.raises(ValueError, match="restart_terminal"):
         check(completed)
+    completed[3]["restart_terminal"] = False
+    completed[3]["complete_path"] = True
+    with pytest.raises(ValueError, match="complete_path"):
+        check(completed)

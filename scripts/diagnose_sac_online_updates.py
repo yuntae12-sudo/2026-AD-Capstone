@@ -33,6 +33,8 @@ def main():
                         help="Opt-in actual consecutive steps per root; 2..8 requires one sample and at most48 steps/trigger")
     parser.add_argument("--failure-branch-restart-terminal", action="store_true",
                         help="Keep a fixed actual step quota per root: after a terminal path, start another at its root; samples must equal horizon")
+    parser.add_argument("--failure-branch-complete-path", action="store_true",
+                        help="One earliest failure predecessor through actual terminal; samples1/window6/horizon200, no terminal restart")
 
     parser.add_argument("--critic-action-gain", type=float,
                         help="Opt-in positive critic input scale; no action clipping or loss change")
@@ -72,7 +74,13 @@ def main():
     except ValueError as exc:
         parser.error(str(exc))
     required_samples = args.failure_branch_rollout_horizon if args.failure_branch_restart_terminal else 1
-    if (not 1 <= args.failure_branch_rollout_horizon <= 8
+    if args.failure_branch_complete_path:
+        if (args.failure_branch_samples != 1 or args.failure_branch_window != 6
+                or args.failure_branch_selection != "moving_predecessors"
+                or args.failure_branch_rollout_horizon != 200
+                or args.failure_branch_restart_terminal):
+            parser.error("complete path requires samples1/window6/moving_predecessors/horizon200 and no restart")
+    elif (not 1 <= args.failure_branch_rollout_horizon <= 8
             or (args.failure_branch_restart_terminal and args.failure_branch_rollout_horizon == 1)
             or (args.failure_branch_rollout_horizon > 1 and
                 (args.failure_branch_samples != required_samples
@@ -193,7 +201,9 @@ def main():
             selection=args.failure_branch_selection,
             rollout_horizon=args.failure_branch_rollout_horizon,
             restart_terminal=args.failure_branch_restart_terminal,
+            complete_path=args.failure_branch_complete_path,
             rollout_script_sha256=(file_hash(Path(__file__).with_name(
+                "sac_failure_complete_path.py" if args.failure_branch_complete_path else
                 "sac_failure_rollout_budget.py" if args.failure_branch_restart_terminal else "sac_failure_rollouts.py"))
                                    if args.failure_branch_rollout_horizon > 1 else None),
             main_transitions=0, branch_transitions=0, branch_terminal_transitions=0,
@@ -367,7 +377,9 @@ def main():
                             from scripts.diagnose_sac_q_values import observation_fingerprint
                             parent_observation = observation_fingerprint(env._boundary().sac_observation)
                             if args.failure_branch_rollout_horizon > 1:
-                                if args.failure_branch_restart_terminal:
+                                if args.failure_branch_complete_path:
+                                    from scripts.sac_failure_complete_path import collect_complete_failure_path as collect_failure_rollouts
+                                elif args.failure_branch_restart_terminal:
                                     from scripts.sac_failure_rollout_budget import collect_fixed_budget_rollouts as collect_failure_rollouts
                                 else:
                                     from scripts.sac_failure_rollouts import collect_failure_rollouts
