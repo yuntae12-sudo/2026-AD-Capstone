@@ -2030,3 +2030,88 @@ RMS는 차이를 희석할 수 있고 정규화 배율·slot 순서의 영향을
 quota-extension1,000에서 종료 노출을 유지하며 실제 후속 경험을 늘렸을 때, 초기 Q와
 실제 미래 보상 차이가 함께 줄어드는지를 확인한다. 그 결과 전에는 수집 변경의 성공,
 학습 불가능성, 추가 학습 예산 또는 새 평가 확대를 미리 결론내리지 않는다.
+
+## 00:52 KST 기존96개 장면의 정확한 이동 구간 중복 검사
+
+정책 성능과 별개로 기존train59/개발validation8/별도후보29의 원본을 읽었다. KEEP/FOLLOW
+중복을 scene ID로 합치면96개 고유 장면이며, provider 행 수는110/16/56이다. 원래 manifest와
+96개 cached proto SHA를 읽기 전후 대조했다. 새 데이터를 받거나 manifest/분할을 바꾸지 않았다.
+
+원본 SDC의 x/y/z·heading·vx/vy·length/width/height를 저장된 좌표 그대로 사용했다.
+20개 연속 valid frame이며 양 끝 XY 변위가1m 이상인 구간만 골라, 반올림 없이 float64
+벡터 전체가 정확히 같은 window를 찾았다. 같은장면 자체 비교는 제외했다. 중복 후보가
+있으면 상대 timestamp 차이도1e-5초 안인지 별도로 검사하도록 했다. 양성 offset 중복,
+정지 구간 제외, heading 변경 음성, invalid frame 제외의 합성4case를 먼저 통과했다.
+
+train10,053/validation1,351/별도후보4,922개 moving window, 총16,326개를 검사했다.
+96개 장면의 가능한4,560쌍에서 서로 다른 장면의 정확한 일치 구간은0개였다.
+모든96원본의 시작 timestamp는0이었다. 이것은 실제 절대 주행 시간이 같다는 뜻이 아니다.
+정책 추론/제어/보상 계산은0회이며 평가 결과로 데이터 선택을 바꾸지 않았다.
+
+**이 음성 결과는 drive/시간구간 독립성 입증이 아니다.** 좌표 원점/회전이 다른 동일 주행,
+반올림된 상태, 겹치지 않는 같은 drive의 구간, 정지 상태로만 겹치는 구간은 검출하지 못한다.
+현재 원본의 populated 필드와 상대 시간만으로 upstream drive 식별자를 확인한 것도 아니다.
+따라서 기존 `scenario_fallback_overlap_unverified` 분류를 그대로 유지한다. 추가 목표32개에
+3개 부족, 원본 시간축 구조 오류17개 미해결도 그대로이며 별도 후보를 완성된 독립 test로
+승격하지 않았다.
+
+실제로 실행한 로컬 `outputs/sac_scene_overlap_20261120/check_exact_sdc_windows.py`와
+`exact-sdc-overlap-review.json`(SHA
+`a31831fc6383f5e8e8e7bbb22e17795c5b8bebd2fdea6700c323fd668658f432`)에 원본 hash·후보 수·
+조건·누락 검출 범위를 기록했다. 표준패키지 import 탐색은 설치가 없어 실패했으며 실제 검사는
+프로젝트가 사용하는 vendored Scenario protobuf로 실행했다. 원본이나 실행 환경은 바꾸지 않았다.
+
+## 00:57 KST quota-extension1,000 수집·동일4주행 완료 — 기존 성적 유지, 새 개선 없음
+
+실행 코드c3fe6a7의1,000actual transition/update·저장 감사가 끝났다. 모델 SHA는
+`b29adb1a125533dd61a49ef626fa66a5e72e5f4152ce99f39166318e68b14d16`, replay SHA는
+`83005d554acd501e022c94fa28ec9bc85fe29866028af664d42d8b5b7c21b004`다.
+`review_collection.py --updates 1000`으로 초기 자기5,000의17배열 바이트 동일·모델 설정·
+과거main 이력의 root 선택/순서·원본 저장 연결·원래 종료 처리를 독립 검토했다.
+
+고유train8장면, main471/branch529다. KEEP/FOLLOW는 main344/127, branch312/217step이다.
+6개 trigger의36roots에서 각8step, 총288quota를 유지했고 선택된6개 path에241step을 더했다.
+실제 연결된 path 길이는29/34/47/67/70/42step이며 모두 충돌 종료했다. 분기 terminal54개,
+main 종료7개(충돌6·목표1)와 마지막 nonterminal 예산 경계1개를 확인했다. train 목표1회를
+고정 개발 평가의 성공으로 더하지 않는다.
+
+| 수집 지표(같은1,000예산) | quota | complete-path | quota-extension |
+| --- | --- | --- | --- |
+| main/branch step | 664/336 | 589/411 | 471/529 |
+| 고유train장면 | 10 | 9 | 8 |
+| 선택root | 42 | 7 | 36 |
+| branch 실제terminal | 66 | 7 | 54 |
+| 사전정지 경험 | 464 | 486 | 375 |
+| 검사 통과 경험 | 443 | 370 | 296 |
+| 양의 즉시보상 경험 | 154 | 146 | 189 |
+
+긴 실제 연결과 종료 노출은 둘 다 확보했지만, 장면/main 경험과 검사 통과 수는 줄었다.
+양의 즉시보상이나 정지 비중 한 지표만으로 수집이 더 좋아졌다고 결론내리지 않는다.
+최초77수집의 검사·source·종료·root/path 순서는 quota와 같았으나 별도 GPU 실행의 최대
+raw-u 차이7.6607e-7, 보상5.1679e-9, packed 관측2.1607e-6을 기록했다. 첫 quota 이후에는
+방문한 상태와 후속 정책도 달라지므로 전체 데이터가 동일한 길이만의 비교라고 하지 않는다.
+
+`review_evaluation1000.py`로 기존3모델과 새 모델의16episode 원본 frame을 재계산했다.
+고정2개 개발 장면×KEEP/FOLLOW의4초기 frame/map/seed는 같고, 고유 장면은2개다.
+
+| 모델 | 목표/충돌 | tick | 거절 | 제동 | 정지 | 평균 return |
+| --- | --- | --- | --- | --- | --- | --- |
+| 초기mean0 | 2/4·2/4 | 216 | 58 | 46 | 22 | -10.015390 |
+| quota1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981233 |
+| independent1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981133 |
+| quota-extension1,000 | 2/4·2/4 | 236 | 44 | 36 | 12 | -9.981107 |
+
+고속 KEEP/FOLLOW는 각각72tick 목표, 중속 KEEP/FOLLOW는 각각46tick 충돌이다.
+거절18.64%·제동15.25%·정지5.08%로 quota1,000과 같다. 작은 return 차이를 성능 향상으로
+주장하지 않는다. complete-path1,000의0/4에서 기존 두 성공을 회복했지만 초기mean0과
+기존1,000 후보들보다 새로운 성공을 확보한 것은 아니다. 안정 정책/기본 채택은 미달이며
+전체16·다른 learner seed·별도 정책 평가로 확대하지 않는다.
+
+로컬 `outputs/sac_quota_extension_20261120/collection1000-review.json` SHA
+`1fedb4562ed662eb424f1d85578f3f9116dd3dedd0484632c99fc5bef6d9b10c`,
+`evaluation1000-review.json` SHA
+`57142671b8453a701217134f699ce6aaa32343e817b7d27bbf6ea888b1b675ab`에 검토 결과가 있다.
+train2477740/주행2485021은 완료 후 종료됐고 runner2477739의 고정 종료Q child2486519가
+이어 실행 중이다. coverage·수집 terminalQ가 뒤따르고, runner2478192는 같은 두 train
+상태×4seed 실제 종료 soft return을 대기한다. 최종 Q/coverage/MC 원본 검토는 미실행이며
+완료 후 실행한다. 현재 소스 동결을 유지하며 다음 학습 예산/새 수집 변경은 아직 결정하지 않았다.
