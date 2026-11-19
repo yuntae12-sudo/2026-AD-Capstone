@@ -190,3 +190,22 @@ entropy1,000→2,000비교와같은경계에서다시시작하며exact rollout r
 초기frame/map/seed를대조한다. 나머지12기존baseline주행을새후보평가로세지않는다.
 후보의전체validation·다른seed확대는없다. 고정Q/실제terminal/coverage/같은2train상태×4seed
 MC까지마친뒤판단하며2,000을넘는추가학습·구조/gain변경·기본채택은자동연결하지않는다.
+
+### 2026-11-20 05:39 동일 raw 평균의 총5,000회 후속 비교
+
+2,000회 후보의 기존4주행·정지4주행·train MC8회가 모두 충돌했다. 종료 Q 적합은
+자신의1,000회보다 좋아졌지만 현재 행동에 대한 잘못된 선호와 정지 상태의 분포 차이는
+남았다. 해당 후보는 미채택이다. 전체 검토 후 별도 결정으로 같은 learner를 총5,000회까지
+이어, 이미 완료된 entropy 평균5,000회와 동일 예산에서 비교한다. 짧은 진단만으로
+장기 수렴을 부정하지 않으면서, 동일 설정의 학습 경과를 확인하는 제한 실험이다.
+
+완료 raw2,000의 optimizer/target/learner RNG 및 replay7,000행/RNG를 복원한다.
+추가 실제 전이와 update는 각각3,000개다. collection-seed2000으로 환경/장면/행동 RNG를
+재시작하며 exact rollout resume는 아니다. 이는 기존 entropy2,000→5,000과 같은 경계다.
+mean gain0.0001·physical Q·수집 규칙·uniform replay50k·실제 전이당1update·원래 Gaussian·
+보상·검사·PD·BC/teacher0은 그대로다. 새 배율·네트워크·손실·재가중은 도입하지 않는다.
+
+기존4주행/Q/MC는 entropy5,000 및 자신의 raw2,000과 대조한다. 정지4주행은
+raw2,000과 과거 entropy2,000을 참고하며, entropy5,000 정지 평가를 수행한 것으로
+쓰지 않는다. 이후 전체 validation·다른 seed·독립 평가·기본 채택·5,000 이후 학습은
+자동 연결하지 않고 완료된 다중 지표를 검토한다. 실행 식별자는 작업 기록에 남긴다.

@@ -3223,3 +3223,92 @@ collection-violation-breakdown SHA `0e25a1b40fec35157cd105b15ae483f6f92550a3f171
 evaluation-independent-review SHA `3b5e0426595ece3a474aefa6c2252b954cfa3be2883f671d633d5abac9903f92`,
 own-evaluation-independent-review SHA `29f5ce696972c8309eb57a1d0d4757e179ed49b14fb66469b9fb1ed4363fb511`.
 기준HEAD792800d에서소스변경없이이번결과기록만추가했다.
+
+## 2026-11-20 05:39 KST — raw2,000 최종 미달과 동일 설정5,000 후속 비교
+
+기준 HEAD `530322677c8d3b62c83241a1818113ae4ff852f5`, 같은 개발 브랜치에서
+런타임 소스 변경 없이 검토·실험 규약을 기록했다. CLI556fc3d/core96fa1d6 유지.
+05:38:04 이전 runner2580230과 모든 자식 PID의 실제 종료, 모든 job exit0,
+고정 소스 및 검토 입력 SHA를 확인했다. 로컬 `sac_mean_decoupled_g_continuation_20261120/`
+아래 `scientific-review.json`은 `REVIEWED_DRIVING_FAILURES`, qualified=false,
+SHA `8d6aa470bc18c03998e09ffd61c067cf1d37b22fa60454fa1ca421891070e290`이다.
+안정 정책 확보나 전체 목표 완료가 아니다.
+
+### 정지 출발과 실제 종료 행동
+
+같은 정지2장면×KEEP/FOLLOW의 초기 frame/map/seed를 대조했다. 세 모델 모두
+0/4성공·4/4충돌·328/328틱 정지였다. 서로 다른 실제 주행의 접촉 위치는 과실 판정이 아니다.
+
+| 정지4주행 | entropy2,000 | raw1,000 | raw2,000 |
+| --- | --- | --- | --- |
+| 거절 | 80/328 | 124/328 | 264/328 (80.49%) |
+| 제동 | 76/328 | 98/328 | 140/328 (42.68%) |
+| 평균 return | -20.429955 | -20.540071 | -20.890173 |
+
+raw2,000의 주행별 누적 이동은0.000828~0.001541m, 최대 속도는0.000425~0.001100m/s다.
+미세한 이동을 출발 성공으로 해석하지 않는다. curvature/curvature_rate 위반을 포함한
+운동 한계 거절이 늘었고, 기존4주행도 이미0성공·4충돌로 미달이다.
+
+고정 종료 KEEP65/FOLLOW72에서 현재 평균의 Q는 저장 행동보다+0.737793/+1.484426,
+실제 종료 보상 대비 오차는+2.846850/+1.919857이었다. 수집 branch KEEP28/FOLLOW69에서는
+저장 행동·현재 평균·현재 Gaussian4표본이 모두 같은 보상/다음 관측으로 충돌했는데,
+현재 평균 선호는+6.129089/+3.890041, 보상 대비 오차는+5.545614/+4.445751이었다.
+이 종료 전이는 bootstrap=false이므로 다음 상태 추정치로 차이를 설명할 수 없다.
+원본 재실행 결과의 reward/next hash/종료를 CPU로 대조한
+`terminal-preference-review.json` SHA는
+`31cd63e927257afe7596a6f1dcb033468ba262ff3360dca401c9880290168185`이다.
+
+### 경험 노출과 실제 미래 보상
+
+전체512,000 batch draw 중 warmup430,763, 새 경험81,237이었다. 추가1,000회 구간에서는
+새로 생긴 main 충돌7행이117회, branch 충돌64행이1,109회 추출됐다. branch4행은 미추출이다.
+최종 online severe125행은5,026회 추출됐고 저장 행동 Q MAE는0.989634였다.
+충돌 데이터가 전혀 학습되지 않았다는 설명은 맞지 않지만, 충분한 학습을 증명하지도 않는다.
+
+최종 정책의 조건부95% Gaussian 타원체 안에 있는 행동은 online624/2,000이었다.
+속도별로 정지0/1,078, 저속23/163, 이동601/759이며, 최근100행은 정지0/43·저속14/28·
+이동25/29였다. 최근 정지43행은72회 추출됐고12행 미추출, 현재sigma RMS 중앙값81.058360이다.
+이는 Gaussian의 지지집합·안전 gate·신뢰구간이 아니다. 예산 사이의 실제 상태도 다르다.
+읽기 전용 `coverage-speed-stratification.json` SHA
+`2572e1a64039c8f6bbec15c9cd2b15c82a310c3e6cc9fdcdb036237f0207df2a`에 분모·입력 SHA를 남겼다.
+
+같은2train상태×4seed88019..88022 후속 주행은8회 모두 충돌했다.
+
+| 현재 평균 첫 행동→원래 Gaussian 후속 주행 | KEEP tick0 | FOLLOW tick4 |
+| --- | --- | --- |
+| 첫 행동 Q | -0.362388 | -0.239095 |
+| 실제 soft return 평균±표본SD | -12.612033±2.576786 | -10.548081±0.290141 |
+| Q−실제 평균 | 12.249646 | 10.308986 |
+| 자신의1,000 대비 paired return 평균 | +0.964912 | -0.126910 |
+
+KEEP 증가에는 종료 보상 할인 차이+1.050353이 들어갔고, 비할인 실제 reward합은
+-0.046333으로 악화됐다. FOLLOW는 종료 할인+0.058358·종료전+0.018837보다
+entropy 기여 감소-0.204105가 컸다. 동일 관측·paired seed·원본 trace/구성 합 검토 완료.
+고정 충돌44행의 Q MAE는 raw1,000의5.879852에서3.616825로 줄었지만
+entropy2,000의0.742834보다 크고, 실제 주행 실패는 그대로다. 보상 증가나 Q 적합만으로
+개선 판정하지 않는다. 두 개발 cohort와 train MC는 독립 test가 아니다.
+
+### 다음 실행: 같은 learner로 총5,000회까지
+
+전체2,000 검토를 마친 뒤 총5,000회 제한 비교를 별도 결정했다. 매번 초기화하거나
+배율을 다시 바꾸지 않고 raw2,000의 전체 learner/optimizer/target/RNG와7,000 replay행/RNG를
+복원해 실제 전이3,000개와 update3,000회를 추가한다. collection-seed2000으로 환경/장면/
+행동 RNG를 재시작한다. 이미 완료된 entropy5,000과 동일 예산의 주행/Q/MC를 비교한다.
+정지4주행의 기존 참고값은 entropy2,000/raw2,000이며 동일 예산 비교라고 부르지 않는다.
+
+원래 Gaussian·보상·검사·PD·순수 SAC·uniform replay50k·전이당1update·mean gain0.0001·
+physical Q·quota8/window6/moving_predecessors/restart-terminal을 유지한다.
+더 긴 학습이 해결책이라는 확정이나 후보 채택은 아니다. 실패한 짧은 진단과 충분한
+학습 예산을 구분하고 동일 설정의 경과를 확인한다. 전체 validation/다른 seed/독립 test/
+5,000 이후 예산은 완료 검토 후 판단한다.
+
+로컬 `outputs/sac_mean_decoupled_g_budget5000_20261120/`의 decision SHA
+`e6bf95dcc6f4c90f9a22f2381eb2458472e85cdac555974b0137fc657c9a6f55`, runner SHA
+`6c3e1cda8f3811aaea2b54de90db69bd0d8a4a27cd723a785fcae110129b05af`.
+새 로컬 runner/reviewer py_compile과 완료 raw2,000을 사용한 정지 검토기 preflight 통과.
+런타임 변경이 없어 새 pytest/추가 GPU preflight는 실행하지 않았다. 실제 continuation이
+full-state 복원 동일성을 검사한다. 05:39:02 runner2597128 시작,05:39:10 train2597131 실제 생존.
+이 시점 학습은 RUNNING이며 새5,000 성능은 미검증이다. 전체 목표는 active다.
+
+05:45:47 실제 report에서 `restored_learner_bytes_identical=true`, 승계2,000·추가416·
+누적2,416/5,000·collection-seed2000을 확인했다. runner2597128/train2597131 생존 확인.
