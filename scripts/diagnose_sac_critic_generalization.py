@@ -102,6 +102,8 @@ def main():
     assert held.any() and (~held).any()
     assert set(a["scene_id"][indices[held]]).isdisjoint(a["scene_id"][indices[~held]])
     arm = source["arms"]["online"]
+    if arm.get("critic_action_gain", 1.0) != 1.0:
+        raise ValueError("this historical fit protocol does not support input-gain variants")
     weights = args.diagnostic / "online-learner.msgpack"
     digest = file_hash(weights)
     assert digest == arm["learner_sha256"]

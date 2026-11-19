@@ -21,6 +21,8 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument("--critic-action-gain", type=float,
+                        help="Opt-in positive critic input scale; no action clipping or loss change")
     parser.add_argument(
         "--zero-critic-action-init",
         action="store_true",
@@ -43,6 +45,10 @@ def main():
         not math.isfinite(args.mean_gain) or args.mean_gain <= 0
     ):
         parser.error("mean gain must be finite and positive")
+    if args.critic_action_gain is not None and (
+        not math.isfinite(args.critic_action_gain) or args.critic_action_gain <= 0
+    ):
+        parser.error("critic action gain must be finite and positive")
     if args.output.exists():
         raise FileExistsError(args.output)
     import tensorflow as tf
@@ -63,10 +69,13 @@ def main():
     from src.scenarios.womd20 import parse_scenario
     from src.environment.womd_control.environment import SACPlanningEnvironment
     from scripts.sac_experiment_runtime import model_proposer
+    from scripts.sac_diagnostic_critic import diagnostic_critic, critic_factory_hash
 
     config = json.loads((args.configuration / "report.json").read_text())
     variant = dict(config["arms"][args.variant])
     overrides = {} if args.mean_gain is None else dict(mean_gain=args.mean_gain)
+    if args.critic_action_gain is not None:
+        overrides["critic_action_gain"] = args.critic_action_gain
     if args.zero_critic_action_init:
         overrides["critic_action_kernel_init"] = "zero"
     variant.update(overrides)
@@ -113,10 +122,7 @@ def main():
                 head_layer_norm=variant["actor_head_layer_norm"],
                 mean_coordinate_scale=variant.get("mean_coordinate_scale", "raw"),
             ),
-            critic=Critic(
-                zero_output=variant["zero_q"],
-                action_coordinates=variant.get("critic_action_coordinates", "raw"),
-            ),
+            critic=diagnostic_critic(variant),
         )
         init_mode = variant.get("critic_action_kernel_init", "standard")
         initialization_hash = None
@@ -145,6 +151,7 @@ def main():
         script_sha256=file_hash(__file__),
         critic_action_kernel_init=init_mode,
         initialization_script_sha256=initialization_hash,
+        critic_factory_sha256=critic_factory_hash(),
         inherited_self_warmup=5000,
         new_transitions=0,
         updates=0,
@@ -250,6 +257,8 @@ def main():
             zero_q=variant["zero_q"],
             critic_action_coordinates=variant.get("critic_action_coordinates", "raw"),
             critic_action_kernel_init=init_mode,
+            critic_action_gain=variant.get("critic_action_gain", 1.0),
+            critic_factory_sha256=critic_factory_hash(),
             updates=int(state.updates),
             learner_sha256=file_hash(weights),
         )

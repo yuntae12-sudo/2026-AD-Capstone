@@ -43,6 +43,7 @@ def main():
     from src.training.sac.policy import tensor_observation
     from src.training.sac.replay import Replay, unpack_observation
     from src.training.sac.runtime import versions, write_report
+    from scripts.sac_diagnostic_critic import diagnostic_critic
 
     version = versions(args.manifest)
     meta = json.loads((args.checkpoint / "manifest.json").read_text())
@@ -94,10 +95,7 @@ def main():
                     head_layer_norm=arm["actor_head_layer_norm"],
                     mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
                 ),
-                critic=Critic(
-                    zero_output=arm["zero_q"],
-                    action_coordinates=arm.get("critic_action_coordinates", "raw"),
-                ),
+                critic=diagnostic_critic(arm, restoring=True),
             )
             state = jax.device_put(
                 serialization.from_bytes(state, weights.read_bytes()), gpu
@@ -142,6 +140,8 @@ def main():
                 learner_sha256=digest,
                 updates=int(state.updates),
                 mean_gain=arm["mean_gain"],
+                critic_action_gain=arm.get("critic_action_gain", 1.0),
+                critic_factory_sha256=arm.get("critic_factory_sha256"),
                 groups=groups,
                 rows=[
                     dict(

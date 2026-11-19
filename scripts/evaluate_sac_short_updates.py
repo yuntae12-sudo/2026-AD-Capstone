@@ -50,6 +50,7 @@ def main():
     from src.scenarios.womd20 import parse_scenario
     from scripts.sac_experiment_runtime import model_proposer
     from src.visualization.sac_rollout import capture
+    from scripts.sac_diagnostic_critic import diagnostic_critic
 
     source = json.loads((args.diagnostic / "report.json").read_text())
     arm = source["arms"][args.variant]
@@ -75,10 +76,7 @@ def main():
                 head_layer_norm=arm.get("actor_head_layer_norm", False),
                 mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
             ),
-            critic=Critic(
-                zero_output=arm["zero_q"],
-                action_coordinates=arm.get("critic_action_coordinates", "raw"),
-            ),
+            critic=diagnostic_critic(arm, restoring=True),
         )
         trained = serialization.from_bytes(initial, weights.read_bytes())
         trained = jax.device_put(trained, gpu)
@@ -110,6 +108,8 @@ def main():
         mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
         actor_head_layer_norm=arm.get("actor_head_layer_norm", False),
         critic_action_coordinates=arm.get("critic_action_coordinates", "raw"),
+        critic_action_gain=arm.get("critic_action_gain", 1.0),
+        critic_factory_sha256=arm.get("critic_factory_sha256"),
         selected_pairs=[(r["scene_id"], r["provider"]) for r, _ in selected],
         selected_labels=args.labels,
         note="Selected labels use deterministic means, CPU Waymax/GPU inference. A single-label report is not a paired comparison by itself. Selected scenes are not independent test. No teacher or BC.",

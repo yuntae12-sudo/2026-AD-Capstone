@@ -98,6 +98,7 @@ def main():
     from src.training.sac.teacher import FrenetTeacher
     from src.environment.womd_control.environment import SACPlanningEnvironment
     from src.scenarios.womd20 import parse_scenario
+    from scripts.sac_diagnostic_critic import diagnostic_critic
 
     source = json.loads((args.diagnostic / "report.json").read_text())
     evaluation = json.loads((args.evaluation / "report.json").read_text())
@@ -127,10 +128,7 @@ def main():
                 head_layer_norm=arm["actor_head_layer_norm"],
                 mean_coordinate_scale=arm.get("mean_coordinate_scale", "raw"),
             ),
-            critic=Critic(
-                zero_output=arm["zero_q"],
-                action_coordinates=arm.get("critic_action_coordinates", "raw"),
-            ),
+            critic=diagnostic_critic(arm, restoring=True),
         )
         state = jax.device_put(
             serialization.from_bytes(initial, weights.read_bytes()), gpu
