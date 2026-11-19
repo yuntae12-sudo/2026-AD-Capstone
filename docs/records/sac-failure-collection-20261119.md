@@ -2182,3 +2182,26 @@ coverage→수집 terminalQ다. 별도 runner2493877(01:11:46.940KST)은 이 pip
 현재는 아직 미실행이며 이전6,000 replay행의17배열·tick/update prefix·실제 주행 frame·
 동일 terminal/MC·512,000추출을 확인해야 한다. 총2,000 이후 자동 추가 학습은 없다.
 주행 개선이 없으면 안정 정책/평가 확대/기본 채택으로 처리하지 않는다. 전체 목표는 active다.
+
+
+## 01:16 KST 작은 soft-return 상승의 구성 분리
+
+로컬 `review_return_components1000.py`를 실제 실행해 기존quota1,000과 새extension1,000의
+2train상태×4paired seed, 총16실제 trace의 return을 terminal/그 이전 보상/entropy로 재계산했다.
+모든16주행은 충돌이며 원시 trace SHA와 총합을 대조했다. 추가 시뮬레이션/학습은 없다.
+
+KEEP의 평균 soft-return +0.000227은 terminal 기여0, 그 이전 보상 -0.000032,
+entropy +0.000259였다. tick/거절/제동/정지 수는 같은4seed 모두 그대로이고 할인 전 누적보상은
+평균 -0.000043으로 약간 나빴다.
+
+FOLLOW의 평균 soft-return +0.210228은 할인된 terminal 보상 +0.191172,
+그 이전 보상 +0.002377, entropy +0.016679였다. 약91%가 terminal 시점 차이의 산술 기여다.
+전체 tick 평균 +1.75, 거절 +1, 제동0, 정지 -0.25이고 할인 전 누적보상은 평균 -0.004829였다.
+차이가 가장 큰 seed88021은58→66tick 뒤 같은 -20.017 terminal 보상으로 충돌했다.
+soft-return +0.954051 중 terminal 기여 +0.872034, 나머지 보상 +0.006332,
+entropy +0.075686이다. 거절49→54/제동44→45/정지25→24이며 할인 전 보상은 -0.027810 나빴다.
+
+이 결과는 충돌 회피나 새 목표 성공이 아니다. terminal 시점 차이가 왜 발생했는지에 대한
+인과 개입도 아니며 의도적인 reward hacking이나 보상 변경 근거로 단정하지 않는다.
+기존 규약을 유지하면서 성공/충돌/거절/제동/정지와 보상을 함께 판단한다.
+`return-components1000-review.json` SHA `a1ef8b79d50c7e4a72945c85060764fd96563640efcdfe8929eb35d5d40e1e75`.
