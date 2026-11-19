@@ -3054,3 +3054,95 @@ ReLU는이L2경계를늘리지않고 B와3t²는원소가음수가아니므로
 로컬 `stopped-independent-review.json` SHA `f4fa262c5b74e8dd3c798897f5d3f2fb817d65d784f06c1a9bddd757296ff2b4`.
 
 로컬 `mean-weight-envelope.json` SHA `8aff75d7449c2ea6d62cf3f27c05b58afd54855dfd7571a5dcb88c6a4caae375`.
+
+
+## 04:59 KST raw 평균1,000회 최종 검토: 주행·가치 미달
+
+runner2560409/마지막검토2579411의실제종료와모든job exit0/source hash를확인했다.
+`scientific-review.json`은REVIEWED_DRIVING_FAILURES/qualified=false다. 기존4개발주행과
+추가정지4주행각각0성공·4충돌이고,같은2train상태×4seed88019~88022도8회모두충돌했다.
+
+| 현재평균첫행동→원래Gaussian 후속주행 | KEEP tick0 | FOLLOW tick4 |
+| --- | ---: | ---: |
+| 첫행동 Q | -0.410892 | -0.220348 |
+| 실제 soft return 평균±표본SD | -13.576946±1.736406 | -10.421171±0.477574 |
+| Q−실제평균 | 13.166054 | 10.200823 |
+| 기준1,000대비 paired return평균 | -0.182494 | +0.555750 |
+
+FOLLOW의return증가는종료보상할인+0.501741(약90.3%),종료전+0.008673,
+entropy+0.045337로분해됐다. 할인하지않은reward합은-0.008690으로악화됐고4/4충돌이다.
+KEEP는충돌tick평균이1.5줄고종료보상할인-0.171887·종료전+0.002129·entropy-0.012737이다.
+동일상태/관측hash/paired seed/원본trace와구성합을대조했다. 보상증가를주행개선으로세지않는다.
+고정warmup severe44행Q MAE도기준4.896726→후보5.879852로악화됐다.
+
+실제current mean과stored행동을다시실행한고정terminal2개는모두같은reward/next관측hash로
+충돌했지만,현재평균Q를KEEP65tick+1.403010/FOLLOW72tick+0.973963높게평가했다.
+수집branch의KEEP28tick/FOLLOW69tick에서는저장행동·현재평균·현재Gaussian4표본모두
+각상태에서동일reward/next관측으로충돌했다. 현재평균선호는+1.958303/+2.503785,
+현재평균Q−reward오차는+5.341227/+6.388299다. stored raw_u와실제replay행도대조했다.
+다른실험의서로다른FOLLOW종료tick을동일상태paired비교로섞지않았다.
+
+### 동일warmup상태의분포차이와실제추출을분리
+
+coverage CSV6,000행의scene/pre_tick/reward/bootstrap과256,000draw/savedRNG를별도CPU로
+대조했다. 현재후보online1,000행중54severe종료는1,606회추출됐고,
+마지막100행은모두정지상태이며223회추출·21행미추출·현재95%Gaussian영역내0행이다.
+동일warmup5,000행을두모델간identity/speed/reward/bootstrap/draw까지대조한결과:
+
+| 동일 초기 경험 | 행수 | 기준 현재95%영역내 | 후보 현재95%영역내 | 실제추출수(양쪽동일) |
+| --- | ---: | ---: | ---: | ---: |
+| 정지(<0.1m/s) | 3,347 | 100% | 0% | 156,027 |
+| 저속(0.1~2m/s) | 213 | 100% | 36.15% | 10,091 |
+| 이동(≥2m/s) | 1,440 | 100% | 100% | 67,243 |
+
+정지행의stored-action/현재sigma RMS중앙값은0.686471→96.218297,
+현재평균의초기sigma좌표변위중앙값은0.212440→144.388756이다.
+현재분포95%타원체의조건부겹침이지Gaussian지지집합/신뢰구간/새안전gate는아니다.
+같은행에서Q(mean)−Q(stored)평균은0.001570→0.226327이나,5,000개대체행동을모두
+실행한것이아니므로그차이를실제이득으로해석하지않는다. 물리적움직임은작아도좁은
+저속탐색분포에비해평균변화가크다는점을기록한다. 단독인과관계확정은아니다.
+CSV비교첫실행은hash helper에문자열경로를넘겨AttributeError로저장전에실패했다.
+Path변환만고쳐재실행했고원본/오류를paired-warmup-coverage-initial-error.json에보존했다.
+학습/추론런타임변경0이다.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/scientific-review.json` SHA `bf9f29ad1505a2b8642f2f988a9b1c3fc4b3da3dae51c73d86198f02a44ccd3d`.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/value-independent-review.json` SHA `93e601bbb1f5cf54443cb2ad3aa7c9e2c021f1a06c7ffc12eb02b66f1c765996`.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/fresh-coverage-independent-review.json` SHA `f7ce8b78549c47690f6f19ddbbcae80c251760d2adba25adf5af9aae5501bc02`.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/paired-warmup-coverage.json` SHA `fb9debd29b038b0da55e46dc1f4f080eb3e6ca1a54fe61563f25a0ab87443d64`.
+
+로컬 `outputs/sac_mean_decoupled_g_20261120/terminal-preference-review.json` SHA `3a6b84a22233df470436b53678d265aab384e6c3063cdd8d7f9fe5446b1ab309`.
+
+
+## 05:02 KST 동일설정 자기경험 추가1,000회 비교 시작
+
+다음변경은학습/수집예산뿐이다. raw1,000의완료가중치/optimizer/target/RNG와replay/RNG를
+이어총2,000(실제추가1,000)까지만진행한다. 새로운gain/보상/안전조건을택하지않는다.
+raw gain0.0001·physicalQ/zero-action·quota8/window6/moving_predecessors/restart-terminal·
+uniformreplay·전이당1update·원래Gaussian·공통PD·BC/teacher0을유지한다. 환경/장면/행동RNG는
+기존entropy1,000→2,000과같은collection-seed1000으로새로시작하며exact resume가아니다.
+
+분포차이·현재행동Q오차와새경험노출을함께확인하기위한제한진단이다. 1,000회실패가
+경험부족때문이라고확정하거나추가학습의성공을보장하지않는다. 같은예산entropy2,000과
+자신의raw1,000을기존4개발주행/Q/MC에서각각대조한다. 추가정지4주행은baseline2,000의
+이미완료된full-development16중사전지정4쌍을재사용하고raw1,000/새raw2,000과비교한다.
+후보전체validation확대가아니다. subset검토기는완료된raw1,000자료로실행해기존측정값과
+정확한일치·4쌍초기frame/map/seed를확인했다. 새로쓴로컬runner/reviewer py_compile통과.
+실행코어수정이없어새pytest/추가GPUpreflight는하지않았으며실제full-state복원검사는
+기존continuation런타임이시작시에강제한다.
+
+로컬 `outputs/sac_mean_decoupled_g_continuation_20261120/decision.json` SHA
+`1252ccd0b66c9ef84c94a76d1ebfb71bd18992a438acdd6f1e6cacbfdab3bff5`,
+runner SHA `a1679509acdb09c58b7a89f640d79ea2c6316430b21f155ce14c448ca2a6940f`.
+05:01:33 runner2580230시작,05:02:06 train2580237과실제생존·RUNNING/train2000확인.
+이시점학습report는아직생성전이므로복원/추가update완료를미리주장하지않는다.
+기준HEAD773cb60의실행코어/CLI는그대로이며이번실험문서개정은미커밋이다.
+2,000뒤자동확대/다른seed/기본채택은없다. 안정정책미확보·전체목표active.
+
+
+05:03:02 실제report에서 restored_learner_bytes_identical=true,승계1,000/추가9/총1,009,
+collection_seed1000,raw/gain0.0001/physicalQ/zero-action override를확인했다.
+runner2580230/train2580237은둘다실제생존했다. 따라서복원과실제추가학습시작은확인됐고,
+총2,000완료/후속주행성능은아직미검증이다.

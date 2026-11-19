@@ -166,3 +166,27 @@ whitened Q였으므로 현재 physical Q 조합과 구분한다. 목록 검색�
 성공·충돌·거절·제동·정지/실제 이동과 보상을 함께 확인하며, 단순 reset 수락이나
 terminal Q 적합으로 통과시키지 않는다. 미달이면 원인을 기록하고 다음 조건을 재검토한다.
 새1,000 이후 예산 확대·다른seed·기본 채택은 자동으로 수행하지 않는다.
+
+
+### 2026-11-20 동일 raw 평균의 총2,000회 제한 비교
+
+fresh1,000의 사전지정 기존4주행과 추가정지4주행은 모두0성공·4충돌이고,
+같은2train상태×4seed후속 주행도8회모두충돌해미채택이다. 동일warmup 정지3,347행의
+저장행동은 기준entropy평균에서는모두현재95%Gaussian영역안,raw후보에서는모두밖이었다.
+현재분포의조건부겹침이며Gaussian의지지집합이나새수락gate가아니다.
+새1,000경험의전체batch추출비중은8.84%,마지막100행은현재영역내0행으로확인했다.
+실제충돌종료에서도현재평균의잘못된Q선호가남았으므로,출력gain/보상/검사를다시바꾸지않고
+같은정책의추가자기경험으로이차이가줄어드는지총2,000회에서제한비교한다.
+노출부족이유일원인이라는확정이나실패정책채택은아니다.
+
+완료raw1,000의learner/optimizer/target/RNG와replay/RNG를복원하고추가1,000개의
+실제train전이와update만실행한다. raw gain0.0001·physicalQ/zero-action·quota8/window6/
+moving_predecessors/restart-terminal·uniformreplay·원래Gaussian·보상/검사/PD·BC/teacher0을
+유지한다. 누적예산2,000과collection-seed1000을명시한다. 환경/장면/행동RNG는예전
+entropy1,000→2,000비교와같은경계에서다시시작하며exact rollout resume로부르지않는다.
+
+같은기존4주행에서동일예산entropy2,000과자신의raw1,000을각각대조한다. 추가정지4주행은
+기존entropy2,000 full-development결과중사전지정4쌍을재사용하고raw1,000/새raw2,000과
+초기frame/map/seed를대조한다. 나머지12기존baseline주행을새후보평가로세지않는다.
+후보의전체validation·다른seed확대는없다. 고정Q/실제terminal/coverage/같은2train상태×4seed
+MC까지마친뒤판단하며2,000을넘는추가학습·구조/gain변경·기본채택은자동연결하지않는다.
