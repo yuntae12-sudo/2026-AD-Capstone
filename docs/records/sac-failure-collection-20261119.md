@@ -4495,3 +4495,27 @@ SAC손실/lr/tau/BCteacher0유지. 추가예산·다른seed·독립test확대는
 13:04 CPU pytest sampling/coverage/continuation/complete_path/reconstruction/rollout_budget
 6파일 **46passed(0.50s)**. 실제최근replay continuation GPU검증은미실행이며실행했다고쓰지않는다.
 안정정책은미확보이며목표를계속진행한다. 다음실험은이기록시점준비중이다.
+
+
+### 2026-11-20 13:10 KST — 완료경로 비교 실제 시작·초기 재현 한계
+
+실행코드a41deb74feba17ab9aaa92ac02af93e22d408172(원격확인).
+로컬 `outputs/sac_recent_full_path_20261120/` runner2763938/child2763958을13:05:57시작했다.
+학습1,000→저장감사→독립root/path검토→기본4→정지4→고정Q/coverage/branchQ→train미래보상8회
+→value/종료평균선호검토의13job이며현재학습중이다. 첫완료branch는29실제step에서충돌했다.
+39소스동결. 결정SHA c3b4525237262c5b6c996fdcc9d265af96907f4b2ee02cd8a2f96e0318d56ae5.
+성공을전제한예산연장/평가확대없음. 성능결과는미완료다.
+
+첫물리행동/실행결과·첫update지표는최근quota와정확히같다. 그러나초기29main step의전체동일성
+검사는update2 xy_world에서실패했다. 실패를숨기거나사후허용오차로정확일치통과로바꾸지않는다.
+CPU `review_initial_prefix.py`로실제차이를별도측정: XY최대1.126931e−6m,raw_u3.37730e−8,
+anchor위치/속도/가속도차이0. 29step모든보상/검사이유/source/종료·batchindex는같다.
+update지표최대차이는Q1loss0.00462694,Q1gradnorm0.04488003,actorloss0.00143145다.
+첫collector개입이전부터수치차이가있으므로이후변화를수집방식만의정확한인과효과로쓰지않는다.
+수치차이의원인은확정하지않았다. replay원본/가중치/소스는실행중수정하지않는다.
+
+완료후기존Bellman피크의정확관측hash(features/fieldmask/itemmask)일치와scene/provider/tick
+일치를구분해비교하는CPU검토기를준비했다. 같은tick의경험을동일상태경험으로세지않는다.
+추가GPU작업은시작하지않았으며독립test/다른seed/최종Rule-based비교는미실행이다.
+노션02/03/04/Home에는완료Bellman·감사오류수정46tests·현재실행을갱신하고다시읽어확인했다.
+이초기수치차이후속기록도다음갱신에포함한다.
