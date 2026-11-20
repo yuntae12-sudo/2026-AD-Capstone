@@ -241,7 +241,8 @@ FOLLOW와 종료 source의 새 옵션 실행은 이100회에서 관찰되지 않
 재수집20개 모두 경로 거절이었고 이동 상태6/정지 상태14로 주행 개선 증거는 아니다.
 같은 초기 learner·자기warmup5,000의 fresh1,000회와 전체 개발16회 평가를 후속 비교로
 선택했다. 완료된 terminal-only refresh1,000 모델/평가를 대조군으로 재사용하며
-새 정책 성능·안정 정책 확보·기본 채택은 아직 미검증이다.
+후속1,000회는 전체 개발16회에서 목표0·충돌16으로 대조군2목표·14충돌보다
+악화돼 채택하지 않았다. 저장/실행 검증과 성능을 구분한다.
 
 새 이력의 읽기 전용 정책 진단은 `sac_rejection_diagnostic_audit.py`를 거친다.
 새 scope는 rejection 전용 lineage 감사, 과거 scope는 기존 감사기를 사용하며
@@ -251,4 +252,27 @@ FOLLOW와 종료 source의 새 옵션 실행은 이100회에서 관찰되지 않
 별도 진입점으로 연결했다. 실제 행동·보상·Q·할인합 계산은 기존 진단과 같다.
 이 진단은 학습 데이터/가중치를 수정하지 않으며 조건부 행동 중첩과 실제 실행 결과를
 구분한다. 전용 감사기를 CPU에서 실제 pilot100/이전 두1,000 이력에 실행했고
-관련30pytest를 통과했다. 새 모델의 GPU Q/return/coverage 검증은 후속 실행 대상이다.
+관련30pytest를 통과했다. 새 모델의 GPU coverage와 고정 실패 상태 Q 실행은 완료했고,
+실제 종료까지의 return 검증을 이어간다. 최신 범위는
+[실험 기록](../records/sac-own-goal-retention-20261120.md)에 남긴다.
+
+### 종료 상태와 비종료 거절 상태의 분리 보존 비교
+
+비종료 수집1,000회에서는 종료 source12개가 모두 비종료 source 삽입으로 퇴출됐고
+8개는 한 번도 재방문되지 않았다. 같은 train 충돌 직전 상태에서 새 정책의 평균 행동을
+실제로 실행했을 때 Q 과대평가도 증가했다. 이를 유일 원인으로 확정하지 않고,
+상태 종류 간 퇴출 경쟁을 줄이는 별도 비교 옵션을 구현했다.
+
+`scripts/sac_stratified_refresh.py`는 종류별 FIFO4, 총8개를 보존한다. 두 종류가 있으면
+종료/비종료를 번갈아 선택하고, 한 종류만 있으면 그 종류를 선택한다. 각 종류 안에서는
+기존 순환 선택을 사용한다. 기존 실제 전이4개당 최대1회, 재귀 수집 금지, 실제 snapshot
+검증을 유지한다. 가중치는 새 실제 경험마다 전체 SAC로 한 번만 갱신한다.
+
+별도 `diagnose_sac_stratified_refresh.py`와 `audit_sac_stratified_replay.py`,
+`audit_sac_stratified_refresh.py`, `verify_sac_stratified_refresh_execution.py`는
+원본 source·배치·실제 제어 재현을 검사한다. 기존 실험이 동결한 파일은 수정하지 않았다.
+보상·검사·PD·원래 Gaussian·loss/lr/tau·BC/teacher0 조건은 같다. 규약5절/10절을
+유지하는 상태 수집 분포 비교이며 기본 채택이 아니다.
+
+관련 CPU36pytest·CLI/AST와 수집/업데이트 드라이버의 식별자 외 동등성을 확인했다.
+실제100전이 pilot의 학습·저장·Waymax 실행 검증과 이후 성능 비교는 아직 미완료다.
