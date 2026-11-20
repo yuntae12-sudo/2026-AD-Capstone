@@ -2474,7 +2474,7 @@ WAITING_FOR_REVIEWED_BASELINE이다. decision SHA
 다음은 capture/원본 검산 → 새100회 학습·감사·실제source 재현 검토다.
 안정 정책과 전체 목표는 미완료다.
 
-## 2026-11-21 00:43 — 종류별 수집의 정책 진단 연결
+## 2026-11-21 00:42 — 종류별 수집의 정책 진단 연결
 
 Rule-based capture3029682와 부모3015652, 후속 pilot3027013, GIF 대기3029047의
 실제 생존을 재확인했다. formal16회는 완료, capture는 진행 중이며 새 학습은 아직
@@ -2501,3 +2501,88 @@ COMPLETE를 확인했다. 각 실제 원본의 기존 검사를 그대로 수행
 새 종류별 모델은 아직 학습 전이므로 그 모델의 실제 Q/coverage/return 진단은 미실행이다.
 pilot의 실제 실행·저장·source 재현 결과를 먼저 검토하고, 같은 예산 성능 비교를
 선택할 때 이 도구를 연결한다. CPU 통과를 성능 통과로 해석하지 않는다.
+
+## 2026-11-21 00:56 — Rule-based 원본 검산·GIF·종류별100회 완료
+
+Rule-based runner3015652/session33463은00:47:51에 formal/capture/review 모두
+exit0로 완료했고 실제 종료를 확인했다. 8장면×KEEP/FOLLOW16쌍의 formal 지표와
+별도 실제 capture의 tick별 보상/수락/종료/정지/제어출처를 대조했고, SAC와 초기
+frame·지도도 모두 일치했다. 재실행을 독립32장면으로 세지 않는다.
+로컬 `outputs/sac_rule_baseline_current_20261120/baseline-review.json` SHA
+`c07391861f47c5b4e23e159ad8e05cc37b0b5caba8d5b85749ff7cb2da9bb8da`.
+
+### 실제 Rule-based/SAC 비교 GIF 저장·시각 확인
+
+`visualization-current/high-speed-keep.gif`를 원본 trace로 생성했다. 8b4c1e7e09f5f4c3
+KEEP 한 장면의 사후 예시이며 추가 정책 호출/episode0이다. Rule-based는74tick 목표,
+실패한 비종료 수집 SAC는73tick 충돌이다. 각각 거절5/35·제동5/32·정지0/9tick이다.
+Rule-based도 마지막5tick은 거절/제동이므로 연속 유효 경로나 이후 안전을 보장하지 않는다.
+
+GIF38frame·1440×900·실제7.4초+종료hold1.5초=8,900ms를PIL로 검산했다.
+중간4.4초 frame과 마지막PNG를 열어 도로/차량/제안·선택 경로/궤적·속도/제동/거절
+표시를 확인했다. 오른쪽 충돌 후 hold, 왼쪽 목표 종료와 서로 다른 정책 label도 확인했다.
+영상 범위로 전체 성능이나 안정 정책을 판정하지 않는다. 원본 render 결과를 보존하고
+별도 시각 확인 파일을 저장했다. 로컬 위 baseline 루트의 `visualization-current/`:
+
+- GIF SHA `ac5b10b74339db2d71ab1d2e08e592adc38e958218ab479c4fc2816e9ef7771b`.
+- PNG SHA `b66a501c489ad3e01a4ac8afe30e2cdb16f3f1ea916130982a728a3add0b5ab6`.
+- evidence SHA `e960c7895b3e5d990f54559ea875b29a0a07e8ba9b174d121192ada2042b642d`.
+- `visual-inspection.json` SHA `3ec7a6f69e176ac6bd082879bc458813a045df621d4ad704053637d09afb08c6`.
+
+### 종류별 수집100회 실행 검증 완료
+
+pilot3027013/session33870은00:53:20에4jobs 모두exit0 완료·실제 종료를 확인했다.
+실제100전이=main51+완료경로29+refresh20이며 actor/Q100·BC0다. 초기 learner는
+기존 reference와 바이트 동일하고 warmup17배열·배치/RNG·source/다음 관측·실제 종료
+플래그를 감사했다. 새 진단 adapter로도 완료된 실제 이력 검사를 통과했다.
+
+재수집의 source와 실제 결과는 각각 비종료13/충돌7이었다. source의 종료 여부를
+새 전이에 복사한 것이 아니라 원래 collector/Waymax에서 실제 결과를 확인했다.
+KEEP main/branch×종료/비종료4조합의 첫 사례를 원본 prefix와 함께 실제 재현했다.
+비종료 bootstrap=true, 충돌 false 및 보상/검사/제어/후속 관측·부모 보존을 대조했다.
+FOLLOW는 관찰되지 않아 미검증이다.
+
+refresh20개는 수락0·이동4/정지16·REUSED1/EMERGENCY19이며 거절 이유는
+PREDICTED_OFFROAD2/KINEMATIC_LIMIT2/PREDICTED_COLLISION16이다. 고유 source15개다.
+이동/정지 수집 통계는 pre-state anchor 속도0.1m/s 경계로 구분했다.
+전체100전이의 이동44·수락23도 수집 중 통계이며 최종 정책 주행 성능이 아니다.
+**구현/실행 검증은 통과했지만 새 안정 정책이나 유효한 재수집 경로 확보는 아니다.**
+
+로컬 `outputs/sac_stratified_refresh_pilot100_20261121/`:
+
+- pilot-review SHA `7fc1cb103fefc28439960ad6928efc054c88a95b51e0dac365ec11009965ceaa`.
+- audit100 SHA `57636d14b084a03c50c910b8fff636ec6ea10c603f40442fb5f4417077690630`.
+- execution100 SHA `75d89275285ced0b9775d5b2e607d2b69dc84d8764742b983140075bab7cad37`.
+- collection-review SHA `1d7e6c2a1956db056618684c3429cfdd8cf905fc7918039ab7c05fce91f851fa`.
+
+### 같은1,000회 비교와 후속 정책 진단 시작/대기
+
+동일 예산 비교를 선택했다. 100회 가중치를 이어받지 않고 같은 seed0/자기warmup5,000/
+초기 learner로 fresh1,000을 실행한다. 주 대조군은 직전의 보존 구분 없는 비종료
+수집1,000(0/16목표), 보조 참조는 terminal-only1,000(2/16)과 현재 Rule-based(7/16)다.
+모델 구성/override/수집 설정/배치 추출/초기바이트를 대조했다. 바뀌는 것은 종류별
+보존과 선택이며 자격·총8개·base4/최대20%·재귀 금지는 유지한다. 비종료만 있을 때
+보존량도 기존8→4가 되므로 종료 보존 하나만의 인과 실험으로 주장하지 않는다.
+보상/검사/PD/Gaussian/loss/lr/tau/전체SAC1·BC/teacher0은 같다.
+
+로컬 `outputs/sac_stratified_refresh_comparison1000_20261121/`의
+runner3037500/session91162·train3037519가00:54:27 시작했고 실제 생존 확인.
+source214/input138 SHA·복사본 동결, decision SHA
+`a851698bb83b3e7a7e4943d583e45603b72a1dd248ae5f4776c5c1930927040b`.
+첫 update 입력 learner도 SHA7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c로
+reference와 실제 바이트 동일했고 이후22update를 확인했다. 이후 모든 계산의 동일성을
+주장하지 않는다. 학습→감사→실제 재현→학습 검토→전체 개발16회→원본 검산6jobs다.
+
+비교 검산기는 이전의 완료된 자료만으로 사전 실행했다. 이때 control/candidate 모두
+같은 과거 비종료 모델을 가리켰고 추가 주행0·새모델 결과0임을 별도 scope로 명시했다.
+새 실행 결과로 오인하지 않는다. `reviewer-preflight/full-validation-review.json` SHA
+`c441b1c27e8d81a118544ba6b6caa3f9e17d5591695320c3de6695c4f7558237`.
+
+같은 폴더 `policy-diagnostics/`의 runner3039851/session65591이00:55:59 시작·생존 확인,
+WAITING_FOR_COMPARISON이다. 부모3037500/start_ticks74961685의 성공 완료와 실제 종료
+후 coverage→같은train 종료 상태Q→같은 선행 상태4seed 실제 미래보상→검산을 수행한다.
+source216/사전input217 동결, decision SHA
+`78c2f5eb16cf5ee14d35612d92e1fffdd9ea92801e52bc64a799ff8314ad4e80`.
+대조군 진단은 완료된 비종료 수집 결과의 바이트 복사본이며 새 독립 표본으로 세지 않는다.
+모델/replay 쓰기0, 새 진단 성능은 아직 없고 추가예산/seed/채택 자동연결은 없다.
+안정 정책·다른seed·최종 동일조건 Rule-based 비교·별도 평가는 계속 미완료다.
