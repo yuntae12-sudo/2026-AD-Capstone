@@ -304,3 +304,24 @@ coverage→같은 train 종료 상태의 현재 행동 Q→실제 미래보상�
 `diagnose_sac_bellman_trace.py`로 재현하고 모든 suffix의 할인합·가치 오차 분해를
 01:59에 검산했다. 비종료 구간 잔차와 일부 새 종료 상태의 큰 오차가 함께 남았다.
 추가 학습/독립평가/기본채택은 아니며 보상·검사·PD·순수 SAC 조건을 유지한다.
+
+
+### 비종료 재수집의 실제 후속 경로 비교 옵션
+
+`scripts/sac_successor_refresh.py`는 기존4+4 source bank와base4당 재수집1회,
+종류 교대를 유지하면서 비종료 슬롯의 실제 환경을 다음 비종료 슬롯에서 이어 쓴다.
+종료 source는 기존처럼 한 번 실행하며 새 결과가 비종료이면 이를 가짜 종료로 바꾸지
+않는다. 비종료 경로는 실제 종료까지 이어지고 예산 소진도 가짜 종료가 아니다.
+root가 FIFO에서 퇴출돼도 실제 후속 경로와 원본 root를 유지한다. bank8환경 외에
+active1개 및 퇴출된 원본root1개를 보존할 수 있어 최대10환경이다. 기존8상태 한도와
+메모리 상한이 완전히 같다고 주장하지 않는다. 재수집 결과의 재귀 source 삽입은 금지한다.
+
+`diagnose_sac_successor_refresh.py`, `audit_sac_successor_replay.py`,
+`audit_sac_successor_refresh.py`, `sac_successor_reconstruction.py`,
+`verify_sac_successor_refresh_execution.py`가 별도 구현이다. root/path/직전전이 ID로
+실제 후속 관측을 연결하고 bank선택/배치SHA·RNG/전체SAC1/warmup·teacher0과
+Waymax 실제 이력을 검증한다. 이후 슬롯은 그 시점의 최신 정책을 쓰므로 하나의
+고정 최종 정책으로 생성한 경로라고 해석하지 않는다.
+
+관련CPU41pytest와3CLI help·컴파일을 통과했다. 보상/검사/PD/Gaussian/학습계산과
+기존 동결 파일은 유지했다. 짧은100전이 실행을 준비하며 실제 수집·성능·채택은 미검증이다.

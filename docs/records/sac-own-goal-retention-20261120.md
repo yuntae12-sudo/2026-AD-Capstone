@@ -2984,3 +2984,41 @@ FOLLOW BRAKE는2.470880이다. 그러나 일부 새 종료 상태의 오차도 �
 - 로컬 `bellman-trace/report.json` SHA `c87f8bda99b13b7504beac092cf9906ee933a772d743551fd1a2bb9f48619093`.
 
 - 로컬 `component-review-candidate.json` SHA `cbd03fc60a8b2e49527bab64743cb24a7033baa7c0f8933120da818777888617`.
+
+
+## 2026-11-21 — 현재 정책의 비종료 후속 경험 수집 옵션 구현
+
+종류별1,000의 실패 분석을 근거로 별도 successor-refresh 비교 옵션을 구현했다.
+기존 소스와 actor/critic/loss/reward/checker/PD는 수정하지 않았다. 상태 수집 분포만
+바꾸며 BC/teacher0, original Gaussian, 실제 새 전이당fullSAC1을 유지한다.
+
+비종료 재수집 슬롯은 한 active환경을 실제 다음 관측부터 이어 실행한다. 종료 source4/
+비종료 source4·base4당최대1회·종류 교대와 종료 source 단일 실제 행동은 유지한다.
+root 퇴출 후에도 active경로를 보존하고, 실제 종료 뒤에 새 root를 선택한다. 재수집에서
+다시 source를 만들지 않으며 수집 예산 경계는 비종료 bootstrap을 유지한다. 정책은 각
+슬롯의 최신 가중치이므로 고정 최종 정책의 연속 평가 경로가 아니다.
+
+메모리는 bank8+active1+퇴출된 원본root최대1로10환경까지다. 원본 root도 끝까지
+검증하기 위해 보관하므로 단순히 기존8에1만 추가한다고 설명하지 않는다. 실제 결과의
+보상/종료를 source에서 복사하지 않는다. terminal-source의 새 결과가 비종료여도
+bootstrap=true를 유지하되 이 경로는 이어 수집하지 않는 구분이다.
+
+새 파일:
+
+- `scripts/sac_successor_refresh.py`: pending 실제 결과/부모·대기환경 보존과 bounded bank.
+- `scripts/diagnose_sac_successor_refresh.py`: 기존 학습계산에 별도 bank와 실제결과 feedback 연결.
+- `scripts/audit_sac_successor_replay.py`, `scripts/audit_sac_successor_refresh.py`:
+  root/후속전이/종류선택/FIFO/관측/flags·배치/RNG/초기learner/teacher0 검증.
+- `scripts/sac_successor_reconstruction.py`, `scripts/verify_sac_successor_refresh_execution.py`:
+  interleaved main/terminal 경로를 섞지 않고 root의 실제 이력+successor prefix를 재현.
+
+검증: 관련CPU41pytest(신규13 포함)통과,3CLI help·컴파일·diff 검사를 완료했다.
+신규 테스트는 실제 환경 이어짐/원본root 퇴출/종료 슬롯 교대/종료 후 새 root/비종료
+bootstrap/미기록 결과/잘못된 flags/환경변조/재귀source/끊긴 이력·다른장면을 확인한다.
+드라이버 diff는 bank/scope/식별자와 `after_refresh` 결과 연결 외 학습계산 변경이 없다.
+
+다음은 같은seed0·자기warmup5000·초기learner 바이트·B-f64/rawgain0.0001/
+physical-whitened zero-action critic·complete-path1/window6/horizon200·같은 sampler의
+fresh100전이 pilot이다. 학습→저장 감사→관찰된 root/후속경로 실제 Waymax 재현→집계
+검산을 연결한다. 소스/입력 동결 후 실행하며 에러는 보존하고 자동 재시작하지 않는다.
+아직 실제 수집·FOLLOW/종료된후속경로 조합·주행 성능·기본 채택은 미검증이다.
