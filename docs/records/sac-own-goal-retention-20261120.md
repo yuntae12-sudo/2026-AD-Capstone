@@ -3498,3 +3498,57 @@ KEEP tick28에서 +0.193424→−0.020161, FOLLOW tick59에서 +0.895033→+0.65
 `provider-retention-replay.json` SHA
 `c37dd76046aad6ea059f7fb088d23fae6ed816e7a25805a2d475edf32a34c53c`.
 전체 목표·다른seed·최종Rule-based비교·별도성능평가는 계속 미완료다.
+
+### 2026-11-21 04:04 KST: 명령 보존 pilot 완료와 동일1,000 비교 시작
+
+`outputs/sac_provider_protected_pilot100_20261121/`의 학습은04:02:03,
+저장감사는04:02:06, 실제재현은04:02:59, 최종검토는04:03:00에 exit0으로 완료됐다.
+runner3106328과 모든 child의 실제 종료를 확인했다. main51/branch29/refresh20,
+actor/Q각100·BC0·teacher0·warmup17배열·배치SHA/RNG·실제후속관측/flags를 검산했다.
+refresh는 비종료13/충돌7, 실제 후속12개다. 예산말13step 경로의 bootstrap=true를
+유지했다. KEEP만 관측됐으며 FOLLOW 실제보존효과와 성능은 미검증이다.
+
+관찰5사례를5reset/82실제step으로 재현해 보상·검사·제어·관측/마스크·원본root보존을
+대조했다. 이전KEEP-only pilot과 수락·거절이유·실제제어선택·종료/flags는 같았다.
+run별UUID와 이를 포함하는 lineage는 다르며 raw_u 최대차이7.2099422e−7,
+reward 최대차이3.2629136e−8이다. 초기learner 바이트동일이 이후 전체연산 동일성을
+보장한다고 주장하지 않는다. 최초 읽기전용 비교가 raw_u를1차원으로 가정해TypeError였고
+실제30×2 형식으로 펼쳐 재계산했다. 원본실험/허용오차는 변경하지 않았다.
+
+- `pilot-review.json`: `99072bef2209160024076a06dad12063a6aa9bafd3e603f0222e46a9760e729e`
+- `execution100.json`: `13386eaf338bebc64a33a71c7de6ad8b6dd2e232ba0e4c113c69b3d76023111b`
+- `pilot-integration-review.json`: `e84693cd5b00525796a9726ecfdcc4d0765402ebd6950caa931f9d094b9b7f1c`
+
+동일 예산 비교를 `outputs/sac_provider_protected_comparison1000_20261121/`에서
+04:03:57 시작했다. 실행코드 b2a37893b46557e076e36ac51758543d42126af8,
+runner3111218/start_ticks76155010·train3111226 실제생존 확인.
+자기warmup5000·seed0·fresh1000이며 pilot 가중치를 재사용하지 않는다.
+첫update 전 learner는 기존reference와바이트동일(SHA7363d29a…f014c2c)이다.
+주 비교모델은 완료된 실제후속1,000(0b679d97…82af1), 보조참조는terminal-only/Rule-based다.
+보상·검사·PD·원래Gaussian·B-f64/rawmean0.0001·physical-whitened/zero-actionQ·
+complete-path/window6/horizon200·배치혼합·fullSAC1/새전이·BCteacher0는 유지한다.
+
+학습1,000→저장감사→관찰조합Waymax재현→학습검토→같은개발8장면×2명령16회→
+원본검산을 연결했다. 비종료후속의 명령별 전이/새root 개수와 미관측 명령도 기록한다.
+동결source288/input174, decision SHA
+`82278b20ef512f20ac6393f8d4bcbee204e8e0fd5344aa1bb38e6f7274db391b`.
+
+Q진단3111403/start_ticks76155848은04:04:04 시작·실제생존 확인. 같은부모의
+성공완료와실제종료를 기다린다. control은 직전후속모델의 완료진단을 바이트그대로
+복사했고 새표본으로 세지 않는다. 새후보 coverage→고정충돌Q→같은2train상태×4seed
+실제미래보상→원본검산을 연결했다. 동결source290/input359,
+decision SHAf7bbd7f61c5bfb7428ef855508a32a5a3736c7b06c5a01e216cbd2d5b13d6017.
+`launch-review.json` SHA8ff757ec31fd7611ca7e1c865823dc60f71331a7cb1964c4b113885ccff62120에
+핸들·입력/소스SHA·비교대상·동일초기조건·예산일치를 확인했다.
+
+#### 이전 비교의 요약 예산 메타데이터 정정
+
+준비 과정에서 직전 `sac_successor_refresh_comparison1000_20261121_retry1/decision.json`의
+최상위budget이100으로 남은 오류를 발견했다. 실행한train명령은`--updates 1000`이며
+완료report·실제전이·직렬화learner감사·actor/Q모두1,000이다. runner는jobs명령을 실행하고
+요약budget은 사용하지 않는다. 실제학습량/성능결과는 변하지 않으며 원래동결decision은
+보존했다. `decision-budget-review.json` SHA98f66d48893e3856abc8115983825de7c5326d01f39f6eccb0a62d617f2e1f2e에
+원본SHA와불일치를 명시했다. 새실행은요약budget과실제명령이1,000으로같음을검사했다.
+
+새1,000의 완료·FOLLOW 수집효과·주행성능·채택은 아직 미검증이다. 추가예산/seed를
+자동연장하지 않고 결과를 검토한다. 전체목표와 다른seed/최종비교/별도성능평가는 미완료다.
