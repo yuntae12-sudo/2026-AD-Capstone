@@ -139,3 +139,21 @@ SAC seed별 차이와 그 평균·표본 표준편차를 보고한다. BC-only/B
 - 성공·실패 Q, 실제 경험/노출, 동일8주행의 다중 지표를 검토한다. 이는 별도 비교안의
   구현이며 기본 채택이나 안정 정책 확보를 의미하지 않는다. 실제 결과는
   [종료 경험 유지 기록](../records/sac-own-goal-retention-20261120.md)에 남긴다.
+
+### 같은 종료 경험 추출 방식의 이어학습 준비
+
+`scripts/continue_sac_terminal_retention.py`는 완료된 목표8+실패8 실행을 복원하는
+별도 진입점이다. `--continue-from`과 누적 목표 `--updates`를 명시해야 한다.
+현재 모델·optimizer·target·learner RNG·실제 replay/RNG를 복원하고 과거 tick/update
+기록을 그대로 보존한다. 장면·정책 수집 RNG와 환경은 명시적으로 재시작하므로
+시뮬레이터의 정확한 중간 시점 재개와는 다르다. 기존 예산 경계에 가짜 종료를 넣지 않는다.
+
+총10,000 update 상한과 warmup5,000을 포함한 replay의 wrap 금지를 유지한다.
+모델·수집·추출 방식/구현 해시 변경이나 손상된 이력은 거절한다. 별도
+`audit_sac_terminal_continuation.py`가 실제 종료 분류·모든 배치 index/RNG·누적 update와
+복원 이력을 검사한다. `diagnose_sac_terminal_soft_returns.py`는 같은 이어학습 감사와
+기존 현재행동/실제 미래보상 검사를 연결한다. 기존 진행 중 소스와 기본 설정은 유지한다.
+
+관련69pytest, 실제 fresh1,000의 새 감사 및 CPU 전체 상태/replay 복원을 검증했다.
+GPU 실제 이어학습은 아직 미실행이며 추가 예산·실행·성능 채택을 뜻하지 않는다.
+주행/현재행동 가치 검토 후 예산을 정하고, 실제 이어학습 단계에서 다시 검증한다.
