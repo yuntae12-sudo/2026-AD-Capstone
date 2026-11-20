@@ -4229,3 +4229,55 @@ terminal2/nonterminal4·활성경로1상태에서원래verify_preserved10회는�
 08:03:25 본학습후보는누적1,731/10,000(새731/9,000),대조군대기다.
 현재동일예산실험의조건·실행코드·보상·검사·PD·순수SAC조건은그대로유지한다.
 다음은고정실험완료후성능검토이며,가속시안은추가동등성검증뒤후속실험에적용할후보다.
+
+#### 2026-11-21 08:15 KST 규약의 이벤트율·실행 경로 추종 RMS 후처리 보완
+
+평가 운영 기준과 현재 고정 비교기를 대조했다. 기존 원본 비교는 성공/충돌 outcome·
+거절/제동/정지/보상을 검산하지만, 이벤트 기준 도로 이탈률과 추종 RMS/표본 수는
+그 요약에 포함하지 않았다. 새 `scripts/sac_capture_metrics.py`와
+`scripts/review_sac_capture_metrics.py`는 원본 capture의 이벤트·실행 경로로 보충한다.
+기존 동결 학습/평가/원본 검토 코드는 변경하지 않았으며 규약의 판정 기준도 그대로다.
+
+추종 오차는 post-step 실제ego와선택된 `executed_xy[0]`의차이다. REUSED에서도
+거절된새raw경로를쓰지않으며, BRAKE의선택경로는포함하고경로없는EMERGENCY는제외한다.
+전체RMS는실제표본의제곱합/표본수로계산하며표본0이면null이다. 한episode의충돌과
+도로이탈event는각각세고,실패자료·누락장면·중복pair·변경된trace는거절한다.
+동일Rule참조의원래runtime보고서와KEEP/FOLLOW별모든지표·분모를추가대조한다.
+
+새14pytest(다중event·REUSED참조·EMERGENCY제외·표본가중RMS·불완전자료등),
+3파일py_compile·CLI help·diff검사를통과했다. 실제완료된이전1,000비교의4모델×16회,
+총64episode/4,111tick을읽어검증했다. 독립64장면이나새주행으로세지않는다.
+
+| 기존 결과 | 추종 표본 / 전체 tick | 위치 RMS(m) | 실제 collision / offroad event episode |
+| --- | --- | --- | --- |
+| 명령별 보존1,000 | 709 / 1,034 | 0.000371416729 | 14 / 0 |
+| 초기 이동1,000 | 664 / 1,038 | 0.000403575567 | 16 / 0 |
+| 종료 재수집 참조1,000 | 666 / 962 | 0.000359284011 | 14 / 0 |
+| Rule 참조 | 928 / 1,077 | 0.000831753523 | 8 / 0 |
+
+이수치는선택된경로의매step추종오차다. 낮은RMS가전체경로유효성·안전주행을뜻하지않는다.
+초기이동후보의0/16목표·16/16충돌등기존결론은변경되지않았다.
+Rule의KEEP456/FOLLOW472추종표본과RMS0.000871309629/0.000791663430을원래
+runtime값과절대오차1e-10이내로대조했다. 원본입력해시와기존주행집계도재확인했다.
+
+실제고정train경로52step을CapturingEnvironment로다시재현해직접검증했다.
+NEW7/REUSED8/BRAKE7의22개오차가실제result.tracking_error와각각1e-10이내로
+일치했고30EMERGENCY는제외됐다. RMS는양쪽0.0021117649824297672m로같았다.
+원래52행의관측/제어/보상/종료결과도동일했다. 새정책호출·학습update·replay삽입0이다.
+추가로부모미완료·cohort누락·보고서hash손상사본3개를모두거절했다.
+
+로컬 `outputs/sac_refresh_matched10000_20261121/` 근거:
+
+- `capture-metrics-integration.json` SHA
+  `5508ea67b98a5fce01cd3cd2fb9a4ac6018f2cc03a2fbd238b5c2acfbbf0311a`.
+- `capture-tracking-physical-replay/review.json` SHA
+  `762cad2e610b78b02bf8cde1222dbb56d28ec4f137ef853dd2c6023a5c584192`.
+- `capture-metrics-corruption/review.json`:3개의손상검출근거.
+
+후속worker3209181/start_ticks77740515를08:15:06에시작했고실제대기를확인했다.
+`capture-metrics-job/decision.json` SHA
+`f98aef264897b568f1243847c03309226f49327ba803a8f358e4b1c39b20ece3`.
+기준HEAD84eb0a5와당시미커밋새파일의정확한SHA로동결했으며이후commit은내용을바꾸지않는다.
+원래parent3186163/start_ticks77350549의성공종료와full-validation-review 완료후에만
+양쪽최종/양쪽1,000/Rule참조를후처리한다. 현재7개학습·평가작업과기존Q/실패/GIF작업은
+그대로다. 새최종모델의지표후처리·성능판단·정책채택은아직미실행이다.

@@ -68,3 +68,28 @@ seed 평균·표본 표준편차를 모두 제공한다. 성공/실패 장면 �
 추가 데이터 스캔과 성능 측정은 같은 장비에서 겹치지 않게 수행한다. 기존 scanner는
 test split에 정책 검사를 수행하지 않으므로, 최종 평가 자료 준비 시에도 사전 봉인과
 정책 비의존 선정을 명시적으로 유지해야 한다. 현재 실험을 확대 manifest로 덮어쓰지 않는다.
+
+## 저장된 평가 기록의 보조 집계
+
+`scripts/review_sac_capture_metrics.py`는 완료된 `full-validation-review.json`과
+동일한 원본 capture를 읽어 이벤트 기준 충돌/도로 이탈률, 출처별 횟수, 최초 제동 tick,
+추종 위치 RMS와 그 표본 수를 보충한다. 기존 결과를 덮어쓰거나 새 정책을 실행하지 않는다.
+
+```bash
+python scripts/review_sac_capture_metrics.py \
+  --root outputs/sac_refresh_matched10000_20261121 \
+  --output outputs/sac_refresh_matched10000_20261121/capture-metrics.json
+```
+
+위 명령은 부모 비교의 전체 평가와 원본 검토가 완료된 뒤 실행한다. 보고서/trace 해시,
+scene/provider 누락·중복, 초기 상태/지도, 기존 주행 집계를 대조하며 실패한 자료를 제외해
+비율을 계산하지 않는다. 같은 조건 Rule-based의 원래 runtime 보고서와도 지표를 대조한다.
+
+`CapturingEnvironment`의 `executed_xy[0]`은 실제 post-step 시간에 선택된 경로의 위치다.
+이를 실제 ego XY와 비교한다. REUSED에서도 새 raw 제안이 아니라 선택된 이전 경로를 쓴다.
+BRAKE에 실행 경로가 있으면 포함하며, 경로가 없는 EMERGENCY는 분모에서 제외한다.
+표본이 없으면 RMS는 `null`이다. 전체 RMS는 개별 RMS의 평균이 아니라 실제 추종 표본의
+오차 제곱합/표본 수로 계산한다. 한 episode의 COLLISION/OFFROAD 동시 이벤트도 각각 센다.
+
+이 RMS는 매 실제 step의 선택 경로 추종 오차이며, 3초 전체 경로의 유효성이나 안정 주행을
+대신하지 않는다. 보조 집계도 성공·충돌·거절·제동·정지·보상·episode 길이와 함께 판단한다.
