@@ -1963,3 +1963,54 @@ session21062, 실제 수집 child3003341이23:25:05에 시작했고 실제 생�
 23:25:40 기준 수집 프로세스 실행 중이며100회 완료/최종 저장감사/실제source재현은
 미완료다. 새정책의 성능 평가는 아직 없다. 실행 결과를 검토한 후 같은1,000회 예산
 대조 여부를 결정하며 추가 학습/새seed/정책채택은 자동으로 연결하지 않았다.
+
+## 23:34 — 비종료 재수집100 완료·동일 예산1,000과 전체 개발 비교 시작
+
+이전 대화 응답은 강화학습/모방학습 구분 설명이며 새 실험 증거를 만들지 않았다.
+이번에는 실제 프로세스와 산출물을 다시 확인했다. pilot runner3003336은 종료됐고
+train/audit/verify/review4jobs가23:29:00에 모두exit0로 완료됐다.
+`outputs/sac_rejection_refresh_pilot100_20261120/pilot-review.json` SHA
+`de18fb865f7cc71901cdf150cc9d120340e8e33ef4e425c495eb900fcb97fd21`.
+
+- 실제100전이 = main51 + complete-path29 + refresh20; actor/Q 각100회, BC0.
+- 자기warmup17배열 보존, 배치25,600추출/RNG와 모든 source/후속 관측을 검산했다.
+  최초 learner는 기존 reference와 바이트 동일했다. teacher replay0 유지.
+- refresh20개 모두 실제 비종료, bootstrap=true. source는main9/branch11이며
+  첫 source 각1개를 원본 경로와 함께 Waymax에서 재실행해 실제 보상/검사/제어/
+  next_obs와 부모 상태 보존을 확인했다. KEEP만 관찰됐으며 FOLLOW/종료 source는 미검증.
+- pre-state anchor 속도 기준 이동6/정지14, 최대3.738856m/s. 새 경로는20/20거절,
+  PREDICTED_COLLISION14/OFFROAD3/KINEMATIC_LIMIT3, REUSED2/EMERGENCY18이었다.
+  `exposure-review.json`은 이 기술통계이며 새 수집이 유효 경로를 확보했다는 증거가 아니다.
+- `audit100.json` SHA `d857971c660e5ca82374a0706e3265e0c19c2b4924e0b83c5bff5b0e08d5958e`,
+  `execution100.json` SHA `b7d268f48e0b9ced67cfc55df0e8d67c3122f915edba91677613eb0c322736de`.
+
+관측된 실제 비종료 경험의 저장/업데이트가 규약대로 수행됐으므로 같은fresh1,000회
+예산의 성능 비교를 선택했다. 100회 가중치를 이어받지 않는다. 이전 완료된
+`sac_terminal_refresh_paired1000_20261120/candidate1000`(terminal-only refresh)를
+이번 대조군으로 재사용한다. 이 모델의 전체 개발 성적은2/16목표·14/16충돌이다.
+대조군을 Rule-based나 안정 정책이라고 부르지 않는다.
+
+새 로컬 `outputs/sac_rejection_refresh_comparison1000_20261120/`:
+
+- 23:33:40 KST runner3008213/session49022, train3008214 시작·실제 생존 확인.
+- source94/input83 SHA와 source복사본을 동결했다. decision SHA
+  `3ba7df2b85530a8278a78bd5ad406a96d093106d6f8bb86a01ad7bc3885cc6b5`.
+- 6jobs: train1000 → audit1000 → verify1000 → review-training → validation-full
+  → review-full. 오류는 보존하고 실패 시 이후 단계는 실행하지 않는다.
+- 같은 seed0/초기learner/자기warmup5,000/config/override/sampler/complete-path 설정을
+  원본 report와 대조했다. 새 실행 첫update에서도 초기 바이트 검사를 다시 수행한다.
+  새 최종 learner와 실제 행동 분포의 동일성을 가정하지 않는다.
+- 변경 요인은 재수집 source 자격이다. 보상·검사·PD·원래Gaussian·loss/lr/tau·
+  전이당전체update1·BC/teacher0 유지. 별도허용 B-f64/rawgain0.0001은 기본채택아님.
+- 새 모델의8고유개발장면×KEEP/FOLLOW16회 전체를 평가한다. 대조군 완료16회는
+  원본 trace/모델 hash를 동결해 재사용하고 두 모델 초기frame/지도·모든tick의
+  보상/종료·거절/제동/정지·명령/속도별 집계를 대조한다. 새로운 독립 장면은 아니다.
+
+새 성능 결과는 아직 없으며 안정정책·다른seed·동일조건Rule-based 최종비교·별도평가는
+미완료다. 1,000회 뒤 지표와 실패 경로를 검토해 다음 행동을 정하며 자동 추가예산이나
+채택은 없다. 현재 동결된 학습/평가 source는 실행 중 수정하지 않는다.
+
+```bash
+python -m json.tool outputs/sac_rejection_refresh_comparison1000_20261120/status.json
+python -m json.tool outputs/sac_rejection_refresh_comparison1000_20261120/candidate1000/report.json
+```
