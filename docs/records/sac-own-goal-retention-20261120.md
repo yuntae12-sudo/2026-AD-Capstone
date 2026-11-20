@@ -1875,3 +1875,70 @@ KEEP와FOLLOW는각각8회 중 양쪽 모두1목표/7충돌이다. 초기 속도
 
 23:06경 후속2996225가RUNNING으로전환되고기존경로진단2997617의실제생존을확인했다.
 전체개발완료status/review/frozen-inputs를추가동결한후실행하며새source/model변경은없다.
+
+## 23:23 — 경로별 가치 오차 완료와 비종료 거절 재수집 구현
+
+Bellman runner2996225/session43612의3jobs가23:21:27에 모두exit0로 끝났고 실제 종료를
+확인했다. 기존 MC의각8경로를 원본 행동 그대로 Waymax에서 재현해 보상/종료/다음관측
+SHA를 검증했다. 별도 `review_components.py --arm control|candidate`는 기존404tick,
+후보395tick의 **모든 suffix를 직접 할인합**으로 다시 계산하고 각 잔차와 초기차이 합,
+실제 제어 source별 집계를 대조했다. 새 독립 평가나 기대 Q의 정확한 적분은 아니다.
+
+| 평균 경로 오차 분해 | 기존 KEEP | 후보 KEEP | 기존 FOLLOW | 후보 FOLLOW |
+| --- | ---: | ---: | ---: | ---: |
+| 초기 Q−실제 soft-return | 11.967498 | 11.597699 | 9.722138 | 9.117232 |
+| 마지막 종료 기여 | 7.435951 | 1.853520 | 6.237524 | 0.340082 |
+| 비종료 구간 기여 | 4.531547 | 9.744179 | 3.484614 | 8.777151 |
+| sampled target 잔차 합 | -2.494604 | -6.748242 | 15.228529 | -23.914554 |
+| target−online 차이 항 합 | 14.462102 | 18.345941 | -5.506391 | 33.031786 |
+
+두 마지막 행의 합과 종료/비종료 두 행의 합은 각각 초기차이와 같다. 부호 있는 항의
+합산이며 오차 설명 비율이나 독립 인과 기여가 아니다. 기존 FOLLOW의 target 차이는
+반대 부호여서 단순히 target 갱신이 느리다는 하나의 설명으로 묶지 않는다.
+후보 비종료 EMERGENCY 구간의 평균 잔차 기여는 KEEP9.709227/FOLLOW7.369012이다.
+비종료 NEW 구간은−2.002022/−3.050221로 음수이며 source별 항 사이에 상쇄가 있다.
+서로 다른 실제 경로이므로 같은 중간 상태의 정책 개선 대조로 확대하지 않는다.
+
+충돌 직전 재수집이 종료 오차를 줄였어도 앞선 거절/제동 구간의 미래 비용 차이는
+해결하지 못했다. 이를 근거로 다음 수집 옵션은 **실제로 거절된 비종료 상태까지
+재수집 source를 확장**하는 것으로 정했다. 보상/검사/PD/Gaussian/loss/lr/tau를
+바꾸거나 제동 상태를 가짜 종료로 바꾸지 않는다. 효과는 아직 미검증 가설이다.
+
+로컬 `outputs/sac_terminal_refresh_bellman1000_20261120/` 완료 근거:
+
+- `bellman-review.json` SHA `8b800e18dc606a91b4ccfaf3f3c14498b347cde462ce3d1339b9c8788d19b69b`.
+- `component-review-control.json` SHA `653991d77572de38981e38f77bda2e80ed429b96cf2bdc5a0ce36c8bc6a86e81`.
+- `component-review-candidate.json` SHA `07a564590c013a2ff8bb5988afd49b5c6b54188bf71b3a0e2c4da6be3c899efe`.
+
+### 구현·규약 대조·단위 검증
+
+`scripts/sac_rejection_refresh.py`는 원래 TerminalRefresh의 실제 전이/관측/bootstrap
+검사와 FIFO8/순환/base4당1회/재귀 금지를 재사용한다. 기존 COLLISION/OFFROAD 직전
+상태에 `bootstrap=true && check_valid=false`인 main/failure_branch를 추가한다.
+수락된 비종료 및 ROUTE_GOAL/기타 종료를 새 자격으로 넣지 않는다. 최대20% 재수집은
+같지만 FIFO 구성/첫 실행시점/종료 상태 노출량은 바뀔 수 있음을 명시했다.
+
+별도 `diagnose_sac_rejection_refresh.py`, `audit_sac_rejection_replay.py`,
+`audit_sac_rejection_refresh.py`, `verify_sac_rejection_refresh_execution.py`를 준비했다.
+driver는 기존 수집/학습 루프를 보존하고 bank/lineage scope와 초기 learner 기록만
+분리했다. fresh1..1000만 지원하며 첫 실제 update에 전달되는 learner를 기록하고
+지정한 reference와 바이트 동일성을 검사한다. 기존83개 진단 소스는 변경하지 않았다.
+
+감사기는 source의실제check/bootstrap·원본/후속배열·FIFO/주기·모든batchhash/RNG·
+actor/Q update수·BC0·자기warmup17배열·초기model을 대조한다. 실제 재현기는 각 관측된
+provider/source종류/비종료·종료 조합의 첫 사례를 원래 collector로 실행한다.
+존재하지 않은 조합은 미검증이며 원본이 거절됐다고 새 결과까지 거절로 정하지 않는다.
+
+규약5절의 원래 Gaussian,10절의 전이당 전체update1·batch256과 기존sampler를 유지하는
+상태 수집 분포 실험이다. 별도 B평균 허용 범위 안에서 같은 모델 설정을 쓴다.
+학습 보상/안전검사/PD/BC·teacher0을 그대로 유지하며 기본 설정 채택은 아니다.
+
+CPU30pytest 통과(0.21s): 신규8개, 원래bank7개와 complete-path/초기기록/실제branch
+복원 관련15개다. 새driver/감사/실제재현 CLI와Python AST, diff 검사도 통과했다.
+신규 테스트는 비종료 bootstrap 보존, 통과한 실제충돌도 포함, goal/기타종료 제외,
+FIFO/주기/최대비중/메모리격리/재귀금지/손상된종료거절을 확인한다.
+
+다음은 새옵션100전이의 실제 GPU 수집→저장감사→관측된 source조합의Waymax 재현이다.
+학습방식의 사전 실행 검증이며100회로 안정정책이나 성능 우위를 판정하지 않는다.
+동일 seed0·자기warmup5,000·기존 실제초기learner를 reference로 쓰고 추가 비교 예산은
+그 결과를 검토한 뒤 정한다. 현재 새옵션의 실제 실행/성능은 아직 미검증이다.

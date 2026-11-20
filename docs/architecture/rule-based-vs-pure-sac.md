@@ -204,3 +204,36 @@ batch256·손실·lr·tau도 유지한다. 규약5절의 확률 행동과10절�
 후보/기존 수집 비교를 시작했다. 학습·저장·실제재현·같은 두 개발장면×KEEP/FOLLOW
 평가를 순서대로 연결했다. 실제 실행 결과와 성능은 별도 기록하며 테스트 통과를
 주행 개선으로 해석하지 않는다. continuation과 다음 예산은 아직 지원/선택하지 않는다.
+
+### 비종료 거절 상태를 포함하는 재수집 옵션
+
+`scripts/diagnose_sac_rejection_refresh.py`는 별도 실험 진입점이다. 앞선 terminal
+refresh의 전체 개발 평가에서는 두 모델 모두 2/16 목표 도달·14/16 충돌이었고,
+후보의 KEEP/FOLLOW 경로 분석에서는 종료 오차가 줄어도 비종료 구간의 오차가
+남았다. 이 관찰을 근거로 충돌/이탈 직전 상태에 더해 **실제로 경로가 거절된
+비종료 상태**를 재수집 대상으로 보존하는 옵션을 준비했다.
+
+`scripts/sac_rejection_refresh.py`는 기존 bank의 실제 전이·관측·bootstrap 검사,
+FIFO8·순환 선택·기존 전이4개당 최대1회·재귀 재수집 금지를 재사용한다. 바뀌는 것은
+source 자격 조건이다. 실제 COLLISION/OFFROAD 직전 상태는 유지하고,
+`bootstrap=true && check_valid=false`인 main/failure_branch 상태를 추가한다.
+수락된 비종료 상태와 목표/기타 종료 상태는 새 자격 조건으로 넣지 않는다.
+source가 늘어나 FIFO 구성, 첫 재수집 시점과 종료 상태의 노출량은 달라질 수 있다.
+최대20% 비중이 같다고 방문/추출 분포까지 같다고 주장하지 않는다.
+
+원래 Gaussian으로 실제 재실행하고 그 결과의 reward/next_obs/종료를 저장한다.
+원본이 거절됐다는 이유로 새 행동도 거절하거나 충돌로 표시하지 않는다. 보상·검사·PD·
+loss/lr/tau·배치256·전이당 전체 SAC update1회·BC/teacher0을 유지한다. 규약5절의
+확률 행동과10절의 전이당 업데이트를 바꾸지 않는 상태 수집 분포 비교이며 기본 채택은 아니다.
+새 driver는 fresh1..1000만 지원하며 첫 실제 update에 전달되는 learner를 기록하고,
+지정한 초기 모델과 바이트 동일성을 검사할 수 있다.
+
+`audit_sac_rejection_replay.py`와 `audit_sac_rejection_refresh.py`는 source 자격,
+실제 원본/후속 배열·FIFO/주기·배치/RNG·업데이트 수와 초기 learner를 검산한다.
+`verify_sac_rejection_refresh_execution.py`는 관측된 명령/source 종류/비종료·종료
+각 조합의 첫 사례를 실제 Waymax에서 재현한다. 없는 조합을 검증한 것으로 세지 않는다.
+기존 source와 실행 기록을 보존하기 위해 진입점/감사기는 별도로 두었다.
+
+관련 CPU30pytest·AST·CLI 검사를 통과했다. 현재는 구현과 단위 검증 단계이며
+새 옵션의 실제 GPU 수집·저장 감사·Waymax 재현·주행 성능은 아직 미검증이다.
+이 상태를 안정 정책 확보나 실험 채택으로 해석하지 않는다.
