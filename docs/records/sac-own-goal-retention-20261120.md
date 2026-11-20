@@ -3291,3 +3291,58 @@ renderer3085826은02:49:27 별도session으로시작·현재실제생존확인. 
 완료상태는 `COMPLETE_PENDING_VISUAL_INSPECTION`이며프레임수/크기/총시간/원본SHA
 검산뒤직접그림검토는남긴다. 2026-11-21T02:50:03.601193+09:00 학습은
 168/1,000 진행중이고모든동결학습/진단source/inputSHA는유지했다.
+
+
+### 2026-11-21 — 대체 후속1,000 학습/저장감사 완료와 FOLLOW 수집 편중
+
+대체실행 `outputs/sac_successor_refresh_comparison1000_20261121_retry1/`의
+train3080425는03:20:51, audit3094677은03:20:54 exit0완료·실제종료했다.
+실제신규1,000=main415+branch385+refresh200, actor/Q 각각1,000·BC0이다.
+자기warmup17배열·초기learner·teacher0·source/후속관측·실제flags·배치SHA/RNG를
+감사했다. 6,000replay는warmup5000+신규1000이고 중단된이전608을합산하지않았다.
+
+- 최종model SHA `0b679d97b0ec4a7bf83129cc3c55de930d33fd96929fb83591d31287f2982af1`.
+- replay SHA `07f742ab6ec9bf730221836e999ca3bb80b99bf2d35fda3cb24ad2da870f782f`.
+- `audit1000.json` SHA `cc04b755e3c1a8578a5157913d2de86cef21e1368cdffc6d1e1127c6fbac35be`.
+
+| 동일1,000의 재수집 | 이전종류별 | 실제후속 |
+|---|---:|---:|
+| 비종료/종료source 전이 | 103/97 | 103/97 |
+| 비종료 고유source | 102 | 4 |
+| 비종료 KEEP/FOLLOW | 63/40 | 103/0 |
+| 비종료 경로수락 | 5/103 | 13/103 |
+| 비종료 사전이동상태 | 56/103 | 58/103 |
+| 비종료source에서 실제충돌 | 0 | 3 |
+
+실제후속99개를확보했다. 비종료경로는4개모두KEEP이고길이는28/41/20/14step이다.
+앞3경로는실제충돌, 마지막source821/path173은예산말bootstrap=true로아직진행중이다.
+수락13개는모두마지막경로에만있다. 중간정책이5또는10update씩바뀌는수집경로라
+최종고정정책의성공률/MC로사용하지않는다. 종료슬롯97개는실제97충돌·수락0이며
+KEEP60/FOLLOW37, 고유13source다.
+
+FOLLOW 전체신규경험은289/1000, KEEP711이다. 신규8고유train장면/8쌍,
+정지출발신규경험0이다. 전체replay는47장면/63쌍, warmup추출142688/256000
+(55.7375%)이며정지출발warmup687행은21729회추출됐다. 전체FOLLOW부재나
+정지출발데이터전체부재로표현하지않는다. 실제새학습은아직9번째장면에진입하지않았다.
+main7실제충돌+마지막1예산경계, branch는6충돌/1목표(collection769)다.
+이역시고정정책의주행성과가아니다.
+
+FOLLOW비종료거절 eligible212개가있었다. FOLLOW가비종료bank에있던35슬롯
+(collection315~655)에서도활성KEEP경로를계속수집했다. 새root선택4시점
+(collection5/255/665/865)에는FOLLOW가bank에없었다. 저장된stage bank ID와
+모든관측/선택을확인한완료감사에기반한집계다. 활성경로지속과FIFO가FOLLOW후속
+경험의노출을막는패턴은관찰했지만, Q/주행실패의인과원인으로단정하지않는다.
+현재수집규칙을바꾸지않고전체개발평가와Q진단을기다린다.
+
+`review_chain_prefix.py --count 1000`, `review_dataset_exposure.py --arm candidate`로
+원본전체행/장면순서/command one-hot·mask/배치추출을검산했다. 전자는원본400분석,
+후자는이전종류별분석스크립트의바이트동일복사다. `chain-prefix1000/report.json`
+SHA `35ccfd010c2bbf1069b8db8c2588752b4929c86dedcb3aba65c00c8ec1eeeac5`,
+`dataset-exposure-candidate.json` SHA `c2c2dc3e7135fe85a7e8bb27acb821177bcc552a7e91c552c41639d48b960e55`,
+`follow-bank-availability-review.json` SHA `b7d9060e0ad8653e7fcf04c5458b9c480059c646355d186b1af2792fe1251f99`.
+별도집계대조와최종model/replay SHA는 `collection-review.json`에저장했다.
+
+실제Waymax재현verify3094709는03:20:56부터실행중이다. 완료전결과파일조회는
+FileNotFoundError였고검증실패로해석하지않았다. 실제PID생존을확인했으며
+새실제재현/전체개발16회/후속Q·미래보상·GIF는미완료다. 안정정책/채택미확보.
+보상/검사/PD/원래Gaussian/학습계산/BCteacher0유지.
