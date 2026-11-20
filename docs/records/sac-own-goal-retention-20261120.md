@@ -1244,3 +1244,60 @@ reviewer SHA `1a4d01e7b981cb46f4b7734da680e0ad72cf7f6b890869f8f03119f0575aba72`.
 각 CSV5,100행의 원래float32 q_gap/추출횟수, 총16확률주행의 실제 종료·원본
 trace hash·할인 보상·entropy 산술을 검산한다. 검증 실패는 원본 보존 후 중단한다.
 예정 결과는 `diagnostic-review.json`; 아직 완료 결과가 아니다.
+
+## 21:28 — fresh100 전체 진단 완료, FOLLOW 포함 fresh1,000 대조 시작
+
+읽기 전용7jobs와후속산술검산이모두exit0 완료했다. 원래main2944744는21:27:21,
+post-review2951779는21:28:00 완료됐고실제PID소멸을확인했다. 두train선행상태×4seed,
+모델당8주행은 **기존/재수집모두8/8 COLLISION** 이다. 완료원본을검산한결과:
+
+| 미래 보상 진단 | 기존100 | 재수집100 |
+| --- | ---: | ---: |
+| KEEP 평균 실제 soft return | -13.9566173152 | -13.9561767645 |
+| KEEP 첫평균행동 Q−평균실제return | 13.4954274193 | 13.5074215002 |
+| FOLLOW 평균 실제 soft return | -10.7077526953 | -10.7071619887 |
+| FOLLOW 첫평균행동 Q−평균실제return | 10.2250729110 | 10.1365617175 |
+
+작은차이를주행개선으로보지않는다. 현재100 모델은미채택이며,앞선24행동실제충돌과
+개발4주행양쪽2목표2충돌결과도유지한다. 초기평균행동이후원래Gaussian4seed의실현
+return표본이며정확한기대Q나독립test가아니다. 기존prefix수치동일성실패도보존한다.
+
+최종 로컬 `outputs/sac_terminal_refresh_diagnostics100_20261120/diagnostic-review.json`
+SHA `cc4478b25b4b4b11bb1496919304e478ba3ef19446c8c658d18418f73113209b`.
+68소스/43입력불변·같은상태출처·CSV각5,100행/25,600draw·24행동종료오차·총16주행
+trace hash/실제종료/할인보상/entropy합을검산했다. control return report SHA
+`f9198f4c282c02cb748aebb1d54de7340ed364dd29697f01fdd317c85891ffde`,candidate
+`275d8e2e33439b75dbe4baed34e3cd3321350fe8f6aa6d96cee89c4185eab33b`.
+
+이결과와KEEP에만국한된14refresh/303학습draw를검토하고,수집방식이FOLLOW까지
+실제로작동하고더학습했을때가치/주행에영향을주는지 **각fresh1,000회** 고정대조를
+선택했다. 100회실패를수렴불가능으로단정하거나100회모델을채택하는결정이아니다.
+배치/재수집비중/보상/검사/PD/모델을추가변경하지않는다.
+
+- 로컬새루트 `outputs/sac_terminal_refresh_paired1000_20261120/`.
+  실행은 `python outputs/sac_terminal_refresh_paired1000_20261120/run_trial.py`.
+- seed0·동일자기warmup5,000·각fresh learner·각새전이1,000/fullSAC update1,000.
+  이전100/1,000/3,000가중치를이어받거나학습량을합산하지않는다.
+- B-f64/raw mean gain0.0001/physical_whitened Q/zero-action critic init·원래Gaussian·
+  complete-path samples1/window6/moving_predecessors/horizon200·목표8+실패8·BCteacher0 유지.
+  후보만FIFO8/base4당refresh1/재귀0의기존옵션을사용한다. 기본채택아님.
+- 첫fullSAC update입력의전체learner를각각저장한다. 후보는새control의초기바이트와
+  일치해야첫update를진행한다. 이후GPU/수집prefix수치차이는측정해서보고하며
+  과거엄격동일성실패를바꾸거나후속경로동일성을가정하지않는다.
+- 11jobs:control1,000→감사→candidate1,000→감사→실제source재현→학습검토→
+  양쪽primary/정지출발각4주행→원본주행검산. 총4개발장면×K/F×2모델=16주행.
+  명령별실제refresh와실제재현이모두있어야FOLLOW수집검증으로기록한다.
+- 기존개발장면8b4c1e7e09f5f4c3/8a4fba3463c6c62d,정지출발8dd5939855c15b3f/
+  a62f5a7d2cd9b3d9 유지. 전체개발validation/새seed/heldout가아니다.
+- 성공상실·충돌·거절·제동·정지·보상을함께판단한다. 초기상태/입력hash/실제lineage/
+  비유한값등실패는원본보존후중단한다. 1,000이후자동예산확대/기본채택없음.
+
+74소스/50입력/소스복사본동결,decision SHA
+`907873d784959c6de19f27239fde3c5f82e80d5ce095d839a9c17d6f9d5241d0`.
+21:28:55 runner2955496/session72760와control2955503 실제생존확인.
+기존진단소스/현재src변경0,실행기준HEAD45f8d447f0e6601a704d55464a9ad468bfb272b4,
+초기기록wrapper구현f2ef2a1198d718dc397fb9487523861049bbf259.
+후속실제control GPU초기기록은COMPLETE,learner SHA
+`7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c`.
+이것은단일초기기록확인이고두실행바이트대조/1,000회완료/주행성능검증은아직미완료다.
+안정정책·전체개발·다른seed·최종Rule-based·별도평가의원래목표는계속미완료다.
