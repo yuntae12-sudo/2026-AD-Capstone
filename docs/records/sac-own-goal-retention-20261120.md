@@ -1301,3 +1301,63 @@ trace hash/실제종료/할인보상/entropy합을검산했다. control return r
 `7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c`.
 이것은단일초기기록확인이고두실행바이트대조/1,000회완료/주행성능검증은아직미완료다.
 안정정책·전체개발·다른seed·최종Rule-based·별도평가의원래목표는계속미완료다.
+
+## 21:40 — paired1,000 이후 현재 행동 진단 연결
+
+현재 main2955496/control2955503은실행중이다.21:40:26 보고서570새전이/fullSAC update570,
+실제trace KEEP326/FOLLOW244를확인했다. 후보1,000은기존수집완료후실행되며아직미시작이다.
+기존11jobs와모델/수집/학습소스는변경하지않았다.
+
+읽기전용후속을로컬
+`outputs/sac_terminal_refresh_paired1000_20261120/policy-diagnostics/`에연결했다.
+runner2959705/session65181은`WAITING_FOR_PAIRED1000`,현재실제생존이다.
+원래main PID2955496과process start ticks73667462를함께확인하며,main의학습/감사/
+실제재현/16개발주행검산성공과원래process종료후에만시작한다. PID재사용을원래작업의
+생존으로오인하지않는다. 부모실패/조기종료는기록후중단하며자동재시작/추가학습없음.
+
+76소스/51기존입력과소스복사본을동결했다. decision SHA
+`58acb1fa492ec827021f7a7b28bd333f72c8b71dca8c2c48d27b5e2229e1b08a`.
+완료후새모델·replay·초기state·실제ticks/update·부모감사결과를추가로hash동결하고,
+첫진단전과각job사이에대조한다. 아직미완료인모델을확정hash로표시하지않았다.
+
+7jobs는양쪽coverage→양쪽같은실패상태Q→양쪽같은선행상태soft return→산술검산이다.
+첫100회에서실제검증한진단소스를그대로사용한다. 후속집계만각6,000 replay행과
+256,000 draw에맞췄으며원래float32차이계산/원본trace검산/4seed를유지했다.
+같은train실패KEEP tick28/FOLLOW tick59의저장/평균/확률4행동,
+선행KEEP tick0/FOLLOW tick4의seed88019–88022각4주행이다. 신규독립test가아니다.
+후속runtime/집계py_compile와실제대기시작은확인했지만GPU진단결과는아직없다.
+예정결과는후속루트`diagnostic-review.json`,실행상태는`status.json`이다.
+
+## 21:40 — 별도 평가 입력 재검산과 외부 조회 제약
+
+기존7,040프로젝트hash-test후보의전수검사보고서·manifest·32개도로후보cache SHA를
+새로대조했다. 결과는29고유장면/56명령쌍(KEEP29/FOLLOW27),목표32에3개부족,
+기존데이터오류17건으로변함없다. 새policy실행/원본전체재스캔/environment reset은0이다.
+로컬 `outputs/sac_heldout_availability_20261120/reset-inventory-review.json`은이전결과와
+바이트동일한SHA `a5105287234e6a5564e6e227b7326b24346176d7482f000b67b474f27e4733c0`다.
+기존1,000raw파일/7,040후보전체를이미검사했으므로같은후보풀을반복검색해서
+새로운적격3개가확보된다고가정하지않는다.
+
+추가원본목록을조회하려했으나`gcloud storage ls`가인증갱신실패로종료했다.
+자격증명없는공개GCS JSON목록조회도HTTP401을반환했다. 따라서현재버킷의추가
+20초prefix존재/부재를확인한것이아니다. 사용자에게`gcloud auth login`재인증을
+비동기로요청했으며,현재로컬SAC학습은계속진행한다. 응답/인증복구없이조회성공으로
+기록하거나다른계정/자격증명을시도하지않는다.
+
+[공식Motion설명](https://www.waymo.jp/intl/jp/open/data/motion/)은일반training/validation을
+10Hz의91sample window로설명하고,시간은장면내0부터/좌표원점은장면마다달라진다고명시한다.
+따라서일반validation을기존20초cohort에그대로혼합하거나이정보로drive독립성을선언하지않는다.
+[공식Scenario proto](https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/protos/scenario.proto)
+GitHub blob SHA `22b1c3c55cad11fe6601261eea603dc7bcdf0ec2`와실제로사용하는vendored descriptor의
+노출필드에는별도drive/log식별자가없었다. 이는외부매핑정보가없다는증명이아니다.
+[공식저장소이슈720](https://github.com/waymo-research/waymo-open-dataset/issues/720)의열람내용도
+후속training_20s/validation중복질문을해결하지않았다.
+최초외부패키지이름의직접import는ModuleNotFoundError였으며,
+실제`src.scenarios.vendor.waymo_open_dataset.protos`를사용해descriptor를확인했다.
+의존성설치/환경변경은없었다.
+
+로컬 `availability-review.json` SHA
+`b9aed0dc267ff01f75df511c9525c83f3e031fa0a49abfdf430d15906dc37c98`에현재재검산범위,
+공식근거/조회실패/남은확인을분리했다. 추가원본또는검증가능한매핑이확보되기전까지
+29/32·17오류·drive/시간독립성미확인상태를유지한다. 목표개수를채우려고train/dev를
+test로바꾸거나오류배열을자르거나ODD/reset/안전검사를완화하지않는다.
