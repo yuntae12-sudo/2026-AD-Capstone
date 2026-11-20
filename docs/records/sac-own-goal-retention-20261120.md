@@ -788,4 +788,4 @@ Gaussian의95%타원체포함비율은조건부거리진단이지문자그대로
 `review.json` SHA `3cec589c365ad2886b8c2684316e1b6334bd556036c00b29bdeca213319bdeec`,
 `successor-speed-review.json` SHA `7d5c35bfacf25e64619dbfe331aff52e2b65e5d749b59acf407efd77295eb167`.
 이것은학습중정책의일부자기경험이며고정정책평가/최종저장감사/전체성능결과가아니다.
-현재3,000학습·그후11jobs와추가현재행동대조5jobs연결은유지하며결과를기다린다.
+현재3,000학습을포함한11jobs와추가현재행동대조5jobs연결은유지하며결과를기다린다.
