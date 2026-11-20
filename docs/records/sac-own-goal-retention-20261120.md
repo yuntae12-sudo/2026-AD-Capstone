@@ -625,3 +625,82 @@ Q−실제soft-return평균은 KEEP13.681079/FOLLOW10.212227이다. 후보 KEEP4
 python -m json.tool outputs/sac_terminal_continuation_smoke_20261120/status.json
 python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/post-status.json
 ```
+
+## 19:35 현재 행동 가치 검토·GIF 완료
+
+기존 목표8과 새 목표8+실패8의 동일 train2상태×각4Gaussian seed 검토가 완료됐다.
+두 모델 모두8/8충돌이다. 실제 reward·할인·entropy·최종bootstrap·관측hash·raw action을
+원본trace에서 검산했다. 아래는 평균 첫 행동 이후 원래Gaussian으로 실제종료까지의
+조건부 표본이며 정확한 기대Q나 독립test가 아니다.
+
+| 항목 | 목표8 KEEP | 목표+실패 KEEP | 목표8 FOLLOW | 목표+실패 FOLLOW |
+| --- | ---: | ---: | ---: | ---: |
+| 현재 평균 첫 행동 Q | -0.371438 | -1.451190 | -0.241021 | -0.946604 |
+| 실제 soft-return 표본평균 | -14.052518 | -13.649348 | -10.453248 | -10.821256 |
+| Q−표본평균 | 13.681079 | 12.198158 | 10.212227 | 9.874652 |
+| 표본 표준편차 | 1.083250 | 1.711044 | 0.259192 | 0.520338 |
+| 평균 실제 tick | 35 | 38 | 62.25 | 59.25 |
+
+과대평가 차이는 줄었지만 여전히 크다. KEEP의soft-return은+0.403170,
+FOLLOW는-0.368008이다. FOLLOW는 평균3tick 먼저 충돌했고 할인 reward 합도
+-11.256366→-11.593023으로 악화됐다. KEEP은 평균3tick 늦게 충돌했을 뿐
+목표도달이 없으므로 안전한 개선으로 판정하지 않는다. 저장종료 Q 개선과
+개발고속2성공회복만으로 이 결과를 상쇄하지 않는다.
+
+로컬 `outputs/sac_own_terminal_retention_1000_20261120/current-action-review.json`
+SHA `b201feffff99f6434dd0d6c5b4f42fff8c13fe7ad5775421cc79fd446a3b5f4f`.
+post runner2890300과 실제 평가/검토 child는 모두종료했다.
+같은고속KEEP 두SAC의 저장trace GIF도 생성됐고 최종PNG를 실제 열어 확인했다.
+기존목표8은충돌후정지, 새목표+실패8은11.03m/s·BRAKE 상태로ROUTE_GOAL임이 표시된다.
+거절/제동/주행 궤적과종료후held표시가 있으며 단일성공예시를 전체성능으로 보지 않는다.
+
+- 로컬 `visual-terminal-comparison/own-goal-vs-goal-failure-keep.gif` (위루트내).
+- 1440×900,37frames,시뮬레이션7.2초·마지막hold포함재생8.7초.
+- GIF SHA `c407246fd2d371043c44d7c01ca95ba93e2f1f419cfa706a618f105fc1ec6e4b`.
+- 같은1,000update의SAC/SAC 비교이며 Rule-based 영상이 아니다.
+
+## 19:36 GPU 이어학습 검사 통과 및 같은 정책 총3,000회 시작
+
+별도smoke는19:36:06 완료했다. 실제 GPU learner/optimizer/target/RNG 복원바이트동일,
+새실제자기전이1개·전체update1회, 누적actor/Q각1,001·BC0·replay6,001행을 확인했다.
+원본tick/update prefix와17배열·실제train분기/종료·전체배치hash/RNG 감사도 통과했다.
+smoke runner2901620/학습2903894/감사2905457의 실제종료를 확인한 뒤 후속을 시작했다.
+로컬 `outputs/sac_terminal_continuation_smoke_20261120/review.json` SHA
+`1975ed4b733ba800a2543f15d6f8eb9319424e2c756d78baf4f48807702d2507`,
+`audit1001.json` SHA `31ba360035a749b8fe17b7ca26e2af7bebd45524bf15e5947ccf18fcdc47e723`.
+이는실행검증이며성능학습이나안정성통과가아니다.
+
+다음선택은새초기화가아닌 **완료된목표+실패1,000모델에서총3,000까지이어학습**이다.
+종료실패Q적합과고속성공회복은관찰됐지만현재행동미래비용/출발이남아있어서,
+같은정책의추가경험과학습이비용전달·성공유지·실제주행에어떤영향을주는지검사한다.
+학습량부족이유일원인이거나3,000이면충분하다고가정하지않는다.
+smoke1,001가중치는사용하지않고원래1,000의전체상태/replay를복원한다.
+collection_seed1000으로환경/장면·정책수집RNG를명시적으로재시작한다.
+정확simulator resume이나순수update횟수만의인과비교로주장하지않는다.
+
+보상·안전검사·공통PD·원래Gaussian·actor/Q구조·gain·lr/tau·목표8+실패8배치·
+자기전이당전체SAC update1·BCteacher0유지. 추가2,000실제전이/전체update를목표로하며
+기존1,000기록은그대로보존한다. 새예산경계에가짜종료나성공을넣지않는다.
+
+로컬 `outputs/sac_terminal_retention_curve3000_20261120/`:
+
+- 19:36:28 runner2905593(session32911),19:36:31 학습child2905600 실제시작/생존확인.
+- decision SHA `0b378b9d873ebe31871c99768e5654112f7ebcbc261095f5c01df4fc9bcc0aed`.
+- runner SHA `610eeba7d7a6c9cf78d69c4100a100486e4454b1bf1400fede9a22a47cad9c65`.
+- 84소스/67입력hash고정및84소스복사본검증. 실행코드0ea2739,실행시문서HEADb3c6af3.
+- 총3,000학습→누적저장감사→같은62종료Q/기존·신규경험분리→고속·저속4주행+
+  정지4주행→초기frame/map·지표·접촉이력검산→같은고속KEEP GIF→같은2train상태×4seed
+  현재행동Q/실제미래보상→검산의11jobs를직렬연결했다.
+- 1,000모델의8주행/MC는완료자료를hash고정재사용한다. 중복새실행이나독립장면으로세지않는다.
+- 검토script는사전동일1,000snapshot양쪽비교에서종료Q/경험/주행지표의일치를실제로확인했다.
+  `preflight/training-review.json` SHA `8d6888b372214091871f3ce7d9b19785bc2ad28db0c184942319e6d9d555745c`.
+  사전검토를새3,000학습/주행성능의완료로세지않는다.
+
+현재3,000결과는아직미완료다. 오류/비유한/hash/lineage실패는기록후중단하고,
+새예산/채택/전체개발·다른seed·최종Rule-based·별도test는자동연결하지않는다.
+개선과회귀를함께검토한뒤다음판단을한다. 안정정책미확보·전체목표진행중이다.
+
+```bash
+python -m json.tool outputs/sac_terminal_retention_curve3000_20261120/status.json
+python -m json.tool outputs/sac_terminal_retention_curve3000_20261120/online3000/report.json
+```
