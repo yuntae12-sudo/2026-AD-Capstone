@@ -4312,3 +4312,43 @@ project_many에서 사용하지 않는 placeholder로 구성했다. 새 정책 �
 현재 학습 적용0이며 이번 검사에서 실행시간/전체 가속률은 측정하지 않았다.
 기존 후보의 주행 실패 결론은 그대로다. 다음은 시안의 실제 제어 사용과 회귀 검증이며,
 진행 중인 총10,000 비교는 원래 코드로 완료한 뒤 주행/Q/실패분석을 판단한다.
+
+### 2026-11-21 08:34 KST — 시안 반환값의 실제 제어 사용과 관련 회귀 검사
+
+시안 반환값을 별도 CPU 프로세스의 실제 Route.project_many 호출에 사용했다.
+각 호출에서 원래 함수도 함께 실행하고 세 배열이 바이트 동일함을 확인한 뒤
+시안 배열을 반환했다. 본 학습/production 파일은 변경하지 않았다.
+고정 train FOLLOW 경로의 main2+FOLLOW50=52step을 실제 Waymax로 재현해
+관측 fingerprint·보상·검사·종료 등을 담은 원래 steps.json 전체와 JSON 바이트
+단위로 같았다. actual_control은 원래 학습 tick 기록과 기존 절대오차1e-8
+기준으로 대조했다(이 제어 입력은 steps.json의 바이트 비교 필드는 아니다).
+2,237호출/821,693질의점과 질의열 SHA도 이전 원래 결과 사용 실행과 같았다.
+이 한 경로의 동등성 확인이며 다른 모든 실제 장면이나 보편적 동등성 증명은 아니다.
+
+첫 실행은 52step 개별 검사 뒤 마지막 전체 비교에서 실패했다. 메모리의
+CheckResult.violations tuple과 JSON에서 읽은 list를 직접 비교한 검증기 오류였다.
+첫 실행기와 failure.json을 보존하고, 별도 v2 실행에서 전체 결과를 JSON으로
+직렬화한 바이트를 원래 파일과 정확히 비교했다. 수치 허용오차를 늘리지 않았다.
+재실행도 동일52step이므로 독립 경로 수는1개다. 원래 tick52 충돌도 그대로 재현했다.
+
+동일 시안을 프로세스 안에서만 적용한 기존6개 테스트 파일은57passed/28.83초,
+시안7,513호출이었다. 기하 scalar parity, 제어, validation, FOLLOW 의미론,
+PD gate, reset kinematics를 포함한다. 저장소 전체 테스트는 미실행이며
+새 정책 호출·학습update·replay삽입0, production 채택0이다.
+
+로컬 `outputs/sac_refresh_matched10000_20261121/`:
+
+- `replay_projection_candidate.py`, `follow-terminal-projection-candidate/failure.json`:
+  첫 전체 비교 오류 보존.
+- `replay_projection_candidate_v2.py` SHA
+  `a7d63fd58408f10eef68695dd96477185eb443e816ee4e8325d45aa7d77afc15`.
+- `follow-terminal-projection-candidate-v2/steps.json` SHA
+  `00f7751a92d4136bb0b6d17ed4f99053b80e96559313a3ef4711d78d09a914dc`,
+  원래 physical replay 파일과 동일.
+- `test_projection_candidate.py`, `projection-candidate-pytest.json` SHA
+  `72801858af914378c0f11cceff8deea02cc7e87e8a5edc5a03c2b5f2360455e6`(결과).
+
+위 실행기는 `JAX_PLATFORMS=cpu /home/autonav/miniconda3/envs/its-merge/bin/python`
+뒤에 경로를 붙여 실행했다. 이번 관련 검사만으로 진행 중 실험에 적용하지 않는다.
+후속 adoption은 전체 실제 장면 제어 재현과 필요한 회귀 범위를 확인한 뒤 별도 결정한다.
+현재 고정예산 학습의 주행/Q/실패분석 판단과 안정 정책 확보 목표는 계속 미완료다.
