@@ -2126,3 +2126,80 @@ script SHA `e127085b62855a10a403bd56a8ce40ca0181e88be4f5b207c2825627a3fad652`.
 최종1,000회가 완료되면 같은 명령의 `--updates 1000`으로 전체 노출을 다시 계산하고,
 전체 개발 주행 및 연결된 Q/return/coverage와 대조한다. 자동 새학습/보상/검사 변경이나
 채택은 없다. 안정정책·다른seed·동일조건Rule-based·별도평가 목표는 계속 미완료다.
+
+## 23:57 — 1,000회 학습·저장감사 완료, 최종 수집/배치 노출 확인
+
+직전 goal turn은 실제400batch 검산으로 진전이었다. 이번에는 확인된 session49022/
+학습PID3008214를45초 이하 간격으로 관찰했고, 학습은23:55:54 exit0로 완료됐다.
+audit1000 child3016820도23:55:57 exit0·COMPLETE다. 실제source재현3016849가 실행
+중이며 전체개발/정책Q/return은 아직 미실행이다. timeout에 따른 재시작은 없었다.
+
+- 새전이1,000 = main433 + 완료경로367 + refresh200, actor/Q 각1,000업데이트·BC0.
+- 자기warmup17배열·전배치index/RNG·원본/후속관측·초기learner reference바이트동일
+  검산 완료. 원래Gaussian/보상/검사/PD/loss/lr/tau/teacher0 조건을 유지했다.
+- 새 learner SHA `937e284a255806fa476b0bb6f1e56b971759385729f3f144a795b20877bc6d3c`.
+- audit SHA `218c51b7d1cc6546ae83e68e9a2c3672f8a4ab50e8ca2033f86f454543d8cee3`.
+
+완료 로그로 `review_collection.py`와 `review_exposure.py --updates 1000`을 실행했다.
+각1,000batch/256,000추출의index hash를 원래sampler로 재현하고 실제 전이 분포를
+집계했다. `collection-final.json` SHA
+`04e101d71b154a8321b5b012b0ca455dfb0edae3c048009801dca524f469fe8c`,
+`exposure-1000.json` SHA `adaef25c3b1a00914fa775ce48a60844354567e2186e0957de53a2568a5a14d0`.
+
+| 완료된1,000수집 | terminal-only 대조군 | 비종료거절 후보 |
+| --- | ---: | ---: |
+| 이동 / 정지 전이 | 503 / 497 | 597 / 403 |
+| 경로 수락 | 242 | 239 |
+| KEEP / FOLLOW 전이 | 676 / 324 | 609 / 391 |
+| refresh 전이 | 194 | 200 |
+| refresh 이동 / 정지 | 0 / 194 | 93 / 107 |
+| refresh 수락 | 0 | 8 |
+| refresh 실제 비종료 / 충돌 | 0 / 194 | 195 / 5 |
+| refresh 고유 source 전이ID | 14 | 188 |
+| 공통 초기 실패44행 batch추출 | 4,293 | 7,858 |
+| 신규 실제 충돌행 batch추출 | 27,727 (208행) | 3,332 (17행) |
+| 비종료 source refresh batch추출 | 0 | 21,176 (195행) |
+| 종료 source refresh batch추출 | 25,706 (194행) | 912 (5행) |
+
+양쪽은train8고유장면을 방문했지만 동일한 중간 상태 분포가 아니다. 새 refresh200개는
+KEEP118/FOLLOW82, 실제 source는비종료거절195/종료5다. 재수집이 이동/비종료 경험을
+확보한 것은 확인됐지만 전체 수락 수는 비슷하고 대부분의 새 경로는 여전히 거절됐다.
+수집 중 충돌208→17을 평가 충돌률 개선으로 해석하지 않는다.
+
+후보에는 실제 목표 도달 전이1개가 추가돼349번 batch에 추출됐다. 이는 main의
+train `30a56b458fc5b63d` KEEP, 전이772/tick67에서 학습 도중 관찰한 것이다.
+해당68tick은 수락58/거절10, NEW58/REUSED4/BRAKE2/EMERGENCY4이고 마지막4tick은
+연속거절·마지막source EMERGENCY였다. 같은train장면의 이전 수집은55tick충돌이었으나
+방문 시점/중간 정책이 다르므로 최종모델 성능 대조가 아니다. 목표 도달을 연속적인
+유효 경로나 안정 주행으로 확대하지 않는다. 전체개발16회 결과는 아직 없다.
+
+## 23:57 — 현재 버전 Rule-based 재평가·전체 주행 기록 저장 대기
+
+최종 Rule-based 비교 준비에서 과거
+`outputs/sac_stability_20261117/revalidated-final/baseline.json`을 현재 규약 함수로
+검사했다. 기존16장면/명령쌍과 집계 재계산은 일치했지만 `validate_rule_baseline`은
+현재버전불일치로 거절했다. 다른 version 항목은 같고 code SHA는 과거c217dc…/
+현재96fa1d…로 다르다. 과거 호환revision ee211b9와 현재tracked core의 차이는
+learner/networks/runtime3파일이다. 이 차이 목록을 새로운 측정이나 무조건적인
+실행 동등성 근거로 쓰지 않고 원래 보고서를 보존한 채 다시 측정하기로 했다.
+
+로컬 `outputs/sac_rule_baseline_current_20261120/historical-preflight.json` SHA
+`82eb34ca4b294be22eca6e7f5c7a530374844cf4de5c72c696e184cdb00cbcb0`.
+새 runner3015652/session33463은23:51:15 시작·실제생존확인,
+WAITING_FOR_POLICY_DIAGNOSTICS다. 부모3012859/start_ticks74492863과 성공 종료를
+확인한 뒤에만 진행한다. 학습/성능 측정과 동시 실행하지 않는다.
+
+- source210/input150 SHA·source복사본 동결. decision SHA
+  `75cfee3ec8c255b39057e4c0bc616809fe9ece1da9ed5dbd4621c8601fcbe161`.
+- 기존 `evaluate_sac_models.py evaluate --policy teacher --seed 0`로 같은manifest의
+  전체16쌍을 평가하고, 원래 `scripted_proposer('teacher')`와 실제 `capture`로
+  동일16쌍의 도로/차량/제안·실행경로/거절/제동/종료 프레임을 다시 저장한다.
+- 독립검산은 현재버전 Rule-based validator, 원본 모든tick의 수락·source·event·
+  보상·정지/종료 집계, 별도 formal평가와의 일치, SAC 평가의 초기frame/지도 일치를
+  확인한다. 반복capture를32개 독립장면으로 세지 않는다.
+- 두번의주행은 formal 지표/영상근거 확보이며 학습 또는 replay 삽입0이다.
+  GIF 자체 생성/최종3seed비교·별도test는 아직 미실행이다.
+
+새 로컬 runner/capture/reviewer는 AST 및 경로/동결hash 검사를 통과했다. 실제 평가와
+capture는 아직 대기 중이며 과거 baseline의 버전만 최신으로 바꾸지 않았다.
+안정정책 확보·다른seed·동일조건 최종비교·별도평가 목표는 계속 미완료다.
