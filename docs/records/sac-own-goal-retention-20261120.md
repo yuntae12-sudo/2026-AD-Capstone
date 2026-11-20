@@ -3742,3 +3742,76 @@ bootstrap을 대조했다. 보고서 입력SHA도 별도 재확인했다. 원본
 실행 명세를 준비했고 학습→저장감사→실제재현→개발16주행→Q/MC를 연결할 예정이다.
 1,000은 진단 예산이며 안정 정책 수렴을 요구하거나 장기학습 불가능성을 판정하는
 기준이 아니다. 시작 여부/식별자는 후속 실제 launch 기록으로 구분한다.
+
+#### 2026-11-21 06:12 KST 초기 이동 FOLLOW 실제 재방문 확인
+
+실행 코드는 `7d1ba056aed3ba076cc058530af9bfafda12df52`이며 학습 조건은 그대로다.
+새 fresh1,000 비교를05:37:12에 시작했다. runner3143797/start_ticks76743215,
+train3143816/start_ticks76743580, Q 후속3143809/start_ticks76743404다.
+06:12:02에 실제 학습 프로세스 생존과913/1,000을 확인했다. source312/input201
+해시도 모두 일치했다. 주 대조군은 직전 명령별 보존1,000이며 pilot 가중치를
+재사용하지 않는다. decision SHA는
+`9558709a7eb8b1b6e83ba05ba910d2fc72f4f04977881348f497834424db6720`이다.
+
+읽기전용 관찰은100/400/700/1,000개 원본 prefix를 보존한다. 첫400개에서는
+양쪽 main188/branch132/refresh80, 비종료 후속43개 모두KEEP였다. 새 두 번째
+KEEP root는 같은 장면의tick6 대신tick0·13.85m/s를 선택했다. 이동FOLLOW
+일반주행/분기55개는 양쪽 이미 있었으므로 전체FOLLOW 경험 부재로 해석하지 않는다.
+
+첫700개에서 새 bank는 FOLLOW source533(tick2·10.236217m/s)를 남겼고 직전
+대조군의 최종FOLLOW bank는 정지 상태였다. 이동FOLLOW 후보가 있는 비종료
+슬롯은24→39지만 활성KEEP 경로가 이어져 새 후보의 이동FOLLOW 재방문은0이었다.
+일반주행/분기의 이동FOLLOW 수는 기존80+117, 새80+84로 전체 이동 경험이
+증가했다고 말할 수도 없다. 수집 분포와 표적 재방문은 구별한다.
+
+두 번째KEEP 경로가collection715에서47step 뒤 실제충돌한 다음,725에서
+source533을 선택해 이동FOLLOW 재방문을 시작했다.725/tick2는통과,
+735/tick3·745/tick4는 `PREDICTED_OFFROAD` 거절이며 모두bootstrap=true다.
+원래source533도 같은 이유로 거절됐다. 첫 통과는 학습 중 확률 행동의 관찰이며
+고정정책 성능이나 학습의 인과적 개선을 입증하지 않는다.
+
+로컬 `outputs/sac_early_moving_comparison1000_20261121/first-moving-follow/`에
+745개 prefix를 저장하고 다음 명령을 실행했다.
+
+```bash
+conda run -n its-merge python outputs/sac_early_moving_comparison1000_20261121/first-moving-follow/replay.py
+```
+
+실제 실행에는 같은 환경의 절대 Python 경로를 사용했다. Waymax1reset/6step
+(복원2·원래source1·재방문3)의 관측fingerprint·검사·제어·보상·종료/bootstrap과
+원래 환경 보존을 확인했다. 입력SHA와 원본prefix 바이트도 별도 재대조했다.
+새 정책 호출/학습update0이며 전체 replay배열과 전체경로 검사는 후속으로 남는다.
+`execution-review.json` SHA:
+`0d1157c1473e8639a68ea7ba47ec819187b0e915b72cead79bbb7eeae97798df`.
+
+#### 같은 첫 업데이트의 제한 수치 재현성 검사
+
+초기모델/배치추출 동일과 이후 수치 동일성을 구분했다. 새 pilot와 새1,000의 첫100개는
+batch-index SHA와 이산 판정이 같지만 첫update metric과 collection3 이후 행동이
+조금 달랐다. raw 행동 최대차이1.98237e-6, 위치0.00048828125m였다.
+값을 반올림하거나 허용오차를 변경하지 않았다.
+
+`outputs/sac_runtime_reproducibility_20261121_retry1/`에서 동일 초기상태/첫배치의
+독립프로세스4개×각2반복을 완료했다. 매번 원래 상태에서 한 번 업데이트를 계산하며
+출력을 연결하거나 가중치를 채택하지 않았다. 실제 새 전이/production update0,
+진단계산8회다. runner/child 실제 부재·동결입력·패키지/GPU/배치 동일을 재확인했다.
+
+- 기본옵션은 프로세스 내 반복은 같지만 독립프로세스 사이525개 leaf 중14개가
+  달랐다. critic Dense_2 parameter/Adam/target 차이로 직렬화순서만의 차이가 아니다.
+- `--xla_gpu_deterministic_ops=true --xla_gpu_exclude_nondeterministic_ops=true
+  --xla_gpu_autotune_level=0` 결합옵션은 두 프로세스와 각 반복의525leaf,
+  전체 직렬화SHA 및 metric이 같았다.
+- 원래 첫 시도는 전체state device_put 뒤 초기바이트 검사에서 업데이트 전에
+  실패했다. Python counter의 배열 변환을 확인하고 실패 로그를 보존했다.
+  retry는 직접 복원한 상태를 그대로 사용하며 엄격한 초기바이트 검사를 유지했다.
+- `independent-review.json` SHA:
+  `b74a1b89368d58be7f8b4c1033bf6b6892756497abdaf6347f523e520aabb34f`.
+
+고정 첫update의 제한 검사다. 전체 학습 결정성·속도·주행 성능·단일backend 원인은
+입증하지 않았다. 진행 중인 학습의 옵션은 변경하지 않았고 기본 설정 채택도 없다.
+
+다음은1,000 완료 후 저장감사/Waymax 재현→개발16주행·Q/MC·실패분석·GIF 직접
+검토다. 이동FOLLOW 경로가 예산말 미종료면 그대로 기록한다. 장기학습 방안은
+같은 예산의 주행과 Q 근거를 함께 보고 결정한다. 안정정책·다른seed·최종Rule비교·
+별도성능평가 목표는 미완료다. Notion03의115절과04의현재진행에 이번 결과를
+반영하고 다시 읽어 새 기록1개·핵심수치·기존05:55 기록 보존을 확인했다.
