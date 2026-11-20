@@ -4018,3 +4018,41 @@ python outputs/sac_refresh_continuation_pilot20_20261121_retry2/final_review.py
 성공·충돌·거절·제동·정지·보상을같이검토하는구상이다. 양쪽전체복원검토와실행조건동결전에는
 시작하지않는다. 중간checkpoint는현driver에없다는한계도명시했다. 아직실행결정/장기학습/
 다른seed확대/안정정책채택이아니다.
+
+#### 2026-11-21 07:13 KST 전체 복원 검토 완료·동일 총10,000 비교 시작
+
+직전 초안의 선행 검증을 마친 뒤 실행 조건을 확정했다. 양쪽1,000 context 복원은
+각8reset/1,000실제재생, 합계2,000step으로 완료했다. 마지막main과UUID·최종bank·진행중
+경로·장면순서·원래호출수에서파생한정책RNG·최근main snapshot·입력SHA를독립검산했다.
+새후보는main다음tick73/활성FOLLOW source533의다음tick30, 대조군은main다음tick47/
+활성KEEP source726의다음tick68이다. 두context의정책key는[1951512285,242283446]이며
+원래저장key와의직접비교는아니다. 새정책호출·학습update·replay삽입0이다.
+로컬 `outputs/sac_refresh_context_restore_20261121/full1000/integration-review.json` SHA
+`49867cf04ab865d166b89264e2f049e4793d62951c96edae8c68bf8b3e137b00`.
+
+실행코드 `f0a21c452cb2351b421ff8d4e18cc7187c988a83`의commit/push·원격SHA를확인한뒤
+`outputs/sac_refresh_matched10000_20261121/decision.json`을동결하고07:13:25에시작했다.
+decision SHA `6e3c4f6feabaab8d970e9f3794866e25803bf4148ab17898c3b2e1382422df26`,595파일동결.
+같은root의plan.json은당시초안으로보존하며실제진행상태는status.json에서확인한다.
+
+- 후보/대조군은각자의완료1,000가중치·optimizer/target/RNG·자기replay·수집상태를이어
+  총10,000까지학습한다. 각각새실제전이9,000/fullSAC9,000이며fresh재시작이나pilot120재사용이아니다.
+- seed0·자기warmup5,000·부모모델/수집/배치조건을고정한다. 보상·안전/운동검사·공통PD·
+  원래Gaussian·loss/lr/tau·BC0/teacher0·새전이당update1과기본수치실행옵션을유지한다.
+- 후보학습→전체저장감사→개발8장면×2명령16회→대조군에동일3단계→원본비교검토의7작업이다.
+  양쪽1,000결과와동일조건Rule결과는재사용임을표시하고초기frame/map동일성·raw지표를검산한다.
+- 성공·충돌·거절·제동·정지·보상과명령/초기속도별결과를함께본다. 반복개발자료이며독립test가아니다.
+  예산소진을수렴/안정주행으로보지않고10,000초과자동연장·자동채택·다른seed/별도test실행은없다.
+- 현driver는최종모델/replay만저장한다. 진행보고/원본로그는갱신하지만중간가중치checkpoint는없다.
+
+07:13:50 실제생존: runner3186163/start_ticks77350549,
+candidate-train10000 PID3186182/start_ticks77351217. report는RESTORING·inherited1,000/
+budget10,000·collected_this_fork0이었다. 실험시작과신규update실행은구분한다.
+다음은현재context복원후바이트/RNG동일성과첫신규update를확인하며실행을관찰하고,
+완료후동일예산주행/Q·실패분석으로판단하는것이다. 안정정책·추가seed·최종비교·별도평가목표는미완료다.
+
+```bash
+python -m json.tool outputs/sac_refresh_matched10000_20261121/status.json
+python -m json.tool outputs/sac_refresh_matched10000_20261121/candidate10000/report.json
+python -m json.tool outputs/sac_refresh_matched10000_20261121/candidate10000/restoration-progress.json
+```
