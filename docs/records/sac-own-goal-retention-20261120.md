@@ -1075,3 +1075,54 @@ main2929909는계속생존,다음후보4주행까지원래7jobs를유지한다.
 64소스/23입력과복사본동결,post decision SHA
 `79b42b1f2478296c7622be541e406b856f4cddda2dec5a72f6504567ed39d9ab`.
 모델/replay/report는완료후추가동결한다. 현재전체성능·안정정책은아직미확보다.
+
+## 20:53 fresh100 주행 완료와 재수집 전 수치 차이
+
+원래7jobs는 COMPLETE_PENDING_DECISION으로 정상 종료했다. 그러나 후속
+`review_training.py`의 재수집 전32행 수치동일성 검사는 실패했다.
+원본 `post-review/status.json`의FAILED,script/log를 보존했으며 원인을 확인하지 않고
+허용오차를 늘려 통과시키지 않았다. 실제 재수집은collection33에서 시작하지만 첫
+gradient 지표 차이는update1부터 나타났고 raw행동은collection2부터 달랐다.
+
+첫학습입력배열(원본warmup+첫실제전이,학습에쓰지않는ID제외)은바이트동일하고
+32회배치index hash도같았다. 그러나 실제초기learner바이트는기록하지않았으므로
+seed/설정동일성을초기상태바이트동일성으로확대하지않는다. 차이의유일원인은미확정이며
+모든차이가수치비결정성때문이라고확정하거나재수집효과로설명하지않는다.
+
+- 재수집전32행 raw_u 최대차이1.5943615795947687e-7,서로다른행31개.
+- obs 최대차이6.351619958877563e-7,서로다른행2개(collection31/32).
+- next_obs 최대차이같음,서로다른행3개(collection30–32).
+- 보상최대차이5.169392341269896e-9,서로다른행3개.
+- mask·검사판정/이유·source·종료·bootstrap·장면/tick·배치인덱스는일치했다.
+
+별도 `prefix-difference-review/`에서 차이를 그대로 보고하는 검토를 수행했다.
+`training-review.json`은COMPLETE_WITH_NONIDENTICAL_PREFIX,
+`pre_refresh_equivalence_passed=false`이며원래검사실패를성공으로바꾸지않았다.
+두실험의동일설정·warmup17배열과실제실행은검증됐지만엄밀한동일경로반사실적비교는아니다.
+별도주행검토는4+4원본trace/초기frame/map/집계를검산한기술적비교다.
+
+| 같은두개발장면×KEEP/FOLLOW | 기존수집100 | 재수집후보100 |
+| --- | ---: | ---: |
+| 목표 / 충돌 | 2 / 2 | 2 / 2 |
+| 전체tick | 218 | 218 |
+| 거절 / 제동 / 정지tick | 58 / 46 / 22 | 58 / 46 / 22 |
+| 평균보상합 | -10.0160922573 | -10.0160973947 |
+
+두모델모두고속KEEP/FOLLOW72tick목표,저속KEEP/FOLLOW37tick충돌이었다.
+주행개선을관찰하지못했고작은보상차이를효과로해석하지않는다. 후보재수집은한train
+KEEP장면의14전이뿐이며FOLLOW수집/정지출발/전체개발/다른seed/독립평가검증이아니다.
+
+로컬 `outputs/sac_terminal_refresh_pilot100_20261120/prefix-difference-review/`:
+
+- `difference-analysis.json`: `81feb1a14ecf1914f7b1e616c8c2c36e88a0d6be89010836f0acd89fcaecd718`.
+- `training-review.json`: `cf485e22b9b0bdb47649ffb1308f8d42b448d61fd34d7e93cd032d73d1b70f9d`.
+- `pilot-review.json`: `3ed4b74e4d39529166ba7c6e6c15814ea701ccb64387db8b39acd254d600ed9e`.
+
+main2929909/post2939148/평가2940353은종료했다. 원래61소스/22입력 및후속64소스/
+23입력·동결모델/report/replay hash를재확인했다. 원본후속FAILED와별도비동일성기술적
+검토완료를구분한다. 이차이분석에학습/시뮬레이션재실행이나모델/replay수정은없었다.
+
+다음은새refresh이력에도현재행동Q/거리·실제미래보상검증도구가올바르게작동하도록
+연결하고,모델초기화/수치동일성검증의범위를명확히한뒤FOLLOW를포함하는같은예산의
+더긴비교를준비하는것이다. 아직다음학습은시작하지않았고이100모델은채택하지않는다.
+보상·검사·PD·Gaussian·순수SAC조건과원래전체목표는유지한다.
