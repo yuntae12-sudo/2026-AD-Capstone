@@ -93,3 +93,72 @@ sampler/driver/auditor를보존했다. `sources/`는로컬실행소스사본이�
 
 노션Home/02/03의68절/04에이전30주행실패·자기성공가치악화·새구현/실행시작을반영했고
 4페이지를재조회해핵심상태/수치/커밋링크와기존67절보존을확인했다.
+
+## 17:49 pilot 완료: 성공 보존 신호와 남은 실패
+
+두 fresh100 학습·저장 감사, 각8개 동일 개발쌍의 총16주행을 완료했다.
+17:49:15 별도 검토기가 모든 원시 frame의 보상·거절·제동·step후 정지·종료를
+재계산했고 초기 frame/map, 모델/manifest, 56개 동결 소스를 확인했다.
+`pilot-review.json` SHA `855d21387748751c5f2f4914d225e17b507efa2da0ac9ec3f0e22b3849fe4bd5`.
+학습/평가 runner2847542와 검토 runner2853566은 종료했다. 안정 정책 확보는 아니다.
+
+| 평가 | 기존 recent | 자기 목표 종료 유지 |
+| --- | --- | --- |
+| primary 4회 | 목표0·충돌4 | 목표2·충돌2 |
+| primary ticks | 224 | 218 |
+| 거절/제동/정지 tick | 110/98/44 | 58/46/22 |
+| 거절/제동/정지 비율 | 49.11/43.75/19.64% | 26.61/21.10/10.09% |
+| 평균 training return | −20.265201 | −10.016100 |
+| 정지 출발4회 | 충돌4,328/328 정지 | 충돌4,328/328 정지 |
+| 정지 출발 거절/제동 | 80/76 | 80/76 |
+| 정지 출발 평균 return | −20.429955 | −20.429955 |
+
+고속 KEEP/FOLLOW의 성공2건은 초기 mean0도 성공했던 쌍이다. 새로운 주행 능력이 아니라
+이 예산에서의 기존 성공 보존 신호다. 성공 종료 frame도 BRAKE/PREDICTED_COLLISION,
+속도 약11.02m/s라서 무개입 안정 주행으로 부르지 않는다. 반복 개발4장면/8쌍·seed0이며
+독립 test나 통계적 일반화 근거가 아니다. 정지 출발 문제는 전혀 개선되지 않았다.
+
+고속 KEEP tick42: 실제 위치 차이0.015832m, 제안 경로 최대 차이0.073698m에서
+기존은 PREDICTED_OFFROAD, 후보는 OK였다. 작은 차이가 검사 경계를 넘고 이후
+제동/충돌 결과를 바꿨다. 단일 trace 비교로 유일 인과나 견고함을 주장하지 않는다.
+`paired-divergence.json` SHA `809c6107af71d67e30dfc3df40f1b002aaec6be0663a9ff6dcfb54888fed0d53`.
+
+같은 저장 종료62행의 CPU highest Q MAE는 기존/후보 순서로 전체13.083282/13.023559,
+목표6행0.274441/0.240822, 실패44행18.309669/18.223490, 기타12행0.324288/0.348515다.
+목표/실패의 소폭 개선과 기타 종료 악화를 함께 기록하며 실패 과대평가는 여전히 크다.
+후보는 실제 자기 목표 종료6행을 총824회 추출했고 기존은24회다. 독립 경험수가
+824개라는 뜻이 아니다. 동일 warmup17배열과 모든 batch index hash/RNG를 검산했다.
+`training-review.json` SHA `81e1fcb27db545285905e312be0107968c1b25f9ea525b5806ce20b439eda359`.
+첫 실제 신규 전이의 관측·행동·보상·next 관측·종료/mask도 바이트 동일함을 별도 확인했다.
+
+### 실제 주행 GIF
+
+위 pilot 로컬 폴더의 `visual/high-speed-keep.gif`와 `.png`는 동일 고속 KEEP의
+기존 SAC/자기 목표 유지 SAC를 나란히 렌더링했다. Rule-based 비교 영상이 아니다.
+실제 저장 trace만 사용했고 재시뮬레이션하지 않았다. 1440×900,39frame,
+주행7.6초/재생9.1초(마지막1.5초 유지)다. 최종 PNG를 시각적으로 확인했다.
+GIF SHA `8f56bb07fd9feddba6ee5d5d4e134f784bf62d406106956f3ae66f10f7381db8`.
+
+원래 wrapper는 GIF/PNG 저장 성공 후 PIL.Image에 savefig를 호출해 exit1이었다.
+실패 로그/원본을 보존하고 `finalize_visual.py`가 기존 결과 전체 frame·크기·duration·입력
+hash를 검증했다. `visual/render.json`은 COMPLETE_VERIFIED_EXISTING_RENDER이며
+원래 wrapper의 FAILED_AFTER_SUCCESSFUL_RENDER도 함께 남겼다. 실패를 삭제하거나
+원래 실행을 성공으로 바꾸지 않았다.
+
+## 17:50 fresh1,000 동예산 비교 시작
+
+pilot를 검토한 뒤 두 방식 모두 동일 초기화에서 fresh1,000을 실행하기로 결정했다.
+목표는 기존 성공 보존이 더 긴 학습에서도 유지되는지와 실패 가치 오차/정지 문제를 함께
+확인하는 것이다. 기본 설정 채택, 안정성 승인, 추가 예산 자동 연장이 아니다.
+과거1,000 결과만 재사용하지 않고 대조군도 재실행한다. pilot100을 이어받지 않으며
+고정Q5000 가중치도 사용하지 않는다. 앞 절의 모든 조건과 reward/checker/PD를 유지한다.
+
+로컬 `outputs/sac_own_goal_retention_1000_20261120/`, main runner2861692는
+17:50:04 시작, review runner2863133은17:50:39 시작했다. 실제 학습 코드1c86e9f,
+launch HEAD는문서커밋eda68fb다. 각학습/저장감사→개발4회/정지4회와 동일62행Q검토,
+원시16trace 검토를 연결했다. 실행 중 source56개와 입력을 동결했다.
+`decision.json` SHA `9124d279d282d1969ad7402e19fcb9eea6a1ad522a792112b79374b788dd285b`.
+준비 중 절대경로 소스 복사에서 SameFileError가 났으나 launch 전이었으며, 원본은
+바뀌지 않았다. workspace 상대 경로로 사본을 만들고 원본/사본56개 hash를 재확인했다.
+현재 상태/자식PID/정확한 명령은 `status.json`, 검토 상태는 `reviews-status.json`이다.
+1,000 결과·기본 채택·다른seed·독립test는 아직 미완료다.
