@@ -4203,3 +4203,41 @@ wrap 없이 보존한다. collection RNG5000 재시작은 default raw10,000의 �
 `e73364438bae988fb26e4df4afab68bffd37a4cb10e62af845f2897c6897cf6e`.
 AST 파싱과 현재 RUNNING 중 검토 거절 확인을 실제 실행했다. 완료된10,000 산출물에 대한
 실행은 아직 미실행이며 scientific-review도 생성하지 않았다. 자동 정책채택은 하지 않는다.
+
+### 2026-11-20 10:59 KST — 현재5,000 모델과 과거 Rule-based 기준선 대조
+
+기록 직전 HEAD `69b33bb37b2dbd9ac368e7a1c663d2dd200af553`, 실행 코드c4babca 유지.
+학습 중 추가 시뮬레이션 없이 보존된 Frenet v4 기준선과 완료된5,000 모델의16쌍을 대조했다.
+`python outputs/sac_mean_basis_f64_full5000_20261120/review_rule_based_reference.py` exit0.
+로컬 결과 `rule-based-reference-review.json` SHA
+`42a0150d0833cc8e3353c210c20b91a908e47ee35f70441db375f765a33af1c3`.
+
+기준선은 `outputs/sac_stability_20261117/revalidated-final/baseline.json`, SHA
+`9981e5dca007764cd7a09df41d28ca8b91c92516ac73b99c4940f1d4f18bcd8e`이며 새 실행이 아니다.
+이전 provenance의 baseline revision `1d6ea21b66f2dd51bc0d48d54d0515f968cc2e75`부터
+현재 작업 트리까지 src/configs/공통평가 실행부의 변경 경로는 learner.py/networks.py뿐이다.
+Frenet 경로 실행에서 사용하는 환경·관측·보상·검사·PD·teacher·scenario·contract는 동일하다.
+metadata 차이는 global code hash뿐이며 manifest/contract/dependencies/teacher가 일치한다.
+16개 scene/provider·seed0·초기 속도도 일치하고, 기준선 episode 원본 요약으로 지표를 재집계했다.
+
+| 개발16쌍 | 과거 Rule-based 참조 | f64 SAC5,000 |
+| --- | ---: | ---: |
+| 목표 / 충돌 / TASK_LOST | 7 / 8 / 1 | 3 / 13 / 0 |
+| KEEP 목표(8회) | 4 | 2 |
+| FOLLOW 목표(8회) | 3 | 1 |
+| tick | 1,077 | 969 |
+| 경로 거절 | 239(22.19%) | 415(42.83%) |
+| 제동 | 223(20.71%) | 366(37.77%) |
+| 정지 | 388(36.03%) | 415(42.83%) |
+| 평균 reward return | −10.068949 | −16.534533 |
+
+**현재 SAC는 초기 mean0보다 성공1건을 늘렸지만 과거 Rule-based 기준선에도 미달한다.**
+SAC에서만 새로 성공한 scene/provider는 없고 Rule-based만 성공한 쌍은4건이다.
+Rule-based의 TASK_LOST1건도 성공으로 세지 않는다. Rule-based 자체도8충돌이므로 안정성 인증은 아니다.
+
+이는 소스/metadata가 맞는 **과거 참조 비교**다. 기준선 요약에는 전체16건의 초기 frame/map과
+주행 원본이 없어 직접 같은 초기 frame을 대조하거나 궤적을 바이트 단위로 재현한 검증은 아니다.
+새16회 Rule-based 재실행·최종 paired 비교·다른 SAC seed·독립test를 완료했다고 쓰지 않는다.
+SAC 요약의 tracking RMS도 없으므로 기준선의 RMS와 비교 값을 만들지 않는다.
+모든16개 쌍을 유지했고 새 유리한 장면을 고르지 않았다. 이 자료는 학습에 들어가지 않는다.
+현재 총10,000회 실험의40소스·설정과 보상/검사/PD/순수SAC/수집/손실은 그대로다.
