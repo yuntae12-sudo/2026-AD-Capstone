@@ -592,3 +592,36 @@ replay6,000행의17배열 동일, RNG복원과 다음 메모리상 배치 hash �
 사전 검사에 사용한1001은 허용 범위 검사 값이며 실제 선택/실행한 후속 학습 예산이 아니다.
 GPU 이어학습·새 전이·추가 optimizer update는 미실행이다. 현재 행동 가치 평가를 마친 후
 추가 예산을 판단하고, 이어학습한다면 실제 GPU 복원/신규 전이/누적 감사를 먼저 확인한다.
+
+## 19:27 연결: 실제 GPU 이어학습 1회 검사 대기
+
+현재 정책의 평가가 끝난 뒤 같은 learner를 실제로 복원하고 신규 자기 경험1개와
+전체 SAC update1회를 수행하는 별도 smoke를 연결했다. 후속 성능 학습의 예산을
+선택한 것은 아니며, 이 검사 모델을 자동으로 최종 후보나 다음 학습 조상으로 채택하지 않는다.
+원래 fresh1,000은 보존하고 별도 `online1001`에 저장한다. 총update1001·이전1000·신규1,
+actor/Q/BC0·6,001 replay행·기존tick/update prefix 및 모든 배치/RNG를 검사한다.
+보상/검사/PD/Gaussian/추출방식·전이당update1은 유지한다. collection_seed1000으로
+환경/수집 RNG를 명시적으로 재시작하므로 정확한 simulator 중간 resume은 아니다.
+
+로컬 `outputs/sac_terminal_continuation_smoke_20261120/`의 `run_smoke.py`를
+its-merge Python으로 실행했다. 19:27:22 PID2901620(session83679),
+`WAITING_FOR_POST_REVIEW`이며 신규 GPU 학습은 아직 미실행이다.
+실제 post PID2890300의 process starttime과 runner hash를 확인한 뒤 대기한다.
+기존 평가가 성공 종료하고 실제 PID가 사라진 경우에만 수행하며, 실패/누락이면 중단한다.
+기존 GPU 평가와 겹치지 않는다. 75소스/30입력 hash 및75소스 보존 복사본을 검증했다.
+
+- decision SHA `7fbb4f58374f141dd2d74836c1080067eb8bab7bfdd29c0391eabfe72d6dc4ba`.
+- runner SHA `68a4ef9b81dd930faff8959cadbaeb0f5e58a686dab38ac7b3731cb27b55dfbd`.
+- 실행 코드0ea2739, 실행 당시 문서 HEAD0f57347. 기존 동결 source 변경0.
+
+대조군 현재행동 평가는 완료됐다. 두 train상태×4확률seed는 모두 충돌했고,
+Q−실제soft-return평균은 KEEP13.681079/FOLLOW10.212227이다. 후보 KEEP4회도
+모두 충돌하며 해당 차이는12.198158이다. 후보 FOLLOW와 최종 검산은 아직 진행 중이다.
+이 부분 결과를 전체 완료나 안정 성능으로 쓰지 않는다. 상태 조회의 최초 편의 명령은
+존재하지 않는 `states` 키로 KeyError였고, 실제 `cases` 키로 수정했다.
+실험 과정/모델/파일 변경이나 재시작은 없었다.
+
+```bash
+python -m json.tool outputs/sac_terminal_continuation_smoke_20261120/status.json
+python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/post-status.json
+```
