@@ -2473,3 +2473,31 @@ WAITING_FOR_REVIEWED_BASELINE이다. decision SHA
 00:37 현재 새 학습은 시작 전이며 기존 조건/동결 파일을 유지했다.
 다음은 capture/원본 검산 → 새100회 학습·감사·실제source 재현 검토다.
 안정 정책과 전체 목표는 미완료다.
+
+## 2026-11-21 00:43 — 종류별 수집의 정책 진단 연결
+
+Rule-based capture3029682와 부모3015652, 후속 pilot3027013, GIF 대기3029047의
+실제 생존을 재확인했다. formal16회는 완료, capture는 진행 중이며 새 학습은 아직
+시작 전이다. 동결된 baseline source210/사전input150 및 pilot source97/input73의
+SHA를 다시 검산했고 기존 파일은 변경하지 않았다.
+
+새 `scripts/sac_stratified_diagnostic_audit.py`는 종류별 수집 scope에서 전용 실제
+lineage 감사를 필수로 실행한다. 과거 scope는 기존 rejection/terminal/일반 감사기를
+거치며 새 계약의 위장·혼합·누락과 미완료 검증을 거절한다. report/replay/adapter의
+해시를 결과에 남긴다.
+
+`diagnose_sac_stratified_branch_q.py`와 `diagnose_sac_stratified_soft_returns.py`는
+기존 rejection 진입점에서 감사 import/해시만 바꾼 별도 복사본이다.
+`audit_sac_stratified_coverage.py`는 실제 수집 종류·감사·출력 contract를 연결했다.
+원래 정책 행동/실제 보상/Q/할인·entropy 계산은 바꾸지 않는다. 진행 중인 동결 파일을
+유지하려고 별도 진입점을 사용했으며 이 진단은 learner/replay를 수정하지 않는다.
+
+관련 CPU32pytest(신규 adapter11 포함)가0.42초에 통과했다. 계약 누락/혼합/위장,
+과거 감사 우회, 미완료 검증을 거절하는 테스트와 기존 adapter/종류별 bank/분기 재현
+테스트를 포함한다. AST·세 CLI help도 통과했다. 새 adapter를 실제 완료된 비종료
+수집1,000·terminal-refresh1,000·그 이전 control1,000의 저장 이력에 실행해 모두
+COMPLETE를 확인했다. 각 실제 원본의 기존 검사를 그대로 수행했다.
+
+새 종류별 모델은 아직 학습 전이므로 그 모델의 실제 Q/coverage/return 진단은 미실행이다.
+pilot의 실제 실행·저장·source 재현 결과를 먼저 검토하고, 같은 예산 성능 비교를
+선택할 때 이 도구를 연결한다. CPU 통과를 성능 통과로 해석하지 않는다.

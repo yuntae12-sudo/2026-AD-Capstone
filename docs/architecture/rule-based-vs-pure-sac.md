@@ -278,3 +278,11 @@ return 검증도 완료했으나 두 train 상태×4seed 모두 충돌해 미채
 실제100전이 pilot의 학습·저장·Waymax 실행 검증과 이후 성능 비교는 아직 미완료다.
 현재 Rule-based 재평가가 성공 완료한 뒤 pilot이 실행되도록 연결했으며, 실행 상태와
 재개 경로는 위 실험 기록에 남겼다.
+
+종류별 수집 결과의 읽기 전용 Q/실제 return/coverage 진단은
+`sac_stratified_diagnostic_audit.py`를 사용한다. 새 scope는 종류별 실제 lineage 검사를,
+과거 scope는 기존 감사기를 반드시 통과해야 하며 계약 혼합/위장/누락을 거절한다.
+`diagnose_sac_stratified_branch_q.py`, `diagnose_sac_stratified_soft_returns.py`,
+`audit_sac_stratified_coverage.py`는 기존 진단의 계산을 유지한 별도 진입점이다.
+관련 CPU32pytest와 과거 실제 세1,000회 이력의 감사는 통과했다. 새 종류별 모델의
+실제 GPU 정책 진단과 주행 성능은 아직 미검증이다.
