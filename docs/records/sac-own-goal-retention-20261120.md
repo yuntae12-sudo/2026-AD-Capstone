@@ -3912,3 +3912,109 @@ source/input530파일동결,새정책호출/학습update0이다. 대조군검증
 별도lineage kernel은명시적인provenance stub 아래과거두1,000기록을기존감사와대조하고
 source ID손상을거절했다. 이는공유산술회귀검사일뿐부모provenance/실제재개검증을대신하지않는다.
 이초안을검증완료/새학습시작으로기록하지않는다.
+
+#### 2026-11-21 06:59 KST Q 검증 완료와 실제 재개 오류 보완
+
+기준 HEAD는 `baaf75fe2040e0b2fa50f10e6dcd437536394b92`, 브랜치는
+`feature/yuntae-sac-training`이다. 초기 이동1,000 실행 코드는7d1ba05이며 아래
+재개 driver·감사 코드4파일과 테스트는 아직 미커밋 초안이다. 보상·검사·PD·원래
+Gaussian·SAC loss/lr/tau·실제 전이당 update1·BC/teacher0 조건은 바꾸지 않았다.
+
+Q/MC runner와 모든 자식 작업의 성공 종료 및 실제 PID 부재를 확인했다.
+고정2train상태×4seed의8회는 모두 충돌했다. 독립8장면으로 세지 않는다.
+
+| 고정 train 상태 | 현재 Q | 실제 soft-return 평균 | 표본 표준편차 | Q−평균 |
+| --- | ---: | ---: | ---: | ---: |
+| KEEP 77ae tick0 | −1.899922 | −13.276254 | 2.045097 | 11.376332 |
+| FOLLOW baac tick4 | −1.296406 | −10.517073 | 0.767718 | 9.220667 |
+
+직전 대조군 차이11.846411/9.467646보다 작지만 소표본이며 전체 개발0/16실패를
+뒤집는 개선 근거가 아니다. 저장 충돌행동 Q MAE는 warmup44개1.307869→0.834475,
+online0.201438→0.138498로 줄었지만 앞선 상태의 과대평가는 남았다.
+8개 원본 trace의 seed·첫 평균행동·후속 entropy·할인 보상·종료 bootstrap·합계/std/Q차이와
+입력 SHA를 별도 검산했다. 로컬 `outputs/sac_early_moving_comparison1000_20261121/`
+`policy-diagnostics/diagnostic-review.json` SHA
+`73cd90171eeef646972e6e7c4d58b8b2ea2680d9b2b333a2ace9ea15b6acc641`,
+`independent-mc-review.json` SHA
+`35200c1c46de746f46e80bd77db95d855e728c2481b67e0938cc3a91460c88fd`.
+
+새 후보의1,000개 실제 전이 context 복원은06:49:51 완료했고06:55에 원본과
+독립 대조했다.8reset·main tick73/기존UUID, 최종bank, 활성FOLLOW source533/path145의
+다음step28·직전collection995·다음환경tick30, 최근main67..72가 일치했다.
+새 정책 호출/update/replay삽입0이며 원본15입력 및 동결530파일 SHA를 재확인했다.
+로컬 `outputs/sac_refresh_context_restore_20261121/full1000/candidate/report.json`
+SHA `2bbee71472482b4dd789e7d7852836c9269fe09af01fb369256a81123fd3f925`.
+정책key는 원래 호출수에서 재구성했으며 저장된 원래key와 직접 비교한 것은 아니다.
+대조군 복원 child3174094/start_ticks77202051은 실제 생존 확인했고06:58에400/1,000이었다.
+
+실제100→120 재개 통합시험은 두 번 새 수집 전에 실패했다. 실패 산출물과 당시
+driver 원본을 각 디렉터리에 보존했고 guard를 해제하지 않았다.
+
+1. `outputs/sac_refresh_continuation_pilot20_20261121/`:06:51 learner 바이트 동일성
+   검사 실패.525leaf의 값·자료형 차이0,126개mapping의 삽입 순서만 달랐다.
+   JAX identity tree traversal로 학습 후 순서를 복원하면 전체 바이트가 일치했다.
+2. `outputs/sac_refresh_continuation_pilot20_20261121_retry1/`:바이트검사는 통과했으나
+   NumPy로 복원한 파라미터가 GPU에 없어 추론 생성에서 실패했다. 신규 전이/update0.
+   배열 leaf만 GPU로 옮겨 Python 카운터를 보존하고, 변환 후 전체 바이트 동일성도
+   계속 검사하도록 보완했다. 전체 state의 무조건적인 device_put은 사용하지 않는다.
+
+CPU 관련23pytest(복원9+재개14)가 통과했다. 양쪽pilot100/본실험1,000의 네 체크포인트를
+실제 GPU에서 불러와 각525leaf·전체바이트동일·actor GPU배치·model_proposer 생성·
+update/BC카운터를 확인했다. 새 정책 호출/update0인 구성 검사이며 실제 재개 검증과
+구별한다. 근거는 첫 시도의 `serialization-review.json`과
+retry1의 `device-restore-review.json`이다.
+
+별도 `outputs/sac_refresh_continuation_pilot20_20261121_retry2/`에서 각각100→120의
+실제20전이+원래SAC20update 통합시험을 재실행 중이다. runner3178327/start_ticks77257357,
+candidate3178346/start_ticks77257960의06:59 실제생존 확인. decision SHA
+`be5695f811833cb4b1886cf06e9c46192b909b18aac5d842a2e4ad6c22f7028c`,558파일동결.
+부모가중치/17replay배열/prefix/RNG·첫main후속상태·활성refresh 연속성을 검사하고,
+완료본의 손상 사본 거절 검사도 준비했다. 실제 재개/전체감사는 완료 전 미검증이다.
+새 장기 성능 예산·기본 채택·다른 seed 확대는 아직 시작하지 않았다.
+
+다음은 양쪽 복원·실제 재개 검증을 마치고, 조건을 유지한 더 긴 동일예산 실험을
+정하는 것이다.1,000의 미달을 숨기거나 장기 학습 불가능성으로 확대하지 않는다.
+안정적인KEEP/FOLLOW·다른seed·최종Rule비교·별도평가 목표는 계속 미완료다.
+
+#### 2026-11-21 07:10 KST 양쪽 실제 재개 통합검증 완료
+
+위 retry2의 여섯 작업(각 학습·전체감사·결과검토)은 모두 성공 종료했고 모든
+PID/start_ticks의 종료를 재확인했다. 후보와 대조군 각각 실제20전이(main16/refresh4)와
+actor/Q20update를 추가해100→120을 완료했다. 총 새경험40/actor40/Q40, BC0/teacher0이다.
+각 부모 learner/optimizer/target/RNG 바이트 동일, 이전17개 replay배열과 원본로그 prefix,
+샘플링 RNG/배치해시, 원래main tick22와UUID, 진행중KEEP source2/path1의step13·
+직전collection95에서후속collection105로의연결을검사했다. 추가 전이당 원래 fullSAC1을
+호출했으며 새샘플의policy_updates_before100..119와update101..120을대조했다.
+
+정상완료본의전체감사2회를양성대조로통과한뒤사본에서명시적수집재시작표기,
+과거tick변조,복원replay RNG변조,새refresh source변조,새batch해시변조를각각검사해
+두모델총10건모두거절했다. 원본SHA는보존됐다. 코드/입력558파일의동결SHA도재대조했다.
+로컬 `outputs/sac_refresh_continuation_pilot20_20261121_retry2/integration-review.json`
+SHA `769c56b8b475aac8c5619965370d0d3dabb39003c7b97a4da7bf97a57445f05c`,
+`corruption-review.json` SHA
+`427a309ab4de558d813ae72b31e977f4b4e4b580e305c07f38e1e8054152f379`.
+
+이는KEEP중심의작은통합검증이다. 새failure branch는0이었고이동FOLLOW의새정책재개나
+주행성능/장기안정성까지검증한것은아니다. 새후보1,000의이동FOLLOW수집context복원은
+앞절에서별도확인했다. 대조군1,000전체복원은07:09:57에실제PID3174094/start_ticks77202051
+생존·CPU실행중으로확인했고마지막보고는800/1,000이다. 관측지연을실패로간주하지않는다.
+
+실행명령:
+
+```bash
+JAX_PLATFORMS=cpu python -m pytest -q tests/training/test_sac_refresh_context_continuation.py tests/training/test_sac_refresh_context_restore.py
+python outputs/sac_refresh_continuation_pilot20_20261121_retry2/run.py
+python outputs/sac_refresh_continuation_pilot20_20261121_retry2/check_corruptions.py
+python outputs/sac_refresh_continuation_pilot20_20261121_retry2/final_review.py
+```
+
+23pytest·4새스크립트py_compile·실제40전이·전체감사·10손상거절·원본재검산통과.
+위run.py는실행완료기록이며같은출력경로로재실행하지않는다. 현재지원은fresh완료부모의
+미종료main cut에서한번이어총10,000이하까지이며,이미이어진모델의재재개나mid-branch
+복원은지원하지않는다. 전체프로젝트회귀나수치비트동일학습보장은아니다.
+
+후속동일예산초안은로컬 `outputs/sac_refresh_matched10000_20261121/plan.json`에있다.
+두기존1,000모델에서각9,000실제전이/update를더해총10,000으로비교하고전체개발16쌍의
+성공·충돌·거절·제동·정지·보상을같이검토하는구상이다. 양쪽전체복원검토와실행조건동결전에는
+시작하지않는다. 중간checkpoint는현driver에없다는한계도명시했다. 아직실행결정/장기학습/
+다른seed확대/안정정책채택이아니다.
