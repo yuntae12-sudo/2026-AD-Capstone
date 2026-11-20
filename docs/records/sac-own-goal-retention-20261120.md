@@ -526,3 +526,69 @@ ROUTE_GOAL/전체장면안전/안정정책으로세지않는다. 같은장면의
 현재B/gain0.0001을역산한동등head절댓값최대는약78.3 대2000이다. 이는저장경로의수학적좌표이며
 실제NN head조사·필요최소출력·학습시간하한·gain이유일원인이라는증명이아니다.
 출력크기만확대하면된다고판단하거나진행중모델/gain/보상/검사를변경하지않았다.
+
+## 19:24 확인: 전체 8회 주행 완료, 현재 행동 가치 평가는 진행 중
+
+19:17:57까지 새 후보의 4개 개발 장면×KEEP/FOLLOW 8회 평가와 저장 trace 검토가
+완료됐다. 같은 초기 frame/map의 기존 목표8 모델 8회는 보존된 결과를 재사용했다.
+독립 장면은 4개이며 두 명령과 두 모델의 반복을 독립 test로 세지 않는다.
+
+| 전체 개발 8회 | 목표8 대조군 | 목표8+실패8 후보 |
+| --- | ---: | ---: |
+| 목표 도달 / 충돌 | 0 / 8 | 2 / 6 |
+| 실제 tick | 514 | 564 |
+| 경로 거절 비중 | 36.19% | 30.14% |
+| 제동 비중 | 31.91% | 24.82% |
+| 정지 비중 | 69.26% | 60.28% |
+| 평균 reward 합 | -20.355843 | -15.263125 |
+
+고속 KEEP/FOLLOW의 기존 성공을 회복했지만 저속 2회와 정지 4회는 모두 충돌했다.
+정지 4회만 보면 양쪽 모두 328/328tick 정지이고, 후보의 거절은92→126,
+제동은82→104로 악화됐다. 전체 평균의 개선으로 이 회귀를 숨기지 않는다.
+추종 position RMS는 대조군0.000282690m(368samples)/후보0.000270578m(468samples)이며
+참조 경로 없는 EMERGENCY146/96tick은 제외했다. 작은 추종 오차는 안전한 경로 생성의
+증거가 아니다. 안정 정책·기본 채택·전체 개발/새seed/독립test 확대는 미완료다.
+
+로컬 `outputs/sac_own_terminal_retention_1000_20261120/`:
+
+- `pilot-review.json` SHA `ebe4fe00337d6ff2ecc67994443940c69b0a302cafd34e3ee9bc8182a9897b18`.
+- `driving-details-review.json` SHA `43c762869e2a1d632423a19f0a195956fed4fb801f5d1d4d35064a85e336b3f3`.
+
+19:23:57 KST 실제 post runner2890300/soft-returns-control child2897254 생존을 확인했다.
+학습은 종료됐으며 현재는 고정 정책의 Q와 실제 종료까지 미래 보상을 대조하는 평가다.
+대조군→후보→검산→같은 고속 KEEP 저장 trace GIF 순서이며 새 학습/replay 쓰기는 없다.
+최종 현재 행동 Q 비교와 GIF는 아직 미완료다. 단순히 좋은 수치가 나올 때까지 반복하는
+것이 아니라, 실패 행동의 가치 추정과 실제 주행을 함께 확인해 다음 실험을 결정한다.
+
+## 같은 learner 이어학습 준비: CPU 복원 확인, GPU 이어학습 미실행
+
+코드 `0ea2739491780029ffe263db3bcfb104831c8c06`은 같은
+`feature/yuntae-sac-training` 브랜치에 commit/push 및 원격 SHA 확인을 마쳤다.
+새 파일 `scripts/continue_sac_terminal_retention.py`,
+`scripts/sac_terminal_retention_continuation.py`,
+`scripts/audit_sac_terminal_continuation.py`,
+`scripts/audit_sac_terminal_branch_replay.py`,
+`scripts/diagnose_sac_terminal_soft_returns.py`는 기존 동결 실험 소스와 분리했다.
+전체 learner/optimizer/target/RNG와 replay/RNG 및 기존 tick/update prefix를 복원한다.
+환경과 수집 RNG는 명시적으로 재시작하므로 정확한 시뮬레이터 중간 재개는 아니다.
+보상·검사·PD·Gaussian·목표8+실패8 추출·실제 전이당 전체 SAC update1을 유지한다.
+
+앞서 실행한 관련 pytest는69 passed다. 실행 명령:
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_terminal_retention_continuation.py \
+  tests/training/test_sac_diagnostic_continuation.py \
+  tests/training/test_sac_terminal_retention_sampling.py
+```
+
+새 auditor의 실제 fresh1,000 저장 감사와 CPU 실제 복원 사전 검토도 완료됐다.
+19:19:57 복원 결과는 직렬화 learner 바이트 동일, actor/Q 각1,000·BC0,
+replay6,000행의17배열 동일, RNG복원과 다음 메모리상 배치 hash 일치다.
+`continuation-preflight-audit.json` SHA
+`3e663a92eac7b9cc444267500fd626ccab012de44a14ead622266ccb93f7521f`,
+`continuation-restore-preflight.json` SHA
+`0eda4994f38bfa02a50c81318357fb05c9c2d6e9347883f0dc7ff11971ae0f88`.
+사전 검사에 사용한1001은 허용 범위 검사 값이며 실제 선택/실행한 후속 학습 예산이 아니다.
+GPU 이어학습·새 전이·추가 optimizer update는 미실행이다. 현재 행동 가치 평가를 마친 후
+추가 예산을 판단하고, 이어학습한다면 실제 GPU 복원/신규 전이/누적 감사를 먼저 확인한다.
