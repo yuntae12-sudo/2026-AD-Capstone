@@ -2704,3 +2704,82 @@ maneuver one-hot/mask로 바꾼 후 두 완료 replay의6,000행씩을 검증했
 01:12:03 KST 실제 `/proc` command로 runner3037500·train3037519·후속3039851을
 재확인했고663/1,000update RUNNING이었다. 후속 전체개발/Q 검증은 계속 대기 중이다.
 안정 정책·다른seed·최종 동일조건 Rule-based 비교·별도 성능 평가는 아직 미완료다.
+
+## 2026-11-21 01:25 — 종류별1,000회 학습·실제8조합 검증 완료, 전체개발 평가 시작
+
+runner3037500/session91162의 train3037519는01:19:13, 감사3048479는01:19:17에
+exit0 완료했다. 실제 source 재현3048512는01:24:13, 학습 검토3049746은01:24:14에
+완료했다. 학습/검증 자식의 실제 종료를 확인했고 다음 평가3049753이01:24:15 시작했다.
+
+실제1,000전이=main384+branch416+refresh200, actor/Q 각각1,000update·BC0이다.
+warmup17배열·teacher0·전체 배치 indices/RNG·source/다음 관측·실제 종료 플래그·
+같은 초기 learner 바이트를 검산했다. 기록된 과거 source 종료값을 새 결과로 합성하지 않는다.
+
+### 실제 수집과 배치 노출 비교
+
+| 완료된1,000회 수집 | 기존 비종료 수집 | 종류별 수집 |
+| --- | ---: | ---: |
+| 적격 비종료 / 종료 source | 556 / 12 | 557 / 13 |
+| 재수집 비종료 / 종료 source | 195 / 5 | 103 / 97 |
+| 종료 source의 비종료 유입에 의한 퇴출 | 12 | 0 |
+| 재수집 경로 수락 | 8 / 200 | 5 / 200 |
+| 재수집 이동 상태 | 93 / 200 | 56 / 200 |
+| 전체 신규 이동 상태 | 597 / 1,000 | 569 / 1,000 |
+| 전체 신규 경로 수락 | 239 / 1,000 | 234 / 1,000 |
+| 신규 실제 충돌 전이 / 배치 추출 | 17 / 3,332 | 110 / 15,769 |
+| 종료 source 재수집 배치 추출 | 912 | 13,843 |
+| 비종료 source 재수집 배치 추출 | 21,176 | 11,298 |
+| 공통 warmup 실패44개 배치 추출 | 7,858 | 5,297 |
+
+종류별 모든 실제 bank 선택을 재구성했고 비종료 유입이 종료 source를 퇴출시키는 현상은
+없었다. 종료13개 중 미선택1개는 마지막 branch source999로, 예산 종료 때 bank에
+남아 있었다. 이를 퇴출로 오인하지 않는다. 재수집 실제 결과는 비종료103/충돌97이며,
+재방문과 배치 추출은 독립 episode 수가 아니다. 이동은 사전 anchor 속도 기준이다.
+
+종류별 신규 경험은 KEEP601/FOLLOW399,7고유장면/7쌍이다. 신규 배치 추출113,195,
+warmup142,805(55.783%)이며 전체 replay는47장면/63쌍이다. 기존 두 대조군은 신규
+8장면/8쌍이었다. 종류별 후보도 정지 출발 신규 경험0이며 해당 warmup687전이의
+추출은21,721회다. 전체 명령 one-hot/mask6,000행과 manifest train membership,
+seed0 main 순서·최종 RNG를 검산했다. 이전 장면 분포 검산기를 같은 코드로 실행했다.
+
+**보존/노출 문제는 줄었으나 이동/수락 수집 지표가 좋아진 것은 아니다.** 새 데이터가
+더 많아졌다는 이유로 안정적인 정책이나 주행 성능 개선을 주장하지 않는다.
+
+학습 중 main7회는 모두 충돌했다. 별도 branch에서는30a56b458fc5b63d/KEEP의
+collection852에서 ROUTE_GOAL1회가 있었다. root tick0에서68step을 진행했고55개
+제안이 수락됐으나 마지막4step은 거절·fallback이었다. 마지막은 KINEMATIC_LIMIT/
+EMERGENCY다. 매 step 정책이 갱신되는 수집 결과이며 고정된 최종 정책의 성공률이 아니다.
+
+### 8조합 실제 재현과 평가 진입
+
+KEEP/FOLLOW×main/failure_branch×비종료 거절/종료 실패8조합 각각의 첫 source를
+원본 prefix와 함께 실제 재현했다. 원본 행동과 재수집 행동, 보상·검사·제어·다음 관측·
+부모 환경 보존을 대조했다. 네 비종료 사례의 bootstrap=true, 네 충돌 사례=false다.
+FOLLOW main 비종료의 실제 원래 보상−0.007874470434608202와 새 보상
+0.0022282608987103385도 재현됐다. source 값을 그대로 복사한 결과가 아니다.
+재현은총8reset/227step이며 성능 평가8episode로 합산하지 않는다.
+
+평가3049753은 `evaluate_sac_short_updates.py --variant online --labels updated`로
+전체 개발8장면×KEEP/FOLLOW16회를 실행 중이다. 주 대조군은 기존 비종료 수집
+0목표/16충돌, 보조 참조는 terminal-only2/14 및 현재 Rule-based7목표/8충돌/TASK_LOST1.
+참조 평가는 재사용하고 새 독립 표본으로 세지 않는다. 주행 원본 검산 완료 후 대기 중인
+진단3039851/session65591이 coverage→같은 train 종료 상태Q→실제 미래보상을 수행한다.
+01:25에 runner3037500·평가3049753·진단3039851 실제 `/proc` command와 모든 동결
+source/input SHA 유지도 확인했다. 새로운 예산/seed/채택은 연결하지 않았다.
+
+로컬 `outputs/sac_stratified_refresh_comparison1000_20261121/`:
+
+- 모델 SHA `f020d96c2fb4642556da5f1decf9a2126884a934fcd3c46c6f599cd685a217da`.
+- replay SHA `43b33177c3c9be3c72c229f698abab204956b4e7d788c0aad30e3ba8d54f1cca`.
+- `audit1000.json` SHA `1aad666465dfed249e02080daabbc6dc5d46db0ec608bcc8b4ad4d72516226ac`.
+- `execution1000.json` SHA `2eb230f2ebd528586ba917df380f7c0c6cebd1ecfdc567c4dafbfb1659212431`.
+- `training-review.json` SHA `1fbb73189c350dcb4b445073e1e183a9e89c19da54ea8ae7e06011e08dac8f9b`.
+- `bank-prefix1000.json` SHA `63608155541a3e420ed8fc287e3c1cbe9e2c724ffefd09c5600de34471073d6a`.
+- `exposure-1000.json` SHA `ef2886d24de51c5f045f575b74845e499941ac3f54efd59bd87ef29834940e99`.
+- `dataset-exposure-candidate.json` SHA `4ae321b05d2e882313fcc40086ff480290afac3f32ee8c48ab30014dcc215d93`.
+- `collection-completion-review.json` SHA `4295fad40c2beeb3465b10fbc3d9e7c3bef0f3e0129ad6161c9c2763ccd61128`.
+
+CPU에서 `review_exposure.py --updates 1000`, `review_dataset_exposure.py --arm candidate`,
+`review_bank_full.py`를 실행했다. 위 저장 감사·실제 재현과 별도의 집계 검증이며,
+새 학습·정책 평가·pytest를 추가 실행한 결과가 아니다.
+안정 정책·다른seed·최종 동일조건 비교·별도 성능 평가는 미완료다.
