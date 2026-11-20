@@ -3815,3 +3815,46 @@ batch-index SHA와 이산 판정이 같지만 첫update metric과 collection3 �
 같은 예산의 주행과 Q 근거를 함께 보고 결정한다. 안정정책·다른seed·최종Rule비교·
 별도성능평가 목표는 미완료다. Notion03의115절과04의현재진행에 이번 결과를
 반영하고 다시 읽어 새 기록1개·핵심수치·기존05:55 기록 보존을 확인했다.
+
+#### 2026-11-21 06:26 KST 전체 재현 완료·수집 상태 복원 준비
+
+새1,000은 실제 전이/actor/Q각1,000과 저장 감사를 완료했다. main416/branch384/
+refresh200이다. 비종료 refresh103개는 기존 KEEP98/FOLLOW5→새75/28,
+이동51→59, 수락22→5로 전체 수락은 감소했다. 이동FOLLOW 재방문28개 중5개
+수락, 마지막collection995/tick29·5.584438m/s에서 미종료/bootstrap=true로 예산이
+끝났다. KEEP의두경로28/47step은 실제충돌했다. 수집통계를 성능으로 취급하지 않는다.
+
+15사례/393실제step(복원187·원래source15·refresh191)의Waymax 재현과학습검토를
+완료했다. 입력SHA와 source312/input201을별도재대조했다. 기존수집대조군과같은
+개발16주행 평가3163288/start_ticks77018897은06:24:43에8개완료/계속진행중이었다.
+Q·실패분석·GIF는정확한부모성공종료후이어지며최종판정은아직없다.
+
+- 모델: `9bf64a2854c26db42701bc63f4f4d6c1d3f010b6bb78eeb381de0f91c65d6d93`
+- replay: `ad4b07f9104e6a480d3455b9f4d02580ef86be338f740410b37e5dfb9eb9cc7c`
+- `execution1000.json`: `676e95a1c1d1c2461da99e4b82d7aa0eca572cf57d1ca76abf7a4c9bd325b273`
+- `training-review.json`: `4b2ec96b8f916dea4a35d762f723de6549773e42812ea700c9f362f677f39e82`
+- `chain-prefix1000/independent-prefix-review.json`:
+  `9d74ccdc50fd3a7a322366cc738fbeb3463a1a3e55f3e2a28d835ef10a193bad`
+
+현재 체크포인트는learner/optimizer/targets/learner RNG·replay/추출RNG를저장하지만
+refresh bank·활성경로·일반주행환경·FailureBranches·장면iterator·policy RNG의
+직접snapshot은없다. 기존fresh-only guard를우회하지않는다. 읽기전용조사에서양쪽
+모두마지막main999뒤terminal refresh1000에서끝나일반주행미종료cut임을확인했다.
+seed0 permutation은양쪽8개episode순서와일치하며policy key는원래1call/1split
+코드와1,000개실제전이에서재구성했다. 저장된원래key와직접비교한것은아니다.
+근거는로컬 `resume-feasibility/inventory.json` 및 `rng-and-main-boundary-review.json`.
+
+새 `scripts/sac_refresh_context_restore.py`는기록된행동을순서대로실제환경에서실행하며
+원래collector 클래스를다시진행시켜일반주행·분기메모리·실패bank·활성경로를복원한다.
+episode UUID는첫행동전에복원하고모든행의token/관측/마스크·보상·검사·제어·종료와
+refresh선택lineage를검사한다. 정책forward/학습update/replay삽입은0이다.
+현재지원은fresh실험의미종료main cut뿐이며branch중단/기존continuation은명시적으로거절한다.
+이는수집상태복원helper이며SAC학습재개driver나성능달성은아직아니다.
+
+관련경계/손상거절9pytest를통과했다. 실제새pilot100 원본을2reset/100step으로복원해
+main tick22, 실패bank,root2의진행중KEEP경로13step,최근main snapshot6개를확인했다.
+입력SHA·원본selector의최종bank/활성경로와독립대조했고프로세스3165033의종료도확인했다.
+로컬 `outputs/sac_refresh_context_restore_20261121/pilot100/report.json` SHA:
+`0f5e075b543d016aa205ac53c1b696646bca29a496af1b6e92509915acfb423a`.
+FOLLOW와대조군의전체context 복원·재개후실제SAC update는미검증이다. 현재1,000실험의
+코드/설정은변경하지않았다. 전체주행/Q검토후장기예산을결정하며새학습예산은아직미실행이다.
