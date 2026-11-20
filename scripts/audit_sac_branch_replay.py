@@ -30,7 +30,8 @@ def validated_budget_end_indices(directory, report, rows):
                 file_hash(source_dir / name) != digest for name, digest in hashes.items()):
             raise ValueError("inherited budget source checksum mismatch")
         source = validate_source(source_dir, report["versions"], report["arms"]["online"],
-                                 report["collection"], report["updates"])
+                                 report["collection"], report["updates"],
+                                 replay_sampling=report.get("replay_sampling"))
         count = entry["inherited_online_updates"]
         if (type(count) is not int or not previous_count < count < len(rows)
                 or count != source["updates"]

@@ -4465,3 +4465,33 @@ target지연항이존재해도tau변경의성능효과를입증하는것은아�
 관련pytest8개통과(새분해7개+기존target검사1개),compile/CLI/diff검사통과.
 이기록시점실제8경로재실행진단은미실행,기준HEAD ac68c73 이후새진단코드는미커밋이다.
 안정정책·새seed·최종Rule-based비교·독립test는미완료로목표를계속진행한다.
+
+
+### 2026-11-20 13:05 KST — 405전이 Q 추적 종료와 다음 수집 비교
+
+실행코드0b72846. Bellman runner2760118/child2760119 exit0·실제종료를확인했다.
+기존8경로405전이의raw행동/보상/검사/종료/다음관측을대조했으며새독립episode는아니다.
+최종검토13:00:45 exit0, 로컬 `outputs/sac_bellman_trace_review_20261120/scientific-review.json`
+SHA `e71187a47ab81b97c3ff61b16ed82af654b33bd0bbf19fb38c29d4d5b691ccdc`. 모델47192c03·replay·core hash보존.
+KEEP 초기gap12.43964 중종료4.76747/비종료7.67217, FOLLOW10.10066 중종료1.63498/비종료8.46568.
+target기준할인잔차합은각−19.07442/−25.39850, target/online차이항은31.51407/35.49916으로
+서로크게상쇄된다. 지연항비율이나tau변경인과효과로해석하지않는다.
+첫Q 재계산차이는최대2.873e−5/2.027e−5로사전1e−3허용범위다.
+
+KEEP tick27에는같은scene/provider/tick의신규main1행·branch0행이145회추출됐다.
+현재정책의다른실패지점31/34/60은신규대응행0이다. FOLLOW45/52/61도main1·branch0이다.
+이는정확관측일치가아니며warmup제외다. 반복추출을새행동경험으로세지않는다.
+다음은 **동일초기조건의완료경로수집1,000 비교**: 최근replay quota8후보와같은자기warmup5000,
+seed0/f64 raw gain.0001/half_recent256를사용하고기존complete-path옵션(samples1/window6/
+moving_predecessors/horizon200, restart없음)으로현재정책의실제종료까지새경험을수집한다.
+과거다른모델/uniform의완료경로1,000은기본4건모두충돌해실패했음을보존한다.
+이번비교는길이뿐아니라root다양성·종료반복노출도함께바뀌며성공을전제하지않는다.
+collector변경을기존continuation에섞지않고fresh동일조건비교로한다. 보상/검사/PD/원래Gaussian/
+SAC손실/lr/tau/BCteacher0유지. 추가예산·다른seed·독립test확대는결과검토전미허용.
+
+별도로저장감사호출부가continuation의replay_sampling을전달하지않아최근replay를uniform으로
+오인하는문제를CPUfixture로재현한뒤수정했다. 기존fresh1,000은continuation없어영향없다.
+`scripts/audit_sac_branch_replay.py`와통합회귀test변경. 같은mode허용/metadata제거거절검증.
+13:04 CPU pytest sampling/coverage/continuation/complete_path/reconstruction/rollout_budget
+6파일 **46passed(0.50s)**. 실제최근replay continuation GPU검증은미실행이며실행했다고쓰지않는다.
+안정정책은미확보이며목표를계속진행한다. 다음실험은이기록시점준비중이다.

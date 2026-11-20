@@ -168,6 +168,23 @@ def test_budget_audit_accepts_only_verified_inherited_and_final_boundaries(budge
     assert validated_budget_end_indices(current, report, rows) == {3}
 
 
+def test_budget_audit_preserves_recent_sampling_metadata(budget_resume):
+    from scripts.audit_sac_branch_replay import validated_budget_end_indices
+    from scripts.sac_diagnostic_sampling import sampling_spec
+    current, report, rows = budget_resume
+    entry = report["continuation_history"][0]
+    source_path = current.parent / "report.json"
+    source = json.loads(source_path.read_text())
+    source["replay_sampling"] = sampling_spec("half_recent256")
+    source_path.write_text(json.dumps(source))
+    entry["source_hashes"]["report.json"] = file_hash(source_path)
+    report["replay_sampling"] = source["replay_sampling"]
+    assert validated_budget_end_indices(current, report, rows) == {1, 3}
+    report.pop("replay_sampling")
+    with pytest.raises(ValueError, match="replay sampling"):
+        validated_budget_end_indices(current, report, rows)
+
+
 @pytest.mark.parametrize("damage", ["hash", "prefix", "count", "restart", "missing_hash", "duplicate"])
 def test_budget_audit_rejects_unverified_cutoffs(budget_resume, damage):
     from scripts.audit_sac_branch_replay import validated_budget_end_indices
