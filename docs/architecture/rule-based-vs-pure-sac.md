@@ -313,7 +313,8 @@ coverage→같은 train 종료 상태의 현재 행동 Q→실제 미래보상�
 종료 source는 기존처럼 한 번 실행하며 새 결과가 비종료이면 이를 가짜 종료로 바꾸지
 않는다. 비종료 경로는 실제 종료까지 이어지고 예산 소진도 가짜 종료가 아니다.
 root가 FIFO에서 퇴출돼도 실제 후속 경로와 원본 root를 유지한다. bank8환경 외에
-active1개 및 퇴출된 원본root1개를 보존할 수 있어 최대10환경이다. 기존8상태 한도와
+active1개 및 퇴출된 원본root1개를 보존할 수 있어 지속 보관 대상은 최대10환경이다(main/branch 실행 환경과 일시적인
+실행 fork는 별도). 기존8상태 한도와
 메모리 상한이 완전히 같다고 주장하지 않는다. 재수집 결과의 재귀 source 삽입은 금지한다.
 
 `diagnose_sac_successor_refresh.py`, `audit_sac_successor_replay.py`,

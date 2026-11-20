@@ -2998,7 +2998,8 @@ root 퇴출 후에도 active경로를 보존하고, 실제 종료 뒤에 새 roo
 다시 source를 만들지 않으며 수집 예산 경계는 비종료 bootstrap을 유지한다. 정책은 각
 슬롯의 최신 가중치이므로 고정 최종 정책의 연속 평가 경로가 아니다.
 
-메모리는 bank8+active1+퇴출된 원본root최대1로10환경까지다. 원본 root도 끝까지
+지속 보관 대상은 bank8+active1+퇴출된 원본root최대1로10환경까지다. 실행 중인
+main/branch 환경과 일시적인 실행fork는 별도다. 원본 root도 끝까지
 검증하기 위해 보관하므로 단순히 기존8에1만 추가한다고 설명하지 않는다. 실제 결과의
 보상/종료를 source에서 복사하지 않는다. terminal-source의 새 결과가 비종료여도
 bootstrap=true를 유지하되 이 경로는 이어 수집하지 않는 구분이다.
@@ -3022,3 +3023,31 @@ physical-whitened zero-action critic·complete-path1/window6/horizon200·같은 
 fresh100전이 pilot이다. 학습→저장 감사→관찰된 root/후속경로 실제 Waymax 재현→집계
 검산을 연결한다. 소스/입력 동결 후 실행하며 에러는 보존하고 자동 재시작하지 않는다.
 아직 실제 수집·FOLLOW/종료된후속경로 조합·주행 성능·기본 채택은 미검증이다.
+
+
+### 예비100전이 실행 시작 확인
+
+구현 `80ba5e1daf6900b418d222760684eb5e34b22576` push/원격SHA 일치를 확인했다.
+로컬 `outputs/sac_successor_refresh_pilot100_20261121/`의 runner3063654/session62388은
+02:07:59, train3063661은02:08:00 시작했다. 2026-11-21T02:10:08.704879+09:00에 두 실제
+command/starttime과 source274/input66 SHA 일치를 다시 확인했고 실제 저장 전이
+23/100개를 확인했다. 첫 update 입력 learner는 reference와 바이트 동일,
+SHA7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c다.
+
+`decision.json` SHA960c62d5bc746ad063130701ff020958317017ca8a58fadb385bf872397a5907,
+`preflight-review.json`은 bank/scope/결과callback 치환 후 driver AST 동일과 core diff0을
+확인했다. `launch-review.json`은 실제 생존/중간 저장 확인이다. 수집 전체 완료·저장 감사·
+후속경로 실제 재현·FOLLOW/종료된후속경로 조합·성능 검증은 아직 미완료다.
+
+확인 명령:
+
+```bash
+python -m json.tool outputs/sac_successor_refresh_pilot100_20261121/status.json
+python -m json.tool outputs/sac_successor_refresh_pilot100_20261121/candidate100/report.json
+tail -n 5 outputs/sac_successor_refresh_pilot100_20261121/train100.log
+```
+
+실행은train100→audit100→verify100→review100만 연결했다. 관찰된 root·비종료후속·
+종료후속의 첫 사례와 마지막후속을 실제 원본 경로로 재현한다. 미관측 조합은 미검증으로
+남긴다. 실패는보존·정지, 시간경과만으로 재시작하지 않는다. 새1,000학습/새seed/평가/
+기본채택은 자동 연결하지 않았으며100회 검산 뒤 다음 실험을 정한다.
