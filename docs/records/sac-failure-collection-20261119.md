@@ -5279,3 +5279,53 @@ Q조건부현재행동의entropy는제외한다. 저장seed의epsilon제곱합GP
 (0.98s). compile/CLI/diff통과.16:46:01 실제PID2836419가전체5000중1000추론까지진행중이다.
 전체구간산출물과종합CPU검토는아직미완료이며실행중source는동결한다.
 원래보상/안전검사/PD/학습/순수SAC조건과기존53소스는유지했다. 안정정책목표는미완료다.
+
+### 2026-11-20 17:02 KST — 전체 실현 return 범위 검산 완료·정책 방향 진단 준비
+
+앞 절의 별도 범위 분석은16:49까지5000행을 완료했고,16:51:50 별도 CPU 검산을 마쳤다.
+`bounded-all-experience-values.json`의 완료103경로/4920전이는 같은TRAIN2roots의
+100충돌·3목표다. 기존53+최종27 budget 행은bootstrap을유지해제외했다.
+
+- 전체4920개 실현return 범위에 대한 Q 오차하한 평균10.9979→2.0638.
+  종료103개는entropy항이없어정확한오차10.2963→0.4063이다.
+- 첫KEEP52개 오차하한평균14.0023→0.4704, 첫FOLLOW51개9.7853→6.5807.
+  최종FOLLOW 첫행동48/51은범위위이며남은초기낙관오차가크다.
+- 목표에 도달한3경로346전이 중최종327개는범위아래다. 성공경로의오차하한평균은
+  0.04494→1.87639로악화됐다. 실패과대평가감소만으로좋은정책을보장하지않는다.
+- critic CPU/GPU최대차1.4305115e−5,같은highest947참조차0,
+  epsilon제곱합CPU/GPU최대차4.26326e−14. 과거default 재현게이트와별개다.
+- 범위는기록된실현경로의entropy불확실성을감싼것이지기대Q의신뢰구간이아니다.
+  오차하한0이Q정확도를증명하지않으며동일학습자료검산을일반화평가로부르지않는다.
+
+로컬 `outputs/sac_fixed_policy_critic_continuation_20261120/review_bounded_results.py`는
+4920개모든suffix에대해재귀구현을사용하지않고직접할인합으로상·하한을검산했다.
+6snapshot×947의Q/실현return집계와전수CPU대조,전체범위집계/행정체성,
+건전한임시복사본continuation감사,상속budget bootstrap변조·신규seed재사용거절2건,
+원래53소스불변을확인했다. 이전default검토와정확actor재구성실패는FAILED로보존했다.
+
+| 로컬 산출물(위 continuation 디렉터리) | SHA256 |
+|---|---|
+| `bounded-all-experience-values.json` | `6ccd735fa320a4919f394458e09f6c8e4d394dfc23bed4edfe55cc539e5a6855` |
+| `bounded-scientific-review.json` | `72625c8b0c83e104ee87b29f4f4d002011a009cf88e88e435850d241cf52904d` |
+| `review_bounded_results.py` | `8af7ee785606c53e34bd73f689c4270318c27dd6027e2de93a88b0ef0867b24a` |
+
+코드71ead6ce0fb2e88093824314021db2e0eef98c25 push·원격동일확인.
+노션Home/02/03(67절)/04에완료·실패·범위한계·다음진단을반영하고4페이지재조회로확인했다.
+
+다음은 `scripts/diagnose_sac_calibrated_actor_direction.py`의별도읽기전용진단이다.
+아직실행결과/성능채택은없다. 보정전/5000보정후critic bundle(online/target/optimizer)을
+동일actor/온도/optimizer·동일원본update RNG·동일최종replay batch256에대조한다.
+한번의canonical update는메모리복사본에서만계산하고모델/replay파일을저장하지않는다.
+이는새전이없는가상계산이며전이당1회인정규SAC학습으로재분류하지않는다.
+critic-only warmup의기본학습편입/생산체크포인트채택은아니다.
+
+같은TRAIN2roots에서원래평균·보정전Q의가상업데이트평균·보정후Q의가상업데이트평균을
+비교한다. 각각첫행동만변경후원래고정확률정책으로종료까지이어가는4공통난수반복
+(2×3×4=24주행),별도로각actor전체의결정적주행(2×3=6주행)을수행하도록구현했다.
+전자는조건부Q의실현표본이며현재행동entropy를제외한다. 후자는다른정책의주행으로
+동일Q의정답으로쓰지않는다. 시작상태지문·원본불변·batchhash/RNG·Q의CPU대조·
+실제종료/보상/거절/제동/step후정지·원시경로를저장한다. source/보상/검사/PD변경없음.
+
+py_compile/CLI/help·diff check와관련기존5pytest(13.97s)는통과했다.
+새실제30주행은다음실행대상으로아직미실행이며,단일배치·동일2TRAINroots·4표본의
+진단한계를유지한다. 안정정책→전체개발→다른seed→Rule-based·별도test목표는미완료다.
