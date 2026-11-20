@@ -4281,3 +4281,34 @@ NEW7/REUSED8/BRAKE7의22개오차가실제result.tracking_error와각각1e-10이
 원래parent3186163/start_ticks77350549의성공종료와full-validation-review 완료후에만
 양쪽최종/양쪽1,000/Rule참조를후처리한다. 현재7개학습·평가작업과기존Q/실패/GIF작업은
 그대로다. 새최종모델의지표후처리·성능판단·정책채택은아직미실행이다.
+
+### 2026-11-21 08:29 KST — 미채택 투영 시안의 개발 장면 좌표 검사
+
+현재 학습 코드는 바꾸지 않고, 앞선 투영 시안을 기존 개발 8개 고유 장면으로
+넓혀 검사했다. 초기 이동 후보1,000과 동일 조건 Rule 참조의 각16episode,
+총32개 저장 기록/2,147frame을 읽었다. 새 주행이나 독립32장면이 아니다.
+
+원래 검토 보고서의 입력 SHA, 16개 scene/provider 쌍의 누락·중복 여부,
+양쪽 초기 frame/map 일치를 확인한 뒤 저장된 route/corridor, raw/executed 경로,
+차량 중심과 차체 꼭짓점을 질의했다. 총8,065호출/480,803점에서 원래 함수와
+시안의 거리 좌표·최근접점·접선 세 배열이 dtype/shape/바이트 단위로 같았다.
+입력을 마지막에 다시 해시했고 본 학습의 동결595파일도 변경0을 확인했다.
+
+실행 명령(저장소 루트, 로컬 산출물):
+
+```bash
+PYTHONPATH=. python3 outputs/sac_refresh_matched10000_20261121/probe_projection_captures.py
+```
+
+- 실행기 SHA `ecc10d3c110ca1990d3524b9c3788120bb6ee4be7637ad144bc438f5aa65d711`.
+- 결과 `outputs/sac_refresh_matched10000_20261121/projection-capture-review.json`
+  SHA `6aab2bd8435ad7c43e61bc1aa363e748cfe856eaba9c254091adbd98601d41d7`.
+- 질의점: route16,144/corridor32,276/차량중심64,245/꼭짓점256,980/
+  raw경로63,450/executed경로47,708. 합계480,803.
+
+이는 저장 좌표로 구성한 유한한 기하 검사다. 실제 adaptive checker 질의열이나
+시안 반환값을 사용한 Waymax 전체 재현 검증은 아니다. 경로 외 route 필드는
+project_many에서 사용하지 않는 placeholder로 구성했다. 새 정책 호출·주행·학습0,
+현재 학습 적용0이며 이번 검사에서 실행시간/전체 가속률은 측정하지 않았다.
+기존 후보의 주행 실패 결론은 그대로다. 다음은 시안의 실제 제어 사용과 회귀 검증이며,
+진행 중인 총10,000 비교는 원래 코드로 완료한 뒤 주행/Q/실패분석을 판단한다.
