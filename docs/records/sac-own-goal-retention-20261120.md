@@ -1126,3 +1126,49 @@ main2929909/post2939148/평가2940353은종료했다. 원래61소스/22입력 �
 연결하고,모델초기화/수치동일성검증의범위를명확히한뒤FOLLOW를포함하는같은예산의
 더긴비교를준비하는것이다. 아직다음학습은시작하지않았고이100모델은채택하지않는다.
 보상·검사·PD·Gaussian·순수SAC조건과원래전체목표는유지한다.
+
+## 21:05 — 재수집 이력의 현재 정책 Q·실제 return 진단 연결
+
+`feature/yuntae-sac-training`, 기준 HEAD `4fa07e754c2a9e076c836a7a06ee92102ab20db6`.
+새 진단 4파일과 테스트 1파일을 추가했다. 기존 학습/환경/동결 스크립트는 변경하지 않았다.
+
+- `scripts/sac_collection_diagnostic_audit.py`: 수집 scope에 맞는 실제 lineage 검사를
+  선택한다. refresh 이력을 기존 수집으로 잘못 표기하거나 알 수 없는 scope이면 거절한다.
+- `scripts/diagnose_sac_refresh_branch_q.py`: 평가할 모델과 실패 상태의 원본 이력을
+  별도 인자로 받는다. 원본의 seed/실제 행동으로 상태를 재현하고, 현재 모델의 저장행동 Q,
+  평균/원래 Gaussian 4표본의 Q와 실제 종료 보상을 비교한다. 다른 모델의 상태를 모델
+  자신의 replay로 오인하지 않도록 report/replay SHA를 각각 남긴다.
+- `scripts/diagnose_sac_refresh_soft_returns.py`: 같은 감사 어댑터를 사용해 기존 고정
+  선행 상태에서 평균 첫 행동과 확률적 후속 행동의 실제 종료까지 할인 보상·entropy를 계산한다.
+- `scripts/audit_sac_refresh_coverage.py`: 새 lineage와 실제 추출 횟수를 검산하고
+  refresh/main/완료경로를 분리한다. Gaussian 타원체 거리는 안전성이나 경험 충분성 증명이 아니다.
+
+CPU 관련 pytest **36개 통과**, 새 4파일 py_compile 통과. 실행 명령:
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_collection_diagnostic_audit.py \
+  tests/training/test_sac_terminal_refresh.py \
+  tests/training/test_sac_terminal_retention_sampling.py
+python outputs/sac_terminal_refresh_diagnostics100_20261120/run_diagnostics.py
+```
+
+새 로컬 루트 `outputs/sac_terminal_refresh_diagnostics100_20261120/`는 완료한
+fresh100 두 모델을 읽기 전용으로 검토한다. 21:05:23 runner PID2944744/session79319 시작,
+68소스/43입력 및 소스 복사본 동결. decision SHA
+`158e1dfd7ec47e8e714da70ec8a27b990cb9813baac46dc5ec6e92d8aa312d0c`.
+7 jobs는 저장감사 → 양쪽 coverage → 양쪽 실제 branch Q → 양쪽 실제 soft return이다.
+두 모델/원본 branch1000/원본 predecessor1000의 실제 저장감사는 exit0 완료했다.
+GPU 진단은 실행 중이며 최종 결과는 아직 없다.
+
+실패 상태는 이전부터 고정한 train KEEP77ae312df21e80b9/tick28와
+FOLLOWbaac7893b025167a/tick59, 각 저장행동·현재평균·확률4개다.
+미래 return은 별도로 고정한 같은 두 train 장면의 KEEP tick0/FOLLOW tick4에서
+각 4개 후속 RNG seed88019–88022로 종료까지 실행한다. 모델마다 8회이며
+독립 장면 8개나 validation/test로 세지 않는다.
+
+추가 학습/가중치·replay 변경은 없다. BC=0/teacher replay=0·보상·검사·PD·원래
+Gaussian 유지. 이전 재수집 전 엄격 수치 동일성 실패는 그대로 보존하며,
+이번 결과도 동일 설정의 기술적 비교이지 완전히 동일한 학습 경로의 인과적 효과 증명이 아니다.
+현재100 모델 미채택·안정 정책 미확보. 이 결과를 검토한 뒤 FOLLOW까지 실제 재수집되는
+더 긴 동일 예산 비교를 결정한다. 전체 개발 validation/다른 seed/최종 Rule-based/별도 평가 미완료.
