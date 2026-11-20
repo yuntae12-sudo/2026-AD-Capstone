@@ -4672,3 +4672,31 @@ train root·branch부모불변을검증한다. actor보정0/temperature보정0�
 canonical update가계산한actor/temperature변경은폐기되므로동시SAC학습규약준수후보라고
 분류하지않는다. 기본SAC코드·보상·검사·PD·분포·기존후보가중치는변경하지않았다.
 compile/CLI/diff검사통과. 이시점실제새진단은미실행이며준비중이다.
+
+
+### 2026-11-20 14:00 KST — 고정정책 진단 실제 시작·초기 Q 경과
+
+실행코드1934f824dab377d02c06117b05f81e35580855e2.
+로컬 `outputs/sac_fixed_policy_critic_20261120/` runner2782595/child2782596,
+13:53:34시작·14:00:09실제생존/214전이·Q보정.43소스동결.
+결정SHA `11f7ae7b9590252e0e4383211fa4554e913c1b1841665a768c7654df09c04b9a`.
+두root관측hash복원과초기평균재계산/Q허용차검사가통과해실제수집이진행됐다.
+
+고정MC평균대비초기Q gap은KEEP13.1475322/FOLLOW10.3927302,
+100회13.0211678/10.3240451,200회13.1222454/10.3918679다.
+200회의Q는−0.4548324/−0.2967272,targetQ−0.3868259/−0.3006059.
+아직보정예산1,000중일부이며개선/실패원인을확정하지않는다. 정책을바꾸지않는진단이므로
+주행정책개선이나안정주행을달성했다고쓰지않는다.
+
+CPU에서원본state의actor/alpha와optimizer를Flax `to_bytes`로직렬화해
+진단에기록한초기hash와각각일치함을독립확인했다. 원시msgpack재포장hash는Flax상태변환을
+거치지않아다르며그차이를가중치변조로오해하지않는다.
+
+`scripts/audit_sac_fixed_policy_critic.py`를준비했다. 완료후읽기전용으로원본/산출물
+hash·actor/alpha정확보존·17배열prefix·새raw행동/reward/종료/관측연결·각Gaussian롤아웃
+시작관측/연속성·모든batchindexhash/최종RNG·예산종료bootstrap·Q경과산술을검토한다.
+Q parameter가안바뀐경우도무조건오류로분류하지않고실제변경여부를표시한다.
+이검토는새sim재실행이나Q forward측정은아니다. compile/CLI/diff검사통과.
+실제완료산출물검토와손상입력거절검증은아직미실행이며실행완료후수행한다.
+실행중43소스·원본모델/replay·learner규약변경없음. 노션Home/02/03/04에완료경로최종미달과
+고정정책진단을갱신·재독확인했고,이번초기경과도다음갱신에포함한다.
