@@ -5045,3 +5045,47 @@ Q_k(d) / (gamma**d * r) = Pr[Binomial(k-1, tau) >= d]    (k >= 1)
 표기를 확인했다. 보고서 SHA `004d35001c27879f989dd9c09a3f074bebe54109e9b21c337497d1b039df99d1`,
 산출물 hash 목록 SHA `26ecff5c6fcb00d71ee67ee130fa578a2bc8cf2adb5089ce4a452eb94040b938`.
 계산 iteration30000을 실제 수집/학습 step에 합산하지 않는다. 안정 정책 목표는 미완료다.
+
+### 2026-11-20 15:21 KST — 누적2000 중간 저장·실제 경험 노출 CPU 검토
+
+15:20:49 CPU 검토 완료, 당시 report는누적2019로 실행 중이었다. 원래1000 parent에서
+추가1000 실제전이/Q 보정을 마친 **2000 snapshot**을 대상으로 검토했으며 본5000 실행은
+중단하지 않았다. 실행 기준c5863d0·문서 기준HEAD91cd6b3, 보상/검사/PD/Gaussian/순수SAC
+데이터 조건과51개 동결소스를 유지했다. critic-only 진단이며 actor 학습/정책 후보가 아니다.
+
+로컬 `outputs/sac_fixed_policy_critic_continuation_20261120/review_milestone.py --count 2000`
+를its-merge Python으로 실행해exit0을 확인했다. CPU JAX만 사용했다. parent 대비 actor와
+온도 및 각 optimizer 직렬화 불변, BC0, Q step2000→3000/actor step1000 유지,
+learner RNG의1000회 split 재구성 일치를 검증했다. 상속 tick/update1000개 byte prefix와
+새1000개 batch index hash, observation chain/종료/seed 규칙을 대조했다. snapshot SHA
+`efa3bf76c71de1c79b9821c9c5a64955cf44c51f362dd782f97cab2d6a2b0ed3`.
+최종 replay 배열 검토는 아직 저장 전이므로 예정된 종료 후 감사에서 수행한다.
+
+추가1000 update의256000 추출 중 상속7000행135809회/새1000행120191회다.
+새 terminal18행은2023회 추출됐다. 새행 중1행은 아직 미추출이며 이를 coverage 완료로
+표현하지 않는다. 새전이259/1000 경로수락, NEW259/REUSED110/EMERGENCY518/BRAKE113.
+검사 거절은 도로이탈238/충돌예측356/운동한계143/sweep미해결4이다.
+step 전 anchor속도<0.1m/s인행381개·그행추출43398회이며, 이는 평가 규약의 **step 후
+정지율이 아니다**. 위합계와 terminal outcome은 저장된1000개 원본에서 다시 집계했다.
+
+같은 두 TRAIN root의 신규수집 중 완료18회는 KEEP9회 모두충돌, FOLLOW9회는2목표·7충돌이다.
+추가 KEEP23tick은 snapshot시점 진행 중이며 종료/예산절단으로 바꾸지 않았다. 두 목표는
+rollout23(seed20261143)114tick/103수락/return0.1898425/끝BRAKE,
+rollout35(seed20261155)117tick/67수락/return−0.2405907/끝REUSED다.
+**고정 actor의 다른 확률 표본에서 나온 목표 도달이며 학습에 따른 정책 개선이 아니다.**
+독립 장면18개나 validation 성공률로 확대하지 않는다. 초기947cohort가 모두충돌이었다는
+관찰도 이 정책의 모든 확률 주행이 반드시충돌한다는 의미가 아니다. 완료 후 기존947의
+동일행동 Q 비교와 전체 신규수집의 성공/실패 구성을 함께 검토해야 한다.
+
+2000 고정 root 평균행동 Q는KEEP−2.3796086/FOLLOW−0.9721057,
+기존 root당4개 mean-first 실제return 평균과의차이는11.1974691/9.7164894다.
+이전1000의12.8644621/10.1315477보다줄었지만 여전히 크다. 작은 과거 확률 표본 평균은
+정확한 기대Q가 아니며, root당 서로 다른 확률 첫행동의 신규 성공과 직접 짝지어진 값도 아니다.
+동일947개 실제행동의2000 Q/return 추론은 아직미실행이며 본실행종료후 예정된GPU검토로
+확인한다. 정책 안정성/전체개발/다른seed/공정Rule-based/독립test 목표는 미완료다.
+
+원본은로컬 `milestone2000-evidence/`, 검토는 `milestone2000-review.json`이며 위출력폴더내에
+있다. 검토SHA `8d2efaa72eed969d2f545d5ef6ead9fe9c8efe9ec9b88d530a5ba79fb67251c6`,
+검토코드SHA `dbdb1074631c378e8c1c5c2c2283126cdce5804423e83d113fd4f0f22de03a1a`.
+실제2000 snapshot을읽어완료한 검증이며 소스구문검사만통과한 결과가아니다.
+본5000 main runner2805374/critic2805375/후속2805376을계속사용하며 재실행하지않는다.
