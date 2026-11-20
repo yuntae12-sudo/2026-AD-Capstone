@@ -2412,3 +2412,64 @@ python -m json.tool outputs/sac_stratified_refresh_pilot100_20261121/status.json
 안정 정책·다른 seed·동일 조건 최종 Rule-based 비교·별도 평가는 아직 미완료다.
 별도 평가 후보29/32와 원본 데이터 오류17, GCS 재인증 대기 및 drive/시간 독립성
 미확인도 그대로 남아 있다. 현재 새 수집을 기본 설정으로 채택하지 않았다.
+
+## 2026-11-21 00:37 — 현재 버전 Rule-based 정식 평가16회 완료
+
+직전 목표 작업은 구현·테스트·완료 진단·Notion 반영까지 진행한 progress였다.
+이번에는 HEAD `226e4c4d1b6a714657932f7d38544bbaf0892f17`과 실제 실행을 재확인했다.
+Rule-based formal child3026743이 00:35:35 exit0로 종료한 뒤 capture3029682가
+실행 중이다. 부모3015652/session33463의 생존도 확인했다. 아래는 완료된 formal16회이며
+capture/전체 원본 대조는 아직 미완료다.
+
+같은 manifest·seed0·현재 FrenetTeacher v4·기존 보상/검사/PD를 사용했다.
+8고유 개발 장면×KEEP/FOLLOW16회다. 새 학습이나 teacher replay 추가는 없다.
+
+| 현재 Rule-based formal 평가 | KEEP8회 | FOLLOW8회 | 전체16회 |
+| --- | ---: | ---: | ---: |
+| 목표 | 4 | 3 | 7 (43.75%) |
+| 충돌 | 4 | 4 | 8 (50%) |
+| TASK_LOST | 0 | 1 | 1 (6.25%) |
+| 실제 tick | 534 | 543 | 1,077 |
+| 경로 거절 | 153 | 86 | 239 (22.19%) |
+| 제동/비상제동 | 145 | 78 | 223 (20.71%) |
+| 정지 | 194 | 194 | 388 (36.03%) |
+| 평균 return | -10.046467 | -10.091431 | -10.068949 |
+
+로컬 `outputs/sac_rule_baseline_current_20261120/review_formal_result.py`를 실행해
+완료 상태/16쌍·episode tick/행동/이유 합계·수락/정지 범위·유한 보상·집계/추종 RMS를
+검산했다. 같은 장면의 모든 episode 필드를 과거
+`outputs/sac_stability_20261117/revalidated-final/baseline.json`과 대조한 결과 차이0개다.
+version에서 달라진 항목은 code_sha256 하나이며 과거 보고서를 수정하지 않았다.
+실제16회 재실행으로 같은 수치를 확인한 것이며 과거 수치를 현재로 재표기하지 않았다.
+
+- 현재 `baseline.json` SHA
+  `fb5cfb3f96ad4fc0c26f14143bc0a81fa7f1d907c88e90016f47f7b0ca2d7ae2`.
+- `formal-baseline-review.json` SHA
+  `3071e627d501d93b49f2fbc9018590566dcbc1a517575c44015751c19ccab797`.
+- 현재 core SHA `96fa1d625b0d8525b1de6de05a12cc132721a03ee47eb51dff3d6e25f02e30ef`.
+
+실패한 비종료 수집 SAC seed0는 전체 개발 목표0/16·충돌16/16·거절65.90%·
+제동58.73%·정지47.40%·평균return-20.467394로 현재 Rule-based보다 미달이다.
+Rule-based도8회 충돌했으므로 안전한 상한이나 실패 장면의 회피 불가능성을 입증한
+결과는 아니다. 실패 진단이며 새3seed·최종평가·독립test 완료로 세지 않는다.
+
+### 실제 궤적 대조와 비교 GIF 준비
+
+capture는 같은16쌍을 실제 제어하며 궤적을 저장한다. formal 결과와 tick별 보상/수락/
+제어출처/종료/정지를 대조하고 SAC와 최초frame·지도를 비교한다. 독립32장면으로 세지
+않는다. 이 검산이 끝나야 부모가 완료된다.
+
+읽기 전용 `render_reviewed_comparison.py`는 이미 분석한 고속 장면
+8b4c1e7e09f5f4c3/KEEP 한 쌍을 선택했다. baseline 전체 검산·실제 종료 뒤 원본 trace의
+label만 바꾼 복사본으로 Rule-based/SAC GIF를 만든다. 추가 정책 호출/episode는 없고
+대표 장면 선택이나 전체 성능 판정으로 주장하지 않는다. frame/해상도/물리 재생시간
+검사와 PNG 직접 확인을 연결하며, 이 시점 새 GIF는 아직 생성되지 않았다.
+
+로컬 `outputs/sac_rule_baseline_current_20261120/visualization-current/`의
+runner3029047/session57026은 00:32:49 시작·실제 생존 확인,
+WAITING_FOR_REVIEWED_BASELINE이다. decision SHA
+`8bbbc31a18c4bfd39f53bde4d0dd358d748dd9e2414819456079c47b43cd252a`.
+새 수집 pilot3027013/session33870도 실제 생존·부모 성공 종료 대기를 확인했다.
+00:37 현재 새 학습은 시작 전이며 기존 조건/동결 파일을 유지했다.
+다음은 capture/원본 검산 → 새100회 학습·감사·실제source 재현 검토다.
+안정 정책과 전체 목표는 미완료다.
