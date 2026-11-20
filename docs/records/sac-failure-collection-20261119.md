@@ -4977,3 +4977,25 @@ python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/main-s
 python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/critic5000/report.json
 python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/main-post-status.json
 ```
+
+### 2026-11-20 14:59 KST — pilot/main의 첫100전이 수치 차이 공개
+
+14:59:05 본 실행은누적1117/5000으로 진행 중이었다. 완전히 저장된 첫100개 신규 전이와
+update만 읽어 pilot과 대조했다. 수집ID/rollout/seed/step·검사결과/실행출처/종료 분류는
+모두 같고100개 batch index hash도 같다. 하지만 tick/update byte prefix는 동일하지 않다.
+최대 raw 행동 차이9.0028156e−10, 보상 차이9.5166930e−15였다. 이 비교에는 사후 PASS
+허용치를 새로 만들지 않았으며 원본 실행이나 수집 규칙을 수정하지 않았다.
+
+처음 update1001의 Q1 loss는pilot0.8415557/main0.8406311, Q1 grad norm82.7929271/82.3923747이다.
+첫 batch에는 신규행이1회 포함돼 입력 전체가 byte 동일하다고 단정할 수 없다.100회 동안
+Q1 loss 차이 최대1.4314133, Q1/Q2 grad norm 차이 최대189.12005/218.25561로 커졌다.
+1100의 고정 평균 Q는pilot KEEP−0.7463992/FOLLOW−0.5928853,
+main−0.7308869/−0.5787887이다. 입력·추론·학습 수치 차이의 내부 원인은 분리하지 않았다.
+
+원래1000 state/replay의 byte 복원·정책/alpha 고정은 유지하지만 **정확한 결정적 학습 재실행**으로
+주장하지 않는다. pilot1100의 수치나 경험을 main의 학습곡선/독립 데이터에 섞지 않고,
+본 실행 자체의 snapshot과 실제 기록으로 누적5000 결과를 검토한다. 수집/학습 코드는 동결 유지.
+로컬 비교 SHA `0d14a4124c6bccd1ec03402243df9a5c556f29e5c73187b906cb95614d2970c3`
+(`main-first100-pilot-comparison.json`), 첫 추출 검토 SHA
+`a3536d7fbe83cc7035f0586e36e6a04df364addc4bce9aac0f0c857c43a01291`
+(`first-update-input-exposure.json`)이며 위 continuation 출력 폴더에 있다.
