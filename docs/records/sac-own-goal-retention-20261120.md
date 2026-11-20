@@ -704,3 +704,62 @@ collection_seed1000으로환경/장면·정책수집RNG를명시적으로재시�
 python -m json.tool outputs/sac_terminal_retention_curve3000_20261120/status.json
 python -m json.tool outputs/sac_terminal_retention_curve3000_20261120/online3000/report.json
 ```
+
+## 19:40 중간 이력 검사와 현재 행동/경험 대조 추가 연결
+
+현재 총3,000 이어학습은 그대로 유지한다. 19:40:53 읽기 전용 중간검사는
+누적1,182개(기존1,000+새182)의 완성된tick/update쌍을고정복사해검산했다.
+기존기록바이트보존, 새전이당정확한update1·현재정책카운터·원래bootstrap/실제종료·
+raw수치유한성·저장replay RNG에서재구성한모든새배치hash가일치했다.
+목표/실패지정slot각1,456회, 새main114/branch68·충돌종료4건이다.
+저속제안73개는모두거절(운동한계5/예측충돌68),양의가속도0이다.
+학습중경험의일부이며최종저장감사/고정정책성능/전체회귀를대신하지않는다.
+
+로컬 `outputs/sac_terminal_retention_curve3000_20261120/live-prefix-001182/review.json`
+SHA `1aa2c5cd6c833f905c198bf9620084bdb68a5ff8165c7c6fff4973faa76881b8`.
+최초중간검사는저장npz가capacity가아닌유효6,000행만가진다는점을놓쳐
+`IndexError: index6000 out of bounds`로실패했다. 원본script/오류를같은루트의
+`live-prefix-audit-initial-failure/`에보존하고, 검사메모리에검토길이만큼별도배열을
+할당해원본6,000행과새기록을채우도록수정했다. 학습소스/진행/원본replay변경·재시작0이다.
+
+저장행동에대한Q적합과현재평균행동의Q가달라질수있으므로, 현재행동과자기경험의
+관계를직접대조하는후속읽기전용검사를준비했다. 새파일:
+
+- `scripts/sac_terminal_retention_exposure.py`: 실제목표/실패추출의전체배치hash/RNG와노출수재구성.
+- `scripts/audit_sac_terminal_coverage.py`: 기존분석을종료유지/이어학습감사와연결한별도진입점.
+- `scripts/diagnose_sac_terminal_branch_q.py`: 같은실제실패상태의저장행동·현재평균·원래4Gaussian표본재실행.
+- `tests/training/test_sac_terminal_retention_exposure.py`: 이력변조/부족·보상분류변경거절,원본배치/RNG복원검증.
+
+기존동결소스/production replay/학습/보상/검사/PD/Gaussian변경0이다.
+행동수집을deterministic mean으로바꾸거나진단평균행동을학습에넣지않는다.
+원본v1.2의5절분포·평가u=mu 및10절step/실제전이규칙과대조했다.
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_terminal_retention_exposure.py \
+  tests/training/test_sac_terminal_retention_sampling.py \
+  tests/training/test_sac_replay_coverage.py
+```
+
+실제28passed. 기존완료1,000의실제6,000replay행/256,000추출을새helper로재구성했고
+목표8,265·실패10,825추출과최종RNG가기존감사와일치했다.
+Q를보지않는첫실패분기선택은KEEP77ae312df21e80b9/tick28/index57,
+FOLLOWbaac7893b025167a/tick59/index358이다. 두행모두현재3,000에상속된prefix다.
+사전검사 `terminal-coverage-preflight.json` SHA
+`266a368bf58be104f5b9ea396ca90e3b737a2b21eb300aa4118d7cfbc0718f2b` (현재3,000루트내).
+GPU forward/Q/반사실적실행의완료검증은아직아니다.
+
+후속은로컬 `outputs/sac_terminal_policy_overlap_20261120/`에연결했다.
+19:45:01 runner2910702(session89956), `WAITING_FOR_CURVE`.
+현재3,000의11jobs가성공종료하고실제runner2905593이종료한뒤에만실행한다.
+두모델의coverage/실패분기실행을순차수행한뒤CSV/실제대안결과를검산한다.
+현재학습/주행과GPU작업이겹치지않는다. 90소스/69입력hash및90소스복사본검증.
+post decision SHA `99a8172fef91718bf09b972469d18834798d8c6d3e4cbc8d00d3be4410df411c`,
+runner SHA `087db7904c98e676bd6e346648b4da65741ebb8213a173bd0bc170b3fdefe5cd`.
+원래3,000decision/예산/학습조건/동결소스는변경하지않았다.
+
+같은6,000관측의분포거리와신규2,000행을따로집계하고, 실제terminal대안만Q−reward를계산한다.
+Gaussian의95%타원체포함비율은조건부거리진단이지문자그대로support·신뢰구간·안전성·
+새행동경험의충분성증명이아니다. 현재평균과저장행동의보상이같다고미리단정하지않는다.
+19:45:23 학습runner2905593/child2905600와post2910702실제생존,학습1,569/3,000·추가569확인.
+최종학습/주행/현재행동검토는아직미완료이며안정정책미확보다.
