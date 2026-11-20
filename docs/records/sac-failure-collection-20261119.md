@@ -4789,3 +4789,33 @@ KEEP−2.29181+15.96645, FOLLOW−8.32044+18.62719로 같은 초기 gap과 일�
 - 실제 행동 가치 `actual-action-values.json` SHA `20dc04b8f91175b65389642fac25459de107e9f34c80068cff2447eeb8dcbda4`.
 - 진단 state SHA `bf458c7e4240c20252ab417eb42f48677c0f5641c4738d24161b8034fbf107af`;
   replay7000 SHA `7350dfb447ca4adae14a6dcfe6f3692c50301933a9493a4a375ae6225a1f07e2`.
+
+### 2026-11-20 14:28 KST — 기대 Bellman 검사 구현·배치 수치 검사 실패 보존·단일 추론 재실행
+
+앞선 완료 진단·실제 행동 분석을 코드/기록 `0b6e5677953d265f96441628b4cee7111d7f7c9e`로
+같은 브랜치에 push하고 원격 SHA를 확인했다. 노션 Home/02/03/04를 갱신·재독해 반영과
+과거 결과 보존을 확인했다. 이 절과 새 분석기는 작성 시점 미커밋이다.
+
+`scripts/diagnose_sac_expected_bellman.py`는 같은 실제 후속 관측에 원래 정책의 Gaussian
+64표본을 적용해 online/target Q 기대값과 표본 표준오차를 측정하는 읽기 전용 진단이다.
+전후 critic에 같은 표본을 쓰며 seed20261120과 replay 행 index로 key를 정한다.
+완료 경로947전이 중 비종료926개만 다음 actor/Q를 평가하고, 종료21개는 보상만 사용한다.
+실제 저장 전이/보상/관측/정책/alpha·optimizer·학습 상태는 변경하지 않는다.
+표준오차는 Gaussian 수치 적분의 표본 변동이며 critic 정확도/독립 test 신뢰구간이 아니다.
+
+최초64배치 추론은 기존 scalar 기록과의 사전 대조 허용1e−3을 위반해 exit1로 중단했다.
+tail index7/보정후Q의 차이는0.0015034675598144531이다. 결과 JSON은 생성되지 않았다.
+원본 코드를 로컬 `expected-bellman64-batch-failed.py`, 실패/허용차를
+`expected-bellman64-batch-failure.json`, 로그를 `expected-bellman64.log`에 보존했다.
+이 차이만으로 수치 오차의 내부 원인이나 큰 미래 비용 오차의 원인을 확정하지 않는다.
+
+허용치를 늘리지 않고 매 표본을 기존과 같은 batch1 critic 추론으로 계산하도록 수정했다.
+원래 Gaussian64표본과 비교 대상/seed/허용1e−3은 유지한다. compile/CLI/diff 통과.
+14:25경 새 GPU 분석을 시작했고 14:28:06 child2795177 실제 생존·200/947 완료를 확인했다.
+첫200전이에서 scalar 참조 대조와 종료/기대잔차 산술 검사를 통과했지만 전체 결과는 미완료다.
+로그 `expected-bellman64-scalar.log`, 예정 결과 `expected-bellman64-scalar.json`이며
+기존 진단/분석 코드와 데이터는 그대로 유지한다. 추가 학습이나 정책 성능 검증이 아니다.
+
+다음은 완료 후 잔차·MC 표준오차·경로 내 위치별 오차와 실제 미래 보상을 대조하고,
+기대 target이 큰 실패 비용을 얼마나 반영하는지 검토하는 것이다. 이때도 tau/lr나 보상/검사를
+근거 없이 바꾸지 않는다. 안정 정책 미확보·전체 목표 계속 진행이다.
