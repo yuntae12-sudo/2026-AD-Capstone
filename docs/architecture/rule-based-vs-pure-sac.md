@@ -242,3 +242,13 @@ FOLLOW와 종료 source의 새 옵션 실행은 이100회에서 관찰되지 않
 같은 초기 learner·자기warmup5,000의 fresh1,000회와 전체 개발16회 평가를 후속 비교로
 선택했다. 완료된 terminal-only refresh1,000 모델/평가를 대조군으로 재사용하며
 새 정책 성능·안정 정책 확보·기본 채택은 아직 미검증이다.
+
+새 이력의 읽기 전용 정책 진단은 `sac_rejection_diagnostic_audit.py`를 거친다.
+새 scope는 rejection 전용 lineage 감사, 과거 scope는 기존 감사기를 사용하며
+서로 다른 수집 계약의 혼합/위장과 미완료 검증을 거절한다. 실행 중인 비교가 참조하는
+기존 파일을 동결한 채 `diagnose_sac_rejection_branch_q.py`,
+`diagnose_sac_rejection_soft_returns.py`, `audit_sac_rejection_coverage.py`를
+별도 진입점으로 연결했다. 실제 행동·보상·Q·할인합 계산은 기존 진단과 같다.
+이 진단은 학습 데이터/가중치를 수정하지 않으며 조건부 행동 중첩과 실제 실행 결과를
+구분한다. 전용 감사기를 CPU에서 실제 pilot100/이전 두1,000 이력에 실행했고
+관련30pytest를 통과했다. 새 모델의 GPU Q/return/coverage 검증은 후속 실행 대상이다.
