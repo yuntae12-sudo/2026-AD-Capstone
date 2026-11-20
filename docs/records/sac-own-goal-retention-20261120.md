@@ -3346,3 +3346,22 @@ SHA `35ccfd010c2bbf1069b8db8c2588752b4929c86dedcb3aba65c00c8ec1eeeac5`,
 FileNotFoundError였고검증실패로해석하지않았다. 실제PID생존을확인했으며
 새실제재현/전체개발16회/후속Q·미래보상·GIF는미완료다. 안정정책/채택미확보.
 보상/검사/PD/원래Gaussian/학습계산/BCteacher0유지.
+
+
+### 실제12사례 재현 완료와 전체개발 평가 진입
+
+verify3094709는03:26:00, review-training3096023은03:26:02 exit0완료·실제종료했다.
+관찰된provider/source종류/stage별root·비종료후속·종료후속·마지막후속12사례를
+12reset/359실제step(원래prefix234+원본source12+새후속113)으로재현했다.
+저장보상/검사/제어/관측·마스크/실제종료·bootstrap와원본관측보존을대조했다.
+KEEP의main/branch비종료후속과실제충돌종료, 예산말branch후속14step의bootstrap=true,
+FOLLOW의main/branch종료source를포함한다. FOLLOW비종료후속은수집되지않아미검증이다.
+12사례를독립성능평가12회나모든경로전수재현으로세지않는다.
+
+`execution1000.json` SHA9162f2c72e498e36423f0942d817530f500c5522bbd225fde53e90140a6bc2d4,
+`training-review.json` SHAd9599e533ef577d94ca796d7d002ac1d83b08798ed755589b9e554b0c893b574.
+학습검토의모든input SHA를재확인했다.
+
+전체개발8장면×KEEP/FOLLOW16회 평가3096030은03:26:03 시작·실제생존확인.
+현재최종정책평가실행중이며결과검토는미완료다. 이후full-review를마친뒤대기중인
+Q진단/실패분석/GIF가이어진다. 안정정책/채택/다른seed/별도성능평가는미완료다.
