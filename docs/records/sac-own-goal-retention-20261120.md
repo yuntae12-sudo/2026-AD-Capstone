@@ -453,3 +453,76 @@ main2885167/학습child2885178/reviewer2885246/post2890300 모두 생존했다.
 ```bash
 python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/post-status.json
 ```
+
+## 19:09 새1,000 학습·저장/Q/경험 검토 완료
+
+학습은19:09:04, 저장 감사는19:09:07 종료했다. 실제1,000전이/actor·Q 전체update1,000,
+초기 자기warmup17배열·실제종료pool·모든배치hash/RNG·BCteacher0 검토를 통과했다.
+후보는main739/분기261전이, 목표pool6→7·실패pool44→58이다. 목표/실패 지정slot은각8,000회,
+전체목표추출8,265·실패추출10,825회다. 기존목표만유지모델과 같은 종료62행의 CPU highest Q:
+
+| 종료 Q MAE | 기존 목표8 | 새 목표8+실패8 |
+| --- | ---: | ---: |
+| 전체62개 | 5.875929 | 2.082132 |
+| 목표6개 | 0.109321 | 0.109951 |
+| 큰실패44개 | 8.124218 | 2.606761 |
+| 기타종료12개 | 0.515507 | 1.144582 |
+
+실패 적합은 개선됐고 목표 오차는 비슷하지만 기타종료의 과소평가는 악화됐다.
+현재 정책 행동의 실제 미래 보상 검토는 아직 대기이며 이 표만으로 Q 문제가 해결됐다고 보지 않는다.
+초기실패44행의추출은1,232→7,965회, 신규실패14행은2,860회다. 신규1,000전이의저속은554개,
+next speed0.1m/s 통과0·최대0.007046m/s로 실제 출발 경험 부족은 남았다.
+새 목표 종료1건은 train KEEP `30a56b458fc5b63d`의68tick주행이며 초기warmup에서도
+성공했던같은쌍이다. 새로운장면성공이나고정정책성능으로세지않는다.
+
+로컬 `outputs/sac_own_terminal_retention_1000_20261120/`의 확인한SHA:
+
+- 후보report `e50299e6c30f0991342bfcdaf2f4dc2ec592708056b192e232bb7eb8a5829f24`.
+- learner `67a2a12c5bc16d1ccbcdc901a683fae7e6f0cfcede7782de004c4bf23e331831`.
+- replay `bc217661ac46d0ab4ca3d00ed267f9e483f7156107e106d5d5ee12b190863d89`.
+- audit `41fc1daa11a600843c619a860fe358e68fa98b12046ad07dd124ffe6769d11c4`.
+- training-review `e543d1acf553f0b9a17f95f2f50b2cf519c1b6bd60e09899a364cd436d7ca0ce`.
+- experience-review `377f0d886361ec4d203d9739c49267ade18eef1b549e849dcb68de9b2a1446f7`.
+
+19:11:55 primary child2893552와main2885167생존확인. 고속KEEP/FOLLOW는각72tick목표,
+저속KEEP는46tick충돌로완료했고나머지FOLLOW·정지4회평가는진행중/대기다.
+고속2성공은초기평균0과pilot100에서도있던성공의회복이며새능력확보로과장하지않는다.
+추가seed/전체개발/Rule-based/독립test/학습예산확대는아직미결정이다.
+
+## 정지 출발 가능성 분리: 수작업 진단이며 SAC 성과 아님
+
+공통 검사·PD에서 출발 가능한 경로가 있는지 같은정지2개발장면×KEEP/FOLLOW를
+별도CPU환경에서 검사했다. SAC/production Rule-based를변경하거나시범을학습에넣지않았다.
+실제anchor 위치/v/a/yaw와원래60차원encode/decode·검사·fallback·PD·Waymax를사용했다.
+현재heading방향의cubic longitudinal경로와초기측방v/a를보존하며감쇠하는성분을구성했다.
+실제초기anchor와기존평가frame의일치,encode/decode roundtrip도검증했다.
+
+첫진단은고정grid jerk0.05/0.1/0.2/0.4/0.8에서초기검사를통과한최대0.2를유지했다.
+모든4사례에서0.05/0.1/0.2는통과,0.4/0.8은curvature/curvature_rate로거절됐다.
+3초실행에서0.0842~0.0857m움직였지만속도0.05825~0.05855m/s라서0.1m/s출발기준은미달이다.
+두번째진단은같은초기경로를사용하되실제속도가기존moving-heading기준0.01m/s이상이되면
+같은grid의0.8을요청했다. 모든신규경로는기존검사와fallback을그대로거쳤다.
+
+| 같은 고유 장면의 KEEP/FOLLOW | 0.1m/s 최초 도달 | 3초 속도 | 3초 이동 |
+| --- | ---: | ---: | ---: |
+| 8dd5939855c15b3f | 둘다1.8초 | 0.196047m/s | 0.243688m |
+| a62f5a7d2cd9b3d9 | 둘다1.9초 | 0.195747m/s | 0.242741m |
+
+각30tick에서실제event0·제동0,2번째tick만KINEMATIC_LIMIT로거절후기존경로REUSED였다.
+나머지29제안은통과했다. 종료는모두`PROBE_HORIZON`이며bootstrap=true로남겨
+ROUTE_GOAL/전체장면안전/안정정책으로세지않는다. 같은장면의두명령은반복측정이다.
+공통검사/PD에서출발이전부불가능하다는설명은이4사례에해당하지않는다.
+그러나이수작업경로는SAC학습결과가아니며teacher/replay/새baseline으로채택하지않는다.
+
+실행: `python outputs/sac_stopped_launch_feasibility_20261120/probe.py`,
+`python outputs/sac_stopped_launch_phased_20261120/probe.py`,
+`python outputs/sac_stopped_launch_phased_20261120/review.py`,모두its-merge에서exit0.
+첫probe PID2892232(session83540),두번째2892801(session44798)는실제종료확인.
+원본report SHA는각 `b7e7ad20ab8b0cbe4c5c1692e5fa5c44dabc597380b65a4d96444054a04e2555`,
+`4388e7381bcf94cd1739e8d1722c543c43df8060e457c77b7b9b2dc41e982f14`.
+새검토 `review.json` SHA `d549c422d7e60a5f95fcc9f73f57bab56da9e3da52cec1b119383eb210859c74`.
+
+동일초기상태의기존목표8모델평균과첫수작업경로도비교했다. raw절댓값최대는약0.000264 대0.03333,
+현재B/gain0.0001을역산한동등head절댓값최대는약78.3 대2000이다. 이는저장경로의수학적좌표이며
+실제NN head조사·필요최소출력·학습시간하한·gain이유일원인이라는증명이아니다.
+출력크기만확대하면된다고판단하거나진행중모델/gain/보상/검사를변경하지않았다.
