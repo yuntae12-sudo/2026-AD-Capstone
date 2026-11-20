@@ -405,3 +405,12 @@ decision SHA `f225fe03e6e38896de9ece34d41928e8dcf5b94c186abfa5da61dfc3fa9ab796`.
 python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/status.json
 python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/reviews-status.json
 ```
+
+18:53 완료된 초기33update를 읽기 전용으로 추가 검산했다. 모든 배치 index hash,
+이전 policy update 번호, finite 기록, 목표/실패 지정 slot264/264회가 일치했다.
+첫 제안의 수치 필드도 대조군과 정확히 같았다. 최초 진단은 제안 dictionary 전체 동일성을
+요구해 실패했으며, 차이는 독립 실행의 episode UUID와 그로 만든 proposal ID뿐이었다.
+실패를 `live-prefix-initial-comparison-failure.json`에 보존했다. 각 실행 내부 ID 일관성과
+나머지 모든 필드를 따로 검증한 `review_live_prefix.py`는exit0이다. 학습은 변경/재시작하지 않았다.
+`live-prefix-review.json` SHA `6d40c505846fa8a31096a05487b2c380c7884090e82722275b93ea898326c707`.
+이는 실행 중 prefix 확인이며 최종 저장 감사나 주행 성능 검증을 대신하지 않는다.
