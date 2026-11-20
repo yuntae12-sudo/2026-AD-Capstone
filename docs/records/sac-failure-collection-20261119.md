@@ -4332,3 +4332,36 @@ SAC 손실식/lr/tau/전이당update1/BC0/teacher0는 유지한다. 배치의 �
 4개 Python 모듈 compile·CLI help·git diff --check 통과. 전체 회귀·새 GPU 학습 검증은
 이 기록 시점에는 미실행이며 다음 제한 실험에서 확인한다. 기준 HEAD d42b2f2 이후 미커밋.
 전체 안정 정책·다른 seed·최종 Rule-based 비교·독립 test 목표는 미완료다.
+
+
+### 2026-11-20 12:10 KST — 최근 replay 1,000회 비교 실행과 초기 동등성 확인
+
+실행 코드 `6455bae1312e28487bd79a27b9abeaa12e921b98` commit/push·원격SHA 확인.
+로컬 `outputs/sac_recent_replay_20261120/`의 runner2739758을12:03:49KST에 시작했다.
+12:10:35 train2739781 실제 생존, 기록된 update286/1,000.36개 소스·설정은 동결하며
+기존10,000 실험 종료 뒤에 시작했고 동시에 GPU 실험을 실행하지 않았다.
+결정 SHA `f108b179776ba6e6b9aff3719f3730a88bbeb402dc6606f087ee14435470c324`.
+
+첫 학습 전의 두 실험 raw_u·XY 경로·anchor·시간·모델/분포 버전과 실제 검사/보상/종료는
+정확히 같았다. observation_token/proposal_id는 독립 실행의 ID라 다르며 물리 값 비교에서
+구분했다. 이후 상태/행동의 동일성까지 주장하지 않는다. 초기 검토 SHA
+`aa974e2d896461207c36722455b3f56994bcbb757a00d8b9902c8e7e59abb1d1`.
+첫100개 실제 update의 모든 배치 index hash를 재현했다. 총25,600번 중 warmup22,972/
+신규2,628 추출이었다. 같은 삽입 index 순서의 균등 계산은25,314/286이다. 이는 CPU의
+고정 index 반사실 비교이며 새 균등 학습 실행이나 같은 미래 경험의 증명이 아니다.
+모든100개 learner state_finite=1. 주행 성능 및 최종 저장 RNG 검토는 아직 미완료다.
+
+학습→replay 감사→같은 기본4/정지4→Q→coverage/배치hash/RNG→실제branchQ→
+train2상태×4확률seed 미래보상→가치·terminal 평균선호의12job을 연결했다.
+완료 후 `python -m outputs.sac_recent_replay_20261120.finalize_review`로 검토한다.
+준비한 검토기의 AST·실행중 거절 guard 확인, 아직 결과 검토는 수행하지 않았다.
+기본 채택·추가 학습 예산·새 seed·독립 test 자동 실행은 없다. 안정 정책 확보 목표는 진행중이다.
+
+```bash
+python -m json.tool outputs/sac_recent_replay_20261120/status.json
+python -m json.tool outputs/sac_recent_replay_20261120/online1000/report.json
+```
+
+노션 첫 화면/02/03/04를12:05KST 갱신하고 다시 읽었다.03의54절은1회만 존재하고
+과거53절과 결과가 보존돼 있으며,04의현재진행과 첫화면은 최근replay 비교로 일치한다.
+노션 저장 확인은 실험 성능 검증을 대신하지 않는다.
