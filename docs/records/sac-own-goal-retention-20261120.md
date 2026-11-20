@@ -2783,3 +2783,204 @@ CPU에서 `review_exposure.py --updates 1000`, `review_dataset_exposure.py --arm
 `review_bank_full.py`를 실행했다. 위 저장 감사·실제 재현과 별도의 집계 검증이며,
 새 학습·정책 평가·pytest를 추가 실행한 결과가 아니다.
 안정 정책·다른seed·최종 동일조건 비교·별도 성능 평가는 미완료다.
+
+## 2026-11-21 — 종류별1,000 전체개발 실패와 완료된 종료Q 검증
+
+전체개발 평가3049753은01:35:00, 원본 검산3052940은01:35:02에exit0 완료했다.
+runner3037500/session91162는01:35:03 COMPLETE_PENDING_DECISION 후 실제 종료했다.
+같은8고유개발장면×KEEP/FOLLOW16쌍의 원본tick·모델/버전·초기frame/지도·종료·
+보상합과 모든 지표를 검산했다. 기존 세 참조의 평가는 재사용이며 새 독립 주행이 아니다.
+
+**종류별 수집 후보는 목표0/16·충돌16/16으로 미채택이다.** KEEP와FOLLOW 각각0/8·8/8.
+보조 참조 terminal-only는2목표/14충돌, 현재 Rule-based는7목표/8충돌/TASK_LOST1이다.
+
+| 전체16회 | 기존 비종료 수집 | 종류별 수집 |
+| --- | ---: | ---: |
+| 목표 / 충돌 | 0 / 16 | 0 / 16 |
+| 실제 tick | 962 | 862 |
+| 거절 | 634(65.90%) | 411(47.68%) |
+| 제동 | 565(58.73%) | 387(44.90%) |
+| 정지 | 456(47.40%) | 460(53.36%) |
+| 평균 return | -20.467394395738786 | -20.336391644312826 |
+
+### 전체 거절률·보상 개선으로 오인하지 않는 코호트 검산
+
+같은 초기 상태를 기준으로 이동 출발12회와 정지 출발4회를 나눠 실제 trace를 다시
+검산했다. 정지 출발4회는 두 모델 모두328/328tick 정지 후 충돌했다. 이 그룹의
+거절이302→78로 줄어 전체 거절률을 낮췄지만 출발/회피에 성공한 것은 아니다.
+
+이동 출발12회는 tick634→534, 거절332→333(52.37%→62.36%),
+제동310→311(48.90%→58.24%), 정지128→132(20.19%→24.72%)로 악화됐다.
+중속4회의 충돌까지tick294→202가 전체 분모 감소의 대부분이다. 빨리 충돌한 주행은
+거절 기회도 줄어드므로 절대 개수와 비율을 함께 판단한다.
+
+평균 return 증가+0.131002751426은 정지 출발4회의 기여+0.140014467013과
+이동 출발12회의 기여−0.009011715587로 분해된다. 가중합이 실제 전체 변화와 일치한다.
+보상 증가를 목표 도달이나 안전 개선으로 취급하지 않는다.
+
+두 모델 각각16회 모두 마지막3초에 제동이 관찰됐고, 최종 자차속도<0.1m/s 및 뒤쪽
+차량 접촉이 함께 기록됐다. 원본의 실제 colliding_ids와 마지막3초 상대 중심/속도를
+대조했으며 접촉 객체 누락0이다. 이 중 이동 후 첫 정지 이전/동시에 제동이 관찰된 경우는 각각12회이고, 처음부터
+끝까지 정지한 경우는 각각4회다. 후자를 제동 때문에 출발하지 못한 것으로 분류하지
+않는다. 최초 보고서의 동시관찰 라벨은 `failure-analysis-initial-chronology-label/`에
+원본과 분석 소스를 보존하고 수정했다. 이는 관찰된 순서/기하이며 제동의 인과 효과, 과실,
+회피 불가능성의 증거가 아니다. 추가 Waymax 주행 없이 완료된 trace에서 분석했다.
+
+로컬 `failure-analysis/report.md`와 `report.json`, `cohort-metrics.png/svg`를 만들었다.
+PNG를 열어3지표×3코호트의 막대/수치/범례·episode 및tick 분모 표시가 읽힘을 확인했다.
+순서 라벨 정정 후 PNG는 앞서 열어 본 파일과 SHA가 동일함을 검산했다.
+그래프는 같은 개발 평가 자료의 표현이며 새로운 평가 표본이 아니다.
+
+### 완료된 coverage·실제 종료상태Q 검증
+
+후속 runner3039851/session65591이 부모 성공 종료를 확인한 후 모델/입력을 추가
+동결했다. coverage3053035와 branch-Q3054352는 완료·실제 종료 확인. 같은 train
+77ae312df21e80b9/KEEP tick28, baac7893b025167a/FOLLOW tick59에서 저장행동·현재평균·
+원래Gaussian4표본을 실행했고 모델당12행동 모두 실제COLLISION/bootstrap=false다.
+
+| 현재 평균 행동의 실제 종료Q 오차(Q−실제 보상) | 기존 비종료 | 종류별 |
+| --- | ---: | ---: |
+| KEEP tick28 | 7.61189752960205 | 0.19342428588867122 |
+| FOLLOW tick59 | 11.607155601501464 | 0.8950326843261713 |
+
+종류별 현재평균 Q는−19.820575714111328/−19.121967315673828, 실제 종료보상은
+−20.014/−20.017이다. 종료에서는 bootstrap0이므로 이 비교의 target은 실제 보상이다.
+이 두 상태에서의 오차 감소와 전체 주행 개선을 혼동하지 않는다.
+
+공통 warmup 실패44행의 저장행동Q MAE도2.651967976030352→1.1554850835604256으로
+줄었다. 같은44행의 배치 추출은7,858→5,297이었다. 이를 재추출 증가만으로 설명하지 않는다.
+양쪽 CSV6,000행/256,000추출의 산술·현재분포95%거리 판정·공통5000행 식별자·
+모델/원본 해시·고정 상태/저장 행동 일치와 실제 종료Q 오차를 별도 검산했다.
+Gaussian 거리 영역은 문자 그대로의 support/안전/충분한 탐색의 보장이 아니다.
+
+미래보상 child3055692는01:46:38, 최종 검산3058193은01:46:45 완료했다.
+runner3039851/session65591도01:46:48 COMPLETE_PENDING_DECISION 후 실제 종료했다.
+같은 두 선행train상태에서 평균 첫 행동 후 원래Gaussian으로 실제 종료까지4seed씩
+실행했다. 새8회 모두충돌이며 기존 대조군8회는 완료자료 재사용이다.
+
+| Q−실제 soft-return 표본평균 | 기존 비종료 | 종류별 |
+| --- | ---: | ---: |
+| KEEP tick0 | 11.454919395485373 | 12.317480893367206 |
+| FOLLOW tick4 | 9.383595679324893 | 9.421274820925062 |
+
+종류별 KEEP의 초기Q−1.7710416316986084 대비 실제 평균−14.088522525065814,
+FOLLOW는 초기Q−1.253022313117981 대비 실제 평균−10.674297134043043이다.
+종료 직전Q 적합은 좋아졌지만 더 이른 상태의 미래 비용 차이는 개선되지 않았다.
+소수 확률표본의 평균이므로 정확한 기대Q 또는 통계적 유의성으로 주장하지 않는다.
+최종 검산은 실제8trace의 할인보상·entropy·종료/부트스트랩·동일상태/모델·동결SHA를
+대조했다. 기본 채택/추가 예산/다른seed로 자동 확장하지 않았다.
+
+새 학습 전 기존 `diagnose_sac_bellman_trace.py`로 저장된8경로의 실제 행동을
+재생하여 온라인Q·targetQ·보상/entropy를 구간별 대조했다. 프로세스3059295/
+session27308은01:59 exit0 및 실제 종료 확인. 로컬 `bellman-trace/`에 완료 결과와
+`bellman-trace.log`를 남겼다. 이는 추가 학습이나 독립 평가8회가 아니다.
+소스·보상·검사·PD·BC/teacher0·loss/lr/tau는 변경하지 않았다. 경로의 오차 분해만으로
+수집 방식이나 tau 변경의 인과 효과를 확정하지 않으며, 남은 비종료 가치 오차의 위치와
+기존 후속경험 수집 방식의 차이를 검토한 뒤 보완을 정한다.
+
+로컬 `outputs/sac_stratified_refresh_comparison1000_20261121/`:
+
+- `full-validation-review.json` SHA `86d3ac63e8a4b989803c34c73682c81cf12888791aaa9df4b83299461d87a98e`.
+- `failure-analysis/report.json` SHA `2dac8b5919a75d67ac72374d6f7684b2d0d9d9592af62ccf73138f3467f99ae8`.
+- `failure-analysis/visual-inspection.json` SHA `fa0b0407ff01361db56b34e6dc7f96cf89f5e0531908b794856af840925ec990`.
+- `policy-diagnostics/completed-terminal-q-review.json` SHA `cd15e2519fc4d13a20bbf3d60b39f0c1a6a06651b5eb9d4a3666cdd46eebfebf`.
+- `policy-diagnostics/diagnostic-review.json` SHA `a735bbe242dedb0c3d051076b56d0b18a66c0149073d2db35763325492ae4c4b`.
+- `bellman-decision.json` SHA `53ea7fd2c7e33b277d7ce94e7a928d3de9a6f24418a0c1fc9adb01a20f5e1006`.
+- 추가 집계 명령은 `review_validation_failures.py`와
+  `policy-diagnostics/review_completed_terminal_q.py`다. CPU에서 실행했고 원본은 수정하지 않았다.
+
+안정 정책·다른seed·최종 동일조건 Rule-based 비교·별도 성능 평가는 미완료다.
+
+
+### 실제 후속 관측·행동의 replay 포함 범위와 다음 수집 가설
+
+읽기 전용 `review_successor_coverage.py`로 최종 replay6,000행의 모든 관측 feature/
+field/item mask를 byte fingerprint로 대조했다. 현재 모델의 coverage CSV와 연결하여,
+각 비종료 전이의 다음 관측에서 실제 행동 경험이 저장·추출됐는지도 확인했다.
+
+| 비종료 전이의 다음 관측 | 기존 비종료 재수집 | 종류별 재수집 |
+| --- | ---: | ---: |
+| 비종료 전이 | 195 | 103 |
+| 같은 관측을 입력으로 한 저장 행동 있음 | 187 | 98 |
+| 해당 전이 뒤에 수집된 같은 관측 행동 있음 | 58 | 24 |
+| 현재 분포95% 거리 영역 안의 저장 행동 있음 | 72 | 43 |
+| 위 행동이 실제 배치에 한 번 이상 추출됨 | 72 | 43 |
+
+종류별 main377/branch409의 비종료 다음 관측은 모두 나중 전이로 이어졌다. 따라서
+**후속 상태가 전혀 없다는 설명은 기각**한다. 다만 재수집 다음 관측103개 중43개만
+현재 정책 분포의95% 거리 영역 안에 저장 행동이 존재했다. 나머지60개를 탐색 불가,
+안전 위반 또는 데이터 support 밖으로 단정하지 않는다. 완전히 일치하는 관측만 세므로
+작은 수치·시간·피드백 차이도 미일치가 될 수 있고, 근처 경험/일반화는 별도 문제다.
+
+완료된 train 확률 경로의 prestate와 replay를 대조하면 KEEP는 각 경로 시작1개만,
+FOLLOW는0개가 완전히 같았다. 기존/종류별 모두 같은 양상이다. 이는 현재 경로와
+과거 경험의 exact identity 범위이며 새로운 독립 주행이나 일반화 실패의 단독 증명이 아니다.
+처음 집계 source도 원본 SHA와 동일한 `review_successor_coverage_initial.py`로 보존했다.
+
+**설계 가설, 아직 구현/실험/채택 전:** 기존 비종료 재수집은 한 step 뒤 환경을 버린다.
+그 결과 상태에서 현재 정책으로 실제 후속 행동을 계속 수집하는 옵션을 검토한다.
+기존 main 실패 후 한 번 실행하는 complete-path와 달리, 재수집 슬롯에서 이어가는
+현재 정책 경로다. 종료 source4/비종료 source4 보존, 총 재수집 최대20%, 원래Gaussian,
+보상/안전검사/공통PD, 실제 새 전이당fullSAC1, BC/teacher0은 유지한다.
+한 active 비종료 환경을 다음 비종료 슬롯에 이어 쓰고 종료 슬롯과 교대하는 구상이며,
+새 후속 상태는 bank 적격 source로 재귀 삽입하지 않는다. 실제 terminal 또는 예산 소진까지
+이어가되 예산 소진을 가짜 terminal로 기록하지 않는다. 추가 active 환경 메모리와
+source 퇴출 후 이어지는 root lineage, parent 보존·실제 후속 재현을 별도로 검증해야 한다.
+
+과거 quota/complete-path도 주행을 개선하지 못했으므로 길이 증가만으로 성공을 예상하지
+않는다. 현재 terminal 보호를 유지한 채 최신 정책의 후속 행동을 수집하는 차이를 검증할
+가설이다. 기존8경로 Bellman 검산도 아래와 같이 마쳤다. 다음은 이 수집 옵션의 제한된 구현과
+실제 후속 상태 재현/저장 감사 pilot이며, 주행 성능과 채택은 별도로 판단한다.
+
+
+추가 로컬 근거:
+
+- `policy-diagnostics/completion-summary-review.json` SHA `2951cf2895d0faec296fc4918e16e56357ce90fe0e78834222797c102fa04930`:
+  두 모델의 soft-return 평균·표준편차·gap 재계산, 모든 동결 source/input 일치 재확인.
+- `successor-action-coverage-review.json` SHA `75a8d5ba34b7721b10cef98febbadfaf68342e25e9676ea150baa5e1159f2072`.
+- 최초 관측만 집계 `successor-coverage-review.json` SHA `09487eb192e7eaed6e343ce756d2644fc0cb7435eb8dfb3dfb6256704d534396`.
+
+완료한 읽기 전용 재생 명령(같은 출력 폴더가 있으면 다시 시작하지 않는다):
+
+```bash
+/home/autonav/miniconda3/envs/its-merge/bin/python scripts/diagnose_sac_bellman_trace.py \
+  --diagnostic outputs/sac_stratified_refresh_comparison1000_20261121/candidate1000 \
+  --states-from outputs/sac_physical_q_20261119/branch1000 \
+  --returns outputs/sac_stratified_refresh_comparison1000_20261121/policy-diagnostics/candidate-soft-returns \
+  --manifest outputs/sac_readiness_20261116/inventory/eligible_manifest_reset_v2.json \
+  --output outputs/sac_stratified_refresh_comparison1000_20261121/bellman-trace
+```
+
+`python outputs/sac_stratified_refresh_comparison1000_20261121/review_bellman_components.py`
+로 모든 suffix 직접 할인합·구간 잔차·초기차이 합·제어 source별 항을 검산 완료했다.
+
+
+### 01:59 — 저장된8경로381step 재현·구간별 가치 오차 검산 완료
+
+KEEP139/FOLLOW242step의 원래 행동·보상·검사·제어·종료·다음 관측 SHA와 부모 보존,
+모델/replay/동결 source를 확인했다. 새 정책 행동이나 독립 평가 표본을 추가한 것이 아니다.
+모든 suffix를 직접 할인합하여 재귀 계산과 대조했고8개 전체 합도 검산했다.
+
+| 평균 경로의 부호 있는 오차 항 | KEEP | FOLLOW |
+| --- | ---: | ---: |
+| 초기 Q−실제 soft-return | 12.317420 | 9.421223 |
+| 마지막 종료 기여 | 2.992297 | 1.093048 |
+| 비종료 구간 기여 | 9.325123 | 8.328176 |
+| sampled target 잔차 합 | 2.826457 | -4.695507 |
+| target−online 차이 항 합 | 9.490964 | 14.116730 |
+
+종료/비종료 합과 마지막 두 항의 합은 각각 초기 gap과 같다. 상쇄가 있는 부호 합이며
+독립 인과 기여/설명률이 아니다. target 차이가 크다는 이유로 tau를 바꾸지 않는다.
+이번 batched critic forward와 원래 forward의 f32 차이는 KEEP−0.0000605583/
+FOLLOW−0.0000516176이며 기존1e−3 허용 내다. 앞선 MC표의 초기Q를 바꿔 쓰지 않았다.
+
+비종료 EMERGENCY의 평균 잔차 기여는 KEEP9.503471/FOLLOW6.518008이고,
+FOLLOW BRAKE는2.470880이다. 그러나 일부 새 종료 상태의 오차도 크다. KEEP rep3는
+실제 충돌tick38에서Q−8.6191339493 대비 reward−20.014, 오차11.3948660507이었다.
+고정된 tick28의0.1934만 보고 현재 정책이 만드는 모든 충돌상태를 학습했다고 할 수 없다.
+다음 수집은 종료 source 보호를 유지하면서 재수집의 현재 정책 후속 행동·실제 새 종료를
+얻는지 확인한다. 효과가 확정된 것은 아니며 종료/비종료 양쪽 진단을 함께 유지한다.
+
+- 로컬 `bellman-trace/report.json` SHA `c87f8bda99b13b7504beac092cf9906ee933a772d743551fd1a2bb9f48619093`.
+
+- 로컬 `component-review-candidate.json` SHA `cbd03fc60a8b2e49527bab64743cb24a7033baa7c0f8933120da818777888617`.
