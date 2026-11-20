@@ -4352,3 +4352,26 @@ PD gate, reset kinematics를 포함한다. 저장소 전체 테스트는 미실�
 뒤에 경로를 붙여 실행했다. 이번 관련 검사만으로 진행 중 실험에 적용하지 않는다.
 후속 adoption은 전체 실제 장면 제어 재현과 필요한 회귀 범위를 확인한 뒤 별도 결정한다.
 현재 고정예산 학습의 주행/Q/실패분석 판단과 안정 정책 확보 목표는 계속 미완료다.
+
+### 2026-11-21 08:38 KST — 저장 XY 경로의 전체 개발 장면 재현 시작
+
+시안의 실제 사용 검증을 초기 이동 후보1,000/Rule 참조 각16개 저장 기록으로
+확대했다. 8개 고유 개발 장면×KEEP/FOLLOW×2방식의32개 고정 목록이다.
+새 정책을 호출하지 않고 원래 raw_xy를 proposal_from_world로 입력한다.
+원래 raw_u는 capture에 없으므로, 원래 학습 행동을 정확히 복원하는 검사는 아니다.
+Trajectory는 현재 실제 anchor와 저장 XY로 구성되며 매step의 snapshot 전체를
+원래 frame과 JSON canonical bytes로 비교한다. 초기map/frame도 같아야 한다.
+한 항목이라도 다르면 mismatch.json과FAILED 상태를 남기고 중단한다.
+
+매 실제 project_many 호출에서 원래/시안 배열이 byte-identical인지 확인한 뒤
+시안 값을 반환한다. 현재 학습에는 적용하지 않으며 새 정책 호출·update·replay0이다.
+새 rollout 성능평가로 세지 않고 저장 경로 재현으로 기록한다.
+
+실행: `JAX_PLATFORMS=cpu /home/autonav/miniconda3/envs/its-merge/bin/python
+outputs/sac_refresh_matched10000_20261121/replay_projection_captures.py`.
+08:38:27 시작, PID3214977/start_ticks77888215 실제 생존 확인.
+로컬 `outputs/sac_refresh_matched10000_20261121/projection-capture-physical/`
+의 decision.json SHA `3083bb1e29064a8e0ecff0b5c64c968fb43a60785c3116115289fd444c2de5a5`,
+status.json에현재항목과완료내역을저장한다. source/input해시와학습595파일을동결했다.
+첫 후보 고속 KEEP84step은 전체frame 일치로 완료했으며 원래 COLLISION도 같았다.
+나머지31개와최종해시검산은아직미완료다. 완료후원본/전체분모를검토하고기록을갱신한다.
