@@ -326,3 +326,15 @@ Waymax 실제 이력을 검증한다. 이후 슬롯은 그 시점의 최신 정�
 
 관련CPU41pytest와3CLI help·컴파일을 통과했다. 보상/검사/PD/Gaussian/학습계산과
 기존 동결 파일은 유지했다. 짧은100전이 실행을 준비하며 실제 수집·성능·채택은 미검증이다.
+
+
+새 scope의 읽기 전용 정책 진단은 `sac_successor_diagnostic_audit.py`가 실제 successor
+lineage 감사를 필수로 수행한 뒤 허용한다. 기존 scope는 종전 adapter로 검사하고
+계약 혼합·위장·누락을 거절한다. `diagnose_sac_successor_branch_q.py`,
+`diagnose_sac_successor_soft_returns.py`, `audit_sac_successor_coverage.py`는 기존
+진단 산술과 원래 행동 분포를 유지한 별도 진입점이다. 관련CPU33pytest·세 과거1,000회
+실제 이력 감사·명칭 치환 후 AST 동일성 검사를 통과했다. 최초 테스트 명령의 없는파일
+지정으로 tests0/exit4가 발생했고 실제 파일 목록 확인 후 수정해33개를 실행했다.
+새100전이 수집/저장 감사와5사례 실제 재현도02:14에 완료했다. 실제후속12개를
+확인했지만 재수집20경로 모두거절, FOLLOW/후속경로terminal은 미관측이다.
+같은초기모델 fresh1,000 및 전체개발16회 비교를 준비하며 주행 성능은 아직 미검증이다.

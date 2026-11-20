@@ -3051,3 +3051,62 @@ tail -n 5 outputs/sac_successor_refresh_pilot100_20261121/train100.log
 종료후속의 첫 사례와 마지막후속을 실제 원본 경로로 재현한다. 미관측 조합은 미검증으로
 남긴다. 실패는보존·정지, 시간경과만으로 재시작하지 않는다. 새1,000학습/새seed/평가/
 기본채택은 자동 연결하지 않았으며100회 검산 뒤 다음 실험을 정한다.
+
+
+### 후속 경로 수집 결과의 읽기 전용 진단 연결
+
+새 `sac_successor_diagnostic_audit.py`는 새 scope에 actual successor lineage 검사를
+필수로 적용한다. 기존 scope는 `sac_stratified_diagnostic_audit.py`를 통해 기존 검사를
+그대로 실행한다. missing/mixed/mislabeled contract와 미완료 감사는 거절한다.
+`diagnose_sac_successor_branch_q.py`, `diagnose_sac_successor_soft_returns.py`,
+`audit_sac_successor_coverage.py`를 별도 추가했으며 기존 동결 파일은 수정하지 않았다.
+이름/adapter/출력계약 치환 후 AST 동일성을 확인해 Q/coverage/return 계산은 유지했다.
+
+관련CPU33pytest(신규14 포함) 통과. 최초 명령은 없는 terminal-diagnostic 테스트 경로를
+지정해0tests/exit4였고, `rg --files`로 실제 경로를 확인한 뒤33개를 실행했다. 결과를
+누락하지 않는다. 기존 종류별·비종료·terminal-only 각각1,000회 실제 이력도 새 adapter로
+검사해 모두 COMPLETE였다. 새100회도 실제 이력 감사12successor/20refresh를 확인했다.
+새 CLI3개 help 확인. 새 GPU 정책진단·주행 성능은 아직 미실행이며 학습 파이프라인과
+별도다. 보상·안전검사·PD·Gaussian·loss/lr/tau·BC/teacher0 조건은 유지한다.
+
+
+## 2026-11-21 02:14 — 후속경로100전이 실제 검증 완료·동일예산 비교 준비
+
+runner3063654/session62388의 train/audit/verify/review4jobs 모두 exit0,
+02:14:18 COMPLETE_PENDING_DECISION 및 실제 종료를 확인했다. 학습은02:13:18,
+감사는02:13:22 완료했다. 실제100전이=main51+branch29+refresh20, fullSAC100·BC0,
+초기learner reference 바이트·자기warmup17배열·배치SHA/RNG/teacher0·실제flags를 검산했다.
+
+재수집 source 비종료13/종료7, 실제결과 비종료13/충돌7이다. 비종료는 main source2,
+tick1에서시작한 한 실제경로를tick13까지 이어13step을 수집했다. 그 중후속12개이고
+마지막collection95도bootstrap=true다. 예산끝 active는(root2,path1,nextstep13,last95)이며
+가짜종료를 만들지 않았다. 종료 source는 main36과branch72의tick28을 재방문했다.
+
+재수집20경로 모두거절, 이동8/정지12다. 이전종류별pilot은 이동4/정지16·수락0이었다.
+이동은prestate anchor기준이며 학습 중 수집통계다. 정책이 매전이 바뀌므로 고정모델
+주행평가나 성공률로 쓰지 않는다. 현재관찰된 provider는 KEEP뿐이다.
+
+실제재현5사례는 main 비종료root/첫후속/마지막후속 및 main·branch 종료root다.
+원본source 행동과 저장된각후속행동의 보상/검사/제어/다음관측·부모보존을 대조했다.
+총5reset/82step(원본prefix59+원본source5+재수집18)이며 독립평가5회가 아니다.
+FOLLOW, branch의비종료root, 비종료후속경로의실제terminal은 아직 미관측/미검증이다.
+
+로컬 `outputs/sac_successor_refresh_pilot100_20261121/`:
+
+- `pilot-review.json` SHA `5017af848786850080dc458836c1c8da2e6ea4768c80a71e6a2bfebe971aab24`.
+- `audit100.json` SHA `b76199c6dcc742ebf0e3fda1cd1c423fcb4a5cfabd7182494eefe5cce6816d23`.
+- `execution100.json` SHA `0b4f615bad453d6ec9c1db5e20474b2aa9380fa9f7cc3555bc1287f7e5eef4f8`.
+
+검산 통과는 실행 근거이며 안정적인 정책이나 주행개선은 아니다. 같은 초기모델·자기
+warmup5000으로fresh1,000 비교를 선택했다.100회가중치를 이어받지 않는다. 주대조군은
+종류별1,000(0/16목표), 보조참조terminal-only2/16·현재Rule-based7목표/8충돌/TASK_LOST1.
+기존평가를 재사용하고 새독립표본으로 세지 않는다. 기존B평균 별도비교조건도 유지한다.
+
+로컬 `outputs/sac_successor_refresh_comparison1000_20261121/`에 학습→저장감사→
+실제관찰조합재현→학습검토→전체개발16회→원본검산을 준비했다. 기존 source선택과
+달리 active경로가후속슬롯을 사용해root재방문빈도·지속보관메모리도 달라진다. 한 요인만의
+인과효과로 단정하지 않는다. 보상/검사/PD/Gaussian/학습계산/전이당fullSAC1/BCteacher0 유지.
+
+새정책의coverage·고정종료상태Q·동일선행train상태2개×4seed 실제미래보상도 후속연결한다.
+성능/기본채택/추가예산/다른seed를 자동확정하지 않으며, 종료source보호와 실제현재정책
+후속행동·새종료경험의확보 및다중주행지표를 함께판단한다. 안정정책 목표는미완료다.
