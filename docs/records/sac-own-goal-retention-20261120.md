@@ -3206,3 +3206,32 @@ main188/branch132/refresh80, 이전은197/123/80이다. 표의 이동은 사전 
 최종1,000에서 FOLLOW·새종료·root범위와 전체개발16회 및 Q/실제미래보상을 함께 검토한다.
 2026-11-21T02:35:06.263951+09:00 실제프로세스3069123/3069130/3070752와 446/1,000저장을
 확인했다. 새학습시작·규약변경·추가예산·seed확대는 하지 않았다.
+
+
+### 2026-11-21 — 성공/실패 혼합 결과를 처리하는 후속 분석 준비
+
+이전 종류별 실패 분석 스크립트는당시16/16충돌을 assert하고 Markdown/그림에도고정
+서술했다. 현재 후보가성공하더라도처리할수있도록 로컬 새분석파일
+`outputs/sac_successor_refresh_comparison1000_20261121/review_validation_failures.py`에
+성공/기타종료처리, 명령별집계, 실제분모/결과를사용하는표·제목을추가했다. 학습소스는
+변경하지않았다. 파일SHA `c234ae5d6a7215f069c6ce97b015d4b4de41e789728da7649fcd27932eb15645`.
+
+과거종류별32trace의 모든case/집계/접촉기하/보상분해를정확히재현했다. 별도도구검증입력은
+기존완료terminal-only의2목표/14충돌trace를candidate로재사용해 원본full-review의명령별
+수치와대조했다. 목표도달을접촉실패에세지않았다. 이는새모델의성과나새독립평가가아니다.
+초기검증그림의candidate범례가현재후속수집을가리켜혼동가능성이있어Control/Candidate로
+고쳤고Markdown에실제모델경로를명시했다. 최초그림은보존하며수정그림도직접확인했다.
+
+`failure-review-preflight/`, `failure-review-mixed-input/`, `failure-review-mixed-output-v2/`와
+`failure-analysis-job/preflight-review.json`에근거를보존했다. 새pytest/학습/정책실행은0이다.
+
+후속runner3079803/session45025는2026-11-21T02:39:31.476573+09:00 시작해 실제부모3069123/
+start_ticks75478893의성공완료·종료를기다린다. decision SHA
+`b161366545740cc6b1d1f247ddd3bdf315dad649b1bd865b15f0a6a50446b858`.
+완료된full-validation-review와원본trace SHA를동결한뒤실패분석→원본수치대조를수행한다.
+모델/replay쓰기와추가학습은없다. 최종그림직접검토는자동완료로표시하지않으며
+`COMPLETE_PENDING_VISUAL_REVIEW`에서확인한다.
+
+2026-11-21T02:40:15.019991+09:00 현재583/1,000전이 저장과
+학습3069123/3069130, Q진단대기3070752, 분석대기3079803 생존을확인했다. 새정책의
+전체개발성능·Q검사와안정정책목표는미완료다.
