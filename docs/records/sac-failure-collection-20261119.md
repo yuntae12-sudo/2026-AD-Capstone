@@ -4168,3 +4168,38 @@ wrap 없이 보존한다. collection RNG5000 재시작은 default raw10,000의 �
 보상을 함께 판단한다. 종료 후 검토 전까지 소스/설정/runner 변경·동시GPU실험 없음.
 **안정 정책 미확보·전체 목표 진행 중.** 최근 replay·보조 평균 행동 수집·다른seed·기본 채택·
 최종 Rule-based 비교·별도 정책test는 아직 선택/실행하지 않았다.
+
+### 2026-11-20 10:42 KST — 성공 종료 직전의 제동 의존 확인
+
+실행 코드c4babca·기록 직전 HEAD `6fddafa6d237960c4551b6742588b1f2065eb636` 유지.
+현재10,000회 실험의40소스/설정은 변경하지 않았다. 완료된5,000회 모델의 실제 frame만 읽어
+성공3건의 종료 직전 상태를 추가 확인했다. 실행 명령:
+`python outputs/sac_mean_basis_f64_full5000_20261120/review_success_endings.py`, exit0.
+로컬 결과 `success-endings-review.json` SHA
+`c63213be13551d4e4ef50c095ae8bb4be52c00f55b772414b3a87f285cc05425`.
+원본 evidence/hash를 검증하고 초기 mean0의 성공2건도 같은 방식으로 집계했다.
+
+| f64 5,000 성공 episode | 종료 tick / 속도(m/s) | 종료 실행 | 종료 직전 연속 거절 | 마지막20tick 실행 |
+| --- | --- | --- | ---: | --- |
+| 고속 KEEP | 77 / 2.7064 | EMERGENCY | 21 | REUSED1·BRAKE5·EMERGENCY14 |
+| 고속 FOLLOW | 72 / 11.0202 | BRAKE | 10 | NEW10·REUSED2·BRAKE8 |
+| 중속 KEEP(새 성공) | 110 / 5.2282 | EMERGENCY | 15 | NEW4·BRAKE13·EMERGENCY3 |
+
+**3건 모두 현재 ROUTE_GOAL 정의상 성공이지만, 종료 때 정책의 새 경로를 그대로 추종하는
+상태는 아니었다.** 두 KEEP은 최종 실제 가속도−6m/s²의 비상제동 중 목표에 도달했다.
+고속 KEEP의 마지막20tick은 모두 거절, 중속 KEEP은16/20거절이다. 중속의 거절 이유는
+마지막20tick 기준 PREDICTED_COLLISION14·KINEMATIC_LIMIT2, OK4였다.
+초기 mean0의 고속 두 성공은 모두72tick BRAKE·연속거절10·비상제동0이어서, 후보 고속KEEP의
+성공 유지가 제동 품질 유지까지 뜻하지 않는다.
+
+실제 충돌 event는 이 성공 episode들에 없었고, **기존 성공3/16·충돌13/16 집계는 유지한다.**
+목표 도달 뒤를 실행하지 않았으므로 이후 충돌이나 필연적인 위험을 추정해 결과를 바꾸지 않는다.
+마지막20tick은 추가 설명용 집계이며 새 gate/탈락 기준이 아니다. 정지/제동을 포함한 기존
+다중 지표 원칙에 따라, 새 목표 도달 한 건만으로 안정 정책을 선언하지 않는 근거로 기록한다.
+
+10,000회 종료 후 검사할 로컬 `finalize_review.py`도 준비했다.16job의 실제 종료·각 결과hash·
+40소스·기존증거·replay/복원/추출·전체16쌍·terminal/MC 모델 일치 검사를 묶고,
+성공/충돌 개수는 미리 가정하지 않는다. 소스 SHA
+`e73364438bae988fb26e4df4afab68bffd37a4cb10e62af845f2897c6897cf6e`.
+AST 파싱과 현재 RUNNING 중 검토 거절 확인을 실제 실행했다. 완료된10,000 산출물에 대한
+실행은 아직 미실행이며 scientific-review도 생성하지 않았다. 자동 정책채택은 하지 않는다.
