@@ -5201,3 +5201,81 @@ KEEP의초기값은더많이변했지만FOLLOW는차이가크게남으며매100�
 검토코드SHA는기존dbdb107과동일하다.16:07:37 본4029/5000·네PID 실제생존·전체53소스불변확인.
 실행/검토코드318c9f4, 직전기록73535c1. 본수집→기존947비교→전체경험검토를계속진행한다.
 안정정책/전체개발/다른seed/공정Rule-based/독립test는여전히미완료다.
+
+### 2026-11-20 16:46 KST — 고정정책5000 완료·수치 재현 실패 보존·별도 정밀도 분석
+
+본수집5000/신규4000과저장감사5000은각exit0으로완료했다. replay11000,
+상속17배열·로그prefix·모든신규batchhash/RNG·actor/alpha/optimizer불변·예산경계1000/5000
+bootstrap 보존·4개snapshot 검증통과. 전체105rollout은100충돌/3목표/2예산중단이며,
+그중신규83rollout은79충돌/3목표/1예산중단이다. 완료경로는103개4920전이, 원래53전이와
+마지막27전이는미완료로분리한다. 동일두TRAIN root의고정정책표본이며정책개선이아니다.
+최종state SHA `d78cf59d476a69af90db2256e85b85fcb9eb745f3c7fb8abff04a78c58c5235a`,
+replay SHA `b29b1aceea34b09b42f572d282f5c6b9b8bc7c87d935cdfbceb1a1d354a22bd8`,
+감사SHA `ee31bead6344bbc0a51ab90ad92f5661ca524687231a2162ae36173649cde2db`.
+
+그러나기존후속검토는원래0회모델의행index28에서기존Q/target과최대차0.0022287369가
+사전허용0.001을넘어exit1로실패했다. `main-post-status.json`의FAILED와로그를보존했고,
+전체경험후속도선행실패에따라추론전중단됐다. 원래runner/critic/audit/후속PID가모두없음을
+확인했다. main을재수집/재학습하지않았으며 허용치를늘리지않았다. 실패기록
+`main-reference-failure.json` SHA `9ad64fa087c82a5c9a048f703cdc5750fd58336445f1cb3af4f2ee0f226f0dd6`.
+
+같은원본모델/입력을읽기전용으로10개→전체1000개대조했다. 명시적GPU matmul `default`는
+기존기록대비최대1.90735e−6/허용초과0개였다. `highest`의GPU/CPU는서로최대1.1444092e−5
+이내로일치했으나기존GPU기록대비최대0.0183172/0.0183086,각352행에서0.001초과였다.
+이결과는계산설정에따른차이를보여주지만, 최초실패의개별kernel/컴파일원인은분리하지않았다.
+새default 실행이맞았다는이유로원래실패를없애거나결정적재현이라고하지않는다.
+`precision-probe1000.json` SHA `8a73851fcd7e13bdbada288a8ec1f0c4ffaaf1b299bb30575473a746f17c94e7`.
+
+공식 [JAX precision 문서](https://docs.jax.dev/en/latest/201/precision.html)와
+[config 문서](https://docs.jax.dev/en/latest/config_options.html)는32bit dot 연산의정밀도설정과
+저장dtype를구분한다. [OpenXLA 결정성 문서](https://openxla.org/xla/determinism)는GPU
+컴파일/autotuning의결정성을다룬다. 문서의일반설명을이번오류의유일원인증명으로쓰지않는다.
+설치된JAX0.6.2에서실제실행해확인했으며학습의전역정밀도/가중치/정책은변경하지않았다.
+
+#### 같은947경험의별도최고정밀도분석: 실제완료
+
+`scripts/evaluate_sac_critic_precision.py`는critic추론에만명시적`highest`를사용하고
+모든947행×6snapshot의Q/target을CPU와대조한다. 기존default참조와의차이는실패행수로
+기록하며원래참조검사를통과했다고재분류하지않는다. 실제GPU/CPU분석exit0,
+각snapshot 최대차5.72e−6~1.91e−5≤새분석에서정한CPU/GPU허용1e−3이다.
+같은가중치·실제행동·이미확인한원래return을비교한수치재분석이며학습후보가아니다.
+
+| frozen-Q 횟수 | 전체947 MAE | 첫확률행동21 MAE | 종료21 MAE |
+| --- | --- | --- | --- |
+| 0 | 11.803229 | 12.347266 | 10.618846 |
+| 1000 | 8.926828 | 12.070882 | 2.734428 |
+| 2000 | 6.127329 | 11.022301 | 0.240844 |
+| 3000 | 4.783391 | 9.173580 | 0.223514 |
+| 4000 | 3.265025 | 6.420791 | 0.340255 |
+| 5000 | 2.516540 | 3.738918 | 0.395318 |
+
+5000의첫행동MAE는KEEP11개0.691719/FOLLOW10개7.090837이다. FOLLOW종료까지31+tick
+275행은평균+5.309597점과대평가가남는다. 반면KEEP362행평균부호오차는−1.475581로
+과소평가도있다. 종료적합후먼상태값의개선은관찰됐으나정확한기대Q·독립평가·정책개선의
+증명은아니다. 정책고정/수집분포/누적학습의효과를단일원인으로분리했다고하지않는다.
+로컬 `precise-fixed-cohort-values.json` SHA
+`96e5d7bb170fcd0283e0121e2d0ddcdee72c84259bc911cda6ebe60f5c47af2c`.
+
+#### 전체경험의정확재현실패와구간분석준비
+
+`scripts/diagnose_sac_precise_continuation_returns.py`의전체경험검토는actor/sampler의
+원래정밀도를유지하고critic만최고정밀도로대조하도록구현했다. 하지만행index9의raw재현차이
+1.3705964e−8>기존1e−9로exit1,결과파일없음이다. 이실패도보존하고허용치를늘리지않았다.
+`precise-all-reference-failure.json` SHA
+`dddca2ef044db77144972b5b248041b34190e59a2d202ad133ab808d070a50e5`.
+따라서추가4000개의정확한ell/soft return을재구성했다고주장하지않는다.
+
+대신기록된실제raw/reward/종료와rollout RNG,규약의sigma범위[0.005,0.03]로실제경로의
+soft return **구간**을계산하는별도분석을준비했다. 평균mu/rho의재현이나작은공분산의역산을
+사용하지않는다. 원래식 `ell=30−0.5*sum(epsilon^2)−30*sum(log(sigma/0.02))`에따라
+`base−60*log(1.5) <= ell <= base−60*log(0.25)`이며계산여유1e−10을명시한다.
+Q조건부현재행동의entropy는제외한다. 저장seed의epsilon제곱합GPU/CPU차이≤1e−12를
+요구하며,원래1000ell과947완료return이구간에포함되는지도검사한다. **기대Q 신뢰구간이나
+정확return이아니며,오차하한0이정확도검증을뜻하지않는다.** 원래재현gate의통과대체도아니다.
+
+`scripts/sac_soft_return_bounds.py`, `scripts/evaluate_sac_bounded_returns.py`,
+`tests/training/test_sac_soft_return_bounds.py` 추가. 실제sampler의sigma극값/비대칭축·현재entropy
+제외·종료·직접할인합/구간폭·alpha0·잘못된alpha/경계/예산중단거절을CPU9테스트로검증했다
+(0.98s). compile/CLI/diff통과.16:46:01 실제PID2836419가전체5000중1000추론까지진행중이다.
+전체구간산출물과종합CPU검토는아직미완료이며실행중source는동결한다.
+원래보상/안전검사/PD/학습/순수SAC조건과기존53소스는유지했다. 안정정책목표는미완료다.
