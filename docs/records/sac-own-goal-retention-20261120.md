@@ -3137,3 +3137,37 @@ python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/status
 python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/candidate1000/report.json
 python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/policy-diagnostics/status.json
 ```
+
+
+### 2026-11-21 — 첫 실제 후속 종료 재현 및 첫100전이 비교
+
+새1,000학습을 그대로 유지하며 collection245에 기록된 첫 실제후속terminal을
+읽기 전용으로 재현했다. source2의원래step은비종료였고, tick1부터28개 새행동을
+이어간 결과tick28에서실제COLLISION/bootstrap=false였다. 중간의종료source재방문과
+main/branch행동을 섞지 않고 원래실제chain만 재생했다. 원본prefix1+source1+후속28,
+총1reset/30step에서 보상/검사/제어/매후속pre관측SHA/종료와부모보존을 대조했다.
+새학습·replay쓰기·독립성능평가가 아니다. PID3076489/session14733 exit0 확인.
+
+로컬 `first-successor-terminal/ticks.jsonl`은첫245개의동결prefix이며
+`first-successor-terminal/replay.py`와 `report.json`에재현근거를보존했다.
+report SHA `91ef49cd13a31e3bd81941bdb61a9d7687633e13ec786b996d94c14ac0cd33f8`.
+다음비종료슬롯collection255은source251/path51/step0,
+previous_refresh_collection_id=null로새root를선택했다. 이는현재저장기록이며 전체1,000
+감사/관찰조합재현은끝난뒤별도로수행한다. FOLLOW/branch비종료/다른종료경로까지
+검증한것으로확대하지않는다.
+
+첫100개tick/updateprefix도완료pilot과대조했다. 최초learner바이트와100개batch-index
+SHA는같고, 장면/명령/tick/검사유효·이유·위반/제어출처/bootstrap/종료판정은모두같았다.
+그러나후속수치가완전히같지는않았다. raw행동차이는update3부터나타나최대
+5.0286278771e−7, 보상차이는최대2.5218067239e−8, 제어가속도2.6897323551e−6m/s²,
+곡률6.1328522861e−5m⁻¹였다. 첫update의일부학습metric에도작은차이가있었다.
+실행별episode UUID차이와수치차이를구분했고, 원인을검증하지않고단정하지않았다.
+최초모델동일성을이후완전수치동일성으로해석하지않는다. 허용오차/설정/정책은바꾸지않았다.
+
+`review_prefix100.py`, 양쪽원본prefix복사본 `prefix100/`,
+`prefix100-review.json` SHA `187efe7ea13288336038eb9405bdaf39fcf360027c9a758eb450a5e3798f09cc`에저장했다.
+이수치비교가주행성능평가나개선증거는아니다.
+
+2026-11-21T02:30:03.916837+09:00 확인: 실제324/1,000전이 저장,
+학습runner3069123/train3069130와후속대기3070752를유지하며동결source/inputSHA를
+모두재확인했다. 새실험/예산/seed/채택으로전환하지않았다.
