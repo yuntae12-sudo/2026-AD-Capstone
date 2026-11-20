@@ -347,3 +347,61 @@ pilot100 후보의 고속2성공도 fresh1,000에서는 유지하지 못했다. 
 아직 설계 제안이며 새 sampler 구현·예산·학습 실행·기본 채택은 미완료다.
 보상/안전검사/PD/순수 SAC 조건을 유지하고, 실패Q 개선과 실제 주행을 함께 확인해야 한다.
 전체개발16쌍·다른seed·새 동일조건 Rule-based 비교·별도test 확대는 미실행이다.
+
+## 18:51 자기 성공·실패 종료 유지 비교 구현 및 실행 시작
+
+직전 단계는 최종16trace 검산과 미채택 판단을 완료해 다음 보완 근거를 얻은 진행이다.
+다음 비교는 성공 종료8을 유지하면서 최근 경험8개를 실제 실패 종료8개로 대체한다.
+batch256 = 균등128 + 최근256행에서112 + 자기 목표 종료8 + 자기 큰 실패 종료8이다.
+빈 pool만 균등 추출로 대체하며 실제 보상과 bootstrap=false를 함께 사용한다.
+이 구분을 원본 종료 사유와 대조하고, 전이/보상/종료를 새로 합성하지 않는다.
+이는 별도 추출 분포 비교로 critic과 actor 상태 분포 모두 달라지며 importance weight는 없다.
+기본 채택·균등 replay와 같은 목적함수·성능 개선을 주장하지 않는다.
+
+실행 코드 `82d5fc7de08499ee4939b5853f229078de70cf14`는 같은 브랜치에 commit/push했고
+원격 SHA도 확인했다. 새 PR/병합은 없다. 새 파일은
+`scripts/sac_terminal_retention_sampling.py`, `scripts/diagnose_sac_terminal_retention.py`,
+`scripts/audit_sac_terminal_retention.py`, 관련 테스트다. driver는 기존goal driver의
+sampler/선택 인자/scope만 바꾼 격리 복사본이다. 기존56소스 해시와 모든src는 유지했다.
+`docs/architecture/rule-based-vs-pure-sac.md`에 별도 비교 조건을 명시했다.
+
+검증 명령:
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_terminal_retention_sampling.py \
+  tests/training/test_sac_goal_retention_sampling.py \
+  tests/training/test_sac_diagnostic_sampling.py
+```
+
+its-merge Python에서40 passed. 실제 보상 함수의4실패/목표/기타종료 분류,
+bootstrap·미래capacity 제외·각 빈 pool fallback·배치 원본 action/mask/reward 보존·
+저장 RNG 재현·teacher/ring 거절을 확인했다. 실제 자기 warmup5,000의 목표6행·실패44행도
+checkpoint의 원본 episode 종료 기록과 일치했다. 전체 회귀/새GPU 성능 검증을 대체하지 않는다.
+
+첫 실행은 seed0·fresh learner·같은 자기 warmup5,000·신규 전이1,000/SAC전체update1,000이다.
+기존 B평균/f64/raw gain0.0001/physical_whitened critic/zero-action 초기화,
+실패수집 samples1/window6/moving_predecessors/horizon200/complete_path를 유지한다.
+보상/안전검사/PD/Gaussian/lr/tau/BCteacher0도 유지한다. 이전 fixed-Q 가중치는 사용하지 않는다.
+대조군은 직전 `outputs/sac_own_goal_retention_1000_20261120/candidate1000`와
+그 candidate-primary/candidate-stopped 실제8trace를 해시 고정해 재사용한다.
+새 비교에서 대조군을 다시 학습/평가했다고 세지 않는다. 별도 실행의 수치 차이와 seed0 한계를 유지한다.
+
+로컬 새 루트 `outputs/sac_own_terminal_retention_1000_20261120/`.
+decision SHA `f225fe03e6e38896de9ece34d41928e8dcf5b94c186abfa5da61dfc3fa9ab796`.
+66개 소스·22개 입력을 고정했고 원본과 보존 복사본 SHA를 대조했다.
+18:51:02 runner2885167(session83060), candidate child2885178 실행 시작.
+18:51:10 검토 runner2885246(session59015) 시작, WAITING_FOR_TRAINING.
+18:51:35 실제 두 실행 PID와 학습 child 생존 확인; 당시 첫 update는 아직 기록되지 않았다.
+
+연결 순서는 후보1,000학습→저장/종료pool/배치해시/RNG/full-update 감사→같은primary4회·
+정지4회 평가다. 별도 CPU 검토는 저장 감사 후 같은62개 종료 Q·실제 경험/배치 노출,
+평가 완료 후 초기 frame/map·16개 저장trace·추종 분모/접촉 이력을 대조한다.
+후속 검토 파일은 준비·구문 검사를 마쳤으며 새 결과 대상 실행은 아직 대기다.
+오류·비유한·hash 불일치는 기록 후 중단한다. 자동 추가 예산/채택/전체validation 확대는 없다.
+안정 정책을 확보했다는 뜻이 아니며 최종 목표는 계속 미완료다.
+
+```bash
+python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/status.json
+python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/reviews-status.json
+```
