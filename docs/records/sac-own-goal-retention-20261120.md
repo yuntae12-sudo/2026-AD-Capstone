@@ -1202,7 +1202,7 @@ python scripts/run_sac_initial_capture.py --driver refresh \
 현재 read-only 진단 runner2944744/candidate-branch-Q2948776은21:11:11 실제 생존했다.
 다음 학습 예산/실행은 아직 결정하지 않았으며 원래 전체 목표는 미완료다.
 
-## 21:14 — fresh100 실제 실패 행동 Q·수집 노출 검산 완료
+## 21:13 기록 — fresh100 실제 실패 행동 Q·수집 노출 검산 완료
 
 양쪽 실제 branch Q와 coverage가 exit0 완료됐다. 같은 train 두 실패 직전 상태에서
 모델마다 저장/평균/Gaussian4표본을 실행한 **총24행동이 모두 충돌**했다.
@@ -1234,3 +1234,13 @@ runner2944744는 유지되고 후속 control-soft-returns2950139가 실행 중�
 다음은 양쪽 실제 종료 return 완료/검산 후 FOLLOW 재수집까지 포함한 다음 예산을 결정한다.
 초기 상태 기록 코드는 `f2ef2a1198d718dc397fb9487523861049bbf259`에 커밋·push/원격SHA확인했으며
 실제 GPU 초기 기록 비교는 아직 미실행이다. 새 PR/병합/모델 채택은 없다.
+
+21:15 후속 검산 연결: 로컬 같은 루트의 `post-review/run_review.py`를
+PID2951779/session87680으로 시작했다. 실제 생존 중인 main2944744의 성공 완료와
+PID 소멸을 확인한 후 `review_results.py`만 실행한다. 후속은 초기
+`WAITING_FOR_DIAGNOSTICS`이며 학습이나 추가 예산을 자동 실행하지 않는다.
+reviewer SHA `1a4d01e7b981cb46f4b7734da680e0ad72cf7f6b890869f8f03119f0575aba72`.
+원래68소스/43입력 불변, 두 모델의 동일 상태 출처, 실제24행동의 종료 오차,
+각 CSV5,100행의 원래float32 q_gap/추출횟수, 총16확률주행의 실제 종료·원본
+trace hash·할인 보상·entropy 산술을 검산한다. 검증 실패는 원본 보존 후 중단한다.
+예정 결과는 `diagnostic-review.json`; 아직 완료 결과가 아니다.
