@@ -4951,3 +4951,29 @@ Q·target Q도 이전 마지막 probe와 정확히 일치했다. actor/alpha·�
 사용하거나 두 실행의 겹치는 시험 경험을 독립 자료로 합산하지 않는다. 본 실행은 이 기록 시점
 준비 중이며 실제 PID·시각·진행은 시작 후 별도 기록한다. 동일947전이의0/1000/2000/3000/4000/5000
 snapshot 가치와 고정 평균 probe를 검토하도록 연결한다. 성능평가 확대/정책 채택/추가예산 자동 연장은 없다.
+
+### 2026-11-20 14:55 KST — 본 고정 정책 진단 누적5000 실제 시작
+
+실행 코드 `c5863d0a8431b4aab3c03b3c49d7c7ca75045684` push/원격 SHA 확인.
+14:54:42에 main runner2805374/critic child2805375, 후속검토2805376을 시작했다.
+14:55:32에 세 PID의 실제 생존을 확인했다.51개 소스 동결·원본 완료1000 parent 사용,
+예산은 새4000 실제 전이/Q 보정으로 누적5000(최종replay11000)이다. pilot1100을 이어받지 않는다.
+결정 SHA `6cca338cd1630b7c08c3d906160d3cf61ac934b2d32fbc349468ea1ae50bd30b`.
+
+이 시점 GPU learner 전체 byte 복원·두 root의 관측 복원은 통과했고 신규 전이0/4000으로
+초기 update 준비 중이다. 초기 Q/target 재계산의 이전 마지막 probe 대비 최대 차이는
+1.6212463e−5로 사전 허용1e−3 이내다. pilot의 초기 Q는 정확히 같았지만 이번 main을
+그와 같은 수치 동일 실행으로 표현하지 않는다. 파라미터 직렬화 불변과 추론 수치 차이를 구분한다.
+
+본 수집→저장 감사→동일947전이의0/1000/2000/3000/4000/5000 가치 비교→손상 입력 거절과
+집계 검산을 연결했다. actor/alpha 고정이므로 주행 성능 개선 평가가 아니다. 보상/검사/PD/
+원래Gaussian/critic lr/tau/half_recent256/BCteacher0 유지·production 정책 checkpoint 없음.
+안정 정책/전체 개발/다른 seed/공정 Rule-based/독립 test 목표는 미완료이며 계속 진행한다.
+
+상태 확인(로컬):
+
+```bash
+python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/main-status.json
+python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/critic5000/report.json
+python -m json.tool outputs/sac_fixed_policy_critic_continuation_20261120/main-post-status.json
+```
