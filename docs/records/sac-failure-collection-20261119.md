@@ -5338,3 +5338,40 @@ runner2839724/child2839725,시작시각을보존했다. 결과는`paired30/repor
 수행하며생산학습을시작한것은아니다. 원래53소스와`src/`를유지했다.
 `review.py`의독립집계검산은compile완료·실제완료산출물검토는아직미실행이다.
 앞절의미래시각오기를16:56으로,범위분석실제완료시각을파일mtime16:47:57로정정했다.
+
+### 2026-11-20 17:24 KST — Q 보정 전후 가상 actor 방향30주행 완료·성공 경험 손실 확인
+
+16:56:52 시작한방향진단은17:23:14에exit0,17:23:40 독립집계검산을완료했다.
+runner2839724/child2839725 종료확인. 원본입력과새도구소스hash는유지됐다.
+24조건부주행과6전체결정적주행이모두충돌했다. 같은TRAIN2roots·단일배치·각4표본이며
+30고유장면이나성능확대평가가아니다. 가상업데이트모델은저장/채택하지않았다.
+
+동일보정후critic에서평균변경이예측한Q증가는KEEP2.48e−5/FOLLOW2.20e−4였지만,
+실제조건부return변화는KEEP평균1.02e−8/FOLLOW정확히0이었다.
+원래/두가상업데이트의전체결정적주행은모두KEEP29ticks·거절28/제동26/정지21,
+FOLLOW54ticks·거절51/제동46/정지26으로같았다. 실제보상차이도약1e−8수준이다.
+보정후가상업데이트가변경한제안경로의최대XY차이는KEEP0.00004076m/FOLLOW0.00004043m다.
+따라서실질적주행개선은없지만,너무작은한번업데이트로장기정책개선불가능까지주장하지않는다.
+
+별도CPU검사로자기성공경험을추적했다. 원래warmup5000중완료62경로/4998전이는
+44충돌·6목표·10RECORD_END·2TASK_LOST,나머지2전이는미완료다.
+목표6경로359전이의실제배치노출은8470/256000(3.3086%),종료6행은155회였다.
+원래checkpoint와현재source의17개warmup배열prefix바이트동일·teacher0·모든추출hash/RNG,
+원래episode의scene/tick/종료/reward합을대조했다. source runtime차이는보존한다.
+6개저장목표종료행의CPUhighest Q MAE는0.487650→고정Q5000후1.890138로악화됐다.
+이는실제종료reward에대한오차이며MC/entropy범위불확실성이없다. sampling만의유일원인을
+증명한것은아니지만실패비용적합과성공가치보존을함께봐야함을확인했다.
+
+| 로컬 산출물(`outputs/sac_calibrated_actor_direction_20261120/`) | SHA256 |
+|---|---|
+| `paired30/report.json` | `b66dc7d9c904c810619c5d523b24e645f8df92362912fc532134390356310f26` |
+| `review.json` | `a929bbbd67bd420e73cb946926fb5328078e539ca0b6704eb8551a211267b503` |
+| `own-success-coverage.json` | `5f237b83ac48b4b67c120bf610e0e3b1859340dfa965381f666eece441450108` |
+| `own-success-terminal-q.json` | `913eda1ddd14ecf8cac0ff2fb3af55ee0e241bb2df9e798bf94fe482e54f0702` |
+
+다음은 [자기 성공 종료 경험 유지 비교](sac-own-goal-retention-20261120.md)다.
+새sampler/격리된fresh driver/저장감사기를구현했고CPU12pytest(0.09s)·compile/CLI통과.
+기존batch128uniform+128recent에서128uniform+120recent+8자기goal-terminal로만바꾼다.
+보상/검사/PD/SAC손실/배율/전이당fullupdate1/BCteacher0는유지하고추출분포변경을명시한다.
+fixed-critic5000의가중치를정책초기값으로채택하지않으며동일fresh초기화와자기warmup을쓴다.
+실제학습/주행검증은아직미실행이다. 관련기존53소스·`src/`는변경하지않았다.
