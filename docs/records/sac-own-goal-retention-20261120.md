@@ -1041,3 +1041,37 @@ decision SHA `7e07134a4ab05404d75b29ec2c5738e4a58ad75ff91567b46dc683f03f3a3594`.
 주행은 같은2개 개발장면8b4c1e7e09f5f4c3/8a4fba3463c6c62d×KEEP/FOLLOW이며
 독립test가 아니다. 예산/입력/소스 실패 시 중단하고1000회나 채택으로 자동 확대하지 않는다.
 현재 실제 재수집·완료 저장·재현·주행 결과는 미완료이고 전체 목표도 미완료다.
+
+## 20:43 후보100 저장·실제 재현 완료, 기존100 대조도 완료
+
+후보100 실제전이/전체SAC update100·replay5,100 저장과 새 감사가 통과했다.
+main57/failure_branch29/terminal_refresh14이며 refresh14개 모두 실제COLLISION이다.
+실제 원본 source ID는29(main)와65(failure_branch) 두 개이고 둘 다 같은 train
+KEEP77ae312df21e80b9/tick28이다. 독립 장면2개나 FOLLOW 검증으로 세지 않는다.
+14개 source관측이 replay의 실제 parent관측과 정확히 같고 FIFO/순환/4base주기,
+warmup17배열·종료pool·배치hash/RNG·actor/Q100·BC0를 검산했다.
+
+명령/source종류별 첫 재수집을 실제로 재현했다. 각28step의 원래 경로를 따라
+source29→refresh33과 source65→refresh73을 각각 실행했다. 원래 행동과 새 행동 모두
+실제충돌·보상-20.014였고 관측/mask·검사·제어·종료/다음관측이 기록과 일치했다.
+부모 snapshot 불변성도 확인했다. 새 행동의 raw값은 원래 저장 행동과 다르다.
+실제 비종료 refresh는 이번100개에서 관찰되지 않았으며 이를 실제 검증 완료로
+확대하지 않는다. FOLLOW와 정책 성능도 아직 검증하지 않았다.
+
+로컬 pilot100루트의 완료 산출물:
+
+- `candidate100/report.json`: `ba4ed8b2ddf59c4eba9ed2d2675569c9b245fee7c75064ec17a00a83e8d304cc`.
+- `audit-candidate.json`: `e005430e2730330f790882ba00d425505a1560d8390faf61a139479d1837f610`.
+- `execution-review.json`: `5019961df2768e418a9d48054dd42ba6a361283f7f4b358ef629d10b9f0444dd`.
+
+후보 학습/감사/재현 child2929929/2934626/2934659는exit0 종료했다.
+20:46:30 기존수집control100/감사도exit0 완료했고 같은개발4주행이실행중이다(child2938828).
+main2929909는계속생존,다음후보4주행까지원래7jobs를유지한다.
+
+최종 두모델의 동일초기설정·warmup17배열·첫refresh전32전이/배치/관측·실제4+4주행
+원본지표/초기frame/map을 검산하는 읽기전용 후속2jobs를 연결했다.
+로컬 `post-review/` runner2939148(session6334),WAITING_FOR_PILOT.
+원래runner의성공종료와실제PID소멸을함께확인한뒤에만실행하며학습/예산확대는없다.
+64소스/23입력과복사본동결,post decision SHA
+`79b42b1f2478296c7622be541e406b856f4cddda2dec5a72f6504567ed39d9ab`.
+모델/replay/report는완료후추가동결한다. 현재전체성능·안정정책은아직미확보다.
