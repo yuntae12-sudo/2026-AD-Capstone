@@ -843,3 +843,59 @@ training-review2915970/experience-review2916232는정상완료했고주행평가
 `94c40eb56b8a4cacec8a10de6a0df0a022064da0ce392927baa297ab50fe7552`.
 main2905593/primary평가2916264/추가검토대기2910702실제생존확인.
 원래학습/평가조건은유지했고새소스변경·추가학습은없다. 안정정책미확보다.
+
+## 20:13 개발 8회 평가 완료: 성공 상실과 거절·제동 시간대
+
+같은 4개 개발 장면의 KEEP/FOLLOW 8쌍을 대조했다. source1,000의 저장
+평가를 hash 고정 재사용하고 continued3,000의 8회를 새로 실행했다.
+초기 frame/map, 원본 tick·보상·종료·제동·정지 집계를 검산했다.
+반복 사용한 개발 장면이며 독립 test나 8개 고유 장면이 아니다.
+
+| 같은 개발 8회 | source1,000 | continued3,000 |
+| --- | ---: | ---: |
+| 목표 / 충돌 | 2 / 6 | 0 / 8 |
+| 전체 tick | 564 | 559 |
+| 거절 tick / 비율 | 170 / 30.14% | 175 / 31.31% |
+| 제동 tick / 비율 | 140 / 24.82% | 157 / 28.09% |
+| 정지 tick / 비율 | 340 / 60.28% | 356 / 63.69% |
+| episode 평균 보상 합 | -15.263125 | -20.332767 |
+
+정지 시작 4회는 두 모델 모두 328tick 전 구간 정지 후 충돌했다.
+후보의 정지 장면 거절 수는126→84로 감소했지만 출발이나 성공으로 이어지지 않았다.
+고속 KEEP/FOLLOW의 기존 두 성공을 잃었으므로 현재 후보는 채택하지 않는다.
+참조 경로가 있는 PD 추종 표본은468→415, 위치 RMS는0.000271→0.000289m다.
+EMERGENCY로 참조가 없는96→144tick은 이 RMS에서 제외했다.
+작은 추종 오차가 경로의 안전성이나 성공을 의미하지 않는다.
+
+고속 장면8b4c1e7e09f5f4c3의 원본 타임라인에서:
+
+- source1,000 KEEP/FOLLOW: 최종 연속 거절은tick63의 PREDICTED_COLLISION부터,
+  첫 제동tick65, 정지 없이tick72 ROUTE_GOAL.
+- continued3,000 KEEP: tick36 PREDICTED_OFFROAD부터 최종 연속 거절,
+  첫 제동38·첫 정지61·충돌67. 접촉 object4877은 뒤쪽에서 접근했다.
+- continued3,000 FOLLOW: tick37–39 도로 이탈 예측 거절/제동 후tick40은 수락,
+  tick41부터 다시 연속 거절, 첫 정지64·충돌72. 같은 object4877 접촉이다.
+  첫 제동39가 최종 연속 거절41보다 앞서므로 단일 단조 과정으로 요약하지 않는다.
+- 후보8회 모두 마지막 접촉 물체는 뒤쪽 접근으로 분류됐다. 시간 순서와 기하학적
+  분류이며 사고 책임·충돌 불가피성·유일한 학습 원인으로 해석하지 않는다.
+  후속 상태는 모델별로 달라 동일 상태 반사실적 비교가 아니다.
+
+실행 산출물은 로컬 `outputs/sac_terminal_retention_curve3000_20261120/` 아래다.
+`review_pilot.py`, `review_driving_details.py`, `render_comparison.py`는 연결된
+runner에서 exit0 완료했고 별도 읽기 전용 `review_regression_timeline.py`도 완료했다.
+
+- `pilot-review.json`: `20d69639992ad0a49391783ec74d58ad6da33b570b20a5a248a2ebee8b3dfce1`.
+- `driving-details-review.json`: `f2a1e6250b9d83daa29e5d99c2067f1808462b1850ca22204d8de69c23943478`.
+- `regression-timeline-review.json`: `67d6a1cbafa308daa4bf50dd611e0dc63c2485bcd1c7c9d8cd01505f5d3b7c23`.
+- `visual-terminal-comparison/same-policy-1000-vs-3000-keep.gif`:
+  `7491ecc2819d3f73ea0fd5faba9b644d70661363d3334480a45559d4b2efd862`.
+
+GIF는1440×900·37frames, 시뮬레이션7.2초/마지막 hold 포함재생8.7초다.
+생성 PNG를 직접 열어 두 모델 표시·제동 시간대·성공/정지충돌 표시를 확인했다.
+같은 learner의 학습 예산 비교이며 Rule-based 최종 비교 영상이 아니다.
+
+20:18경 실제 main2905593/현재행동 평가2919730/후속 대기2910702 생존 확인.
+현재는 추가 학습이 아니라 고정 모델의 실제 종료까지 미래 보상을 평가 중이다.
+그 뒤 현재 Gaussian과 저장 행동의 거리 및 같은 실패 상태의 실제 대안을 비교한다.
+보상·안전검사·공통 PD·BC/teacher0와 동결 조건을 유지한다.
+추가 예산·정책 채택·전체 개발/다른 seed/최종 Rule-based/별도 test는 미완료다.
