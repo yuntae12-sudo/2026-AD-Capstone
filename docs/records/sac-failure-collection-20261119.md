@@ -5089,3 +5089,40 @@ rollout35(seed20261155)117tick/67수락/return−0.2405907/끝REUSED다.
 검토코드SHA `dbdb1074631c378e8c1c5c2c2283126cdce5804423e83d113fd4f0f22de03a1a`.
 실제2000 snapshot을읽어완료한 검증이며 소스구문검사만통과한 결과가아니다.
 본5000 main runner2805374/critic2805375/후속2805376을계속사용하며 재실행하지않는다.
+
+### 2026-11-20 15:26 KST — 신규 목표 도달까지 포함하는 전체 경험 가치 검토 연결
+
+직전2000 검토에서 고정 actor의 새로운 확률 표본 중 FOLLOW 목표2건이 관찰됐다.
+기존947개 완료전이 비교는 동일행동의 학습 경과를 보는 데 유지하되, 그 cohort가 모두충돌한
+결과만 전체수집을 대표하게 하지 않도록 **전체 완료경로의 읽기 전용 가치 검토**를 추가했다.
+보상/검사/PD/정책/수집/Q 갱신과 기존51개 동결소스는 바꾸지 않았다.
+
+`scripts/diagnose_sac_continuation_returns.py`는 기존6000행 이후의실제5000전이를 읽고,
+완료경로 전부에 대해 원래 Q와 최종 Q를 같은 실제 행동/return과 대조한다. 원래1000과
+신규4000, KEEP/FOLLOW, terminal outcome, 종료까지거리별로 분리한다. 기존53개 budget
+절단과 최종미완료경로는 실제미래return에서제외하며 가짜종료를만들지않는다. actor/alpha 및
+optimizer 불변·전체 state byte복원·BC0을검증하고 원래Gaussian을기록된seed로재현한다.
+이미사용한 행동1e−9/Q1e−3/동일return1e−10 허용치를 유지해 이전1000/947 자료와 대조한다.
+초기947의 결과나 새 성공에 맞춰 허용치를 넓히지 않는다.
+
+구문검사와 `--help` 실행은통과했다. CPU환경에서 아직RUNNING인 본자료를입력한실행은
+`audit_sac_fixed_policy_continuation.py:28`의 완료상태검사에서예상대로exit1, 결과파일없음을
+확인했다. 이음성검사를 GPU값검증 통과라고하지않는다. 실제5000완료자료의추론·return
+검산은 **미실행/대기**다. guard기록SHA
+`858da0143e742d88cf257a3df67a8ef5223304de92f08af2085e830b098d873f`.
+
+15:26:17 로컬후속runner `all_experience_review.py` PID2815256을기동했다.
+15:26:23 본runner2805374/critic2805375/기존후속2805376/새후속2815256의실제생존확인,
+본진단2274/5000·새후속 `WAITING_FOR_MAIN_POST_REVIEW`, 아직GPU child없음이다.
+기존후속의성공완료와모든기존child/runner종료를확인한뒤에만새GPU추론을시작한다.
+이후CPU에서모든완료suffix의조건부할인return을직접합산해검산하고,
+원본tick/보상/종료/예산절단/cohort별집계를대조한다. 오류나수치허용치미달은기록후중단하며
+자동재시작·추가학습·정책채택은없다. 이것은새경험5000개를추가수집하는작업이아니다.
+
+새후속은기존51소스+새evaluator/runner총53소스를동결한다. evaluator SHA
+`2fc1ad23e7d0c9fed160c963b646a8aa742e229cf70c3d474a652e33709db7f4`,
+runner SHA `e7f4bcd4086b06bc8be0840d8ccc4f8e817d7353a8d952213fbef59d16169b2e`.
+실행시기준HEAD1a1902c에서새evaluator는미커밋이었으며아래기록과함께동일내용을커밋한다.
+로컬결과확인은동일continuation출력폴더의 `all-experience-status.json`,
+`all-experience-values.log`, 완료후 `all-experience-values.json`/`all-experience-review.json`.
+현재안정정책목표는미완료이며본5000진단과기존947비교를끝낸후전체경험검토까지함께해석한다.
