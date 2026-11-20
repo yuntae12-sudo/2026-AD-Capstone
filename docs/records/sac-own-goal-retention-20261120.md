@@ -3110,3 +3110,30 @@ warmup5000으로fresh1,000 비교를 선택했다.100회가중치를 이어받�
 새정책의coverage·고정종료상태Q·동일선행train상태2개×4seed 실제미래보상도 후속연결한다.
 성능/기본채택/추가예산/다른seed를 자동확정하지 않으며, 종료source보호와 실제현재정책
 후속행동·새종료경험의확보 및다중주행지표를 함께판단한다. 안정정책 목표는미완료다.
+
+
+### 동일 예산 fresh1,000 및 후속 진단 시작
+
+구현33800602edc8a505b71adbd49a1644dd55d59151 push/원격SHA 확인. 새 비교는
+runner3069123/session56549·train3069130, 시작2026-11-21T02:16:35.674870+09:00다.
+소스280/input142 동결, decision SHA170ee6e1dabdc727d9b3ff5d78ce7841caf3b78cbdc0663f952b990ebc59a6b3.
+첫 update 입력learner도 reference와 SHA7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c로
+바이트 동일했다. 2026-11-21T02:18:20.749269+09:00 실제 저장10/1,000전이를 확인했다.
+
+같은 폴더 `policy-diagnostics/`의 runner3070752/session67143은
+2026-11-21T02:17:33.848164+09:00 시작, 실제부모3069123/start_ticks75478893의
+성공완료·실제종료를 기다린다. source282/input314 동결, decision
+SHAa49e01055472351196d8f5f785e9d8766deda997aaacdbead3442fa0fd63751a.
+주대조군 진단은 이전종류별1,000의 완료candidate 자료를control로 바이트 복사한 것으로,
+이전 비종료 수집 대조군이나 새 독립 표본과 혼동하지 않는다.
+
+학습/저장/실제후속재현/전체개발 검산이 끝난 뒤coverage→같은train충돌직전Q→
+같은선행train상태2개×4seed 실제미래보상→원본검산 순서다. 현재는학습실행/후속대기이며
+새 성능결과는 없다. `launch-review.json`에 모든 동결SHA와 실제PID/command 및 초기
+모델 일치 확인을 저장했다. 현재 소스/설정 변경·자동재시작·추가예산/seed/채택 없음.
+
+```bash
+python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/status.json
+python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/candidate1000/report.json
+python -m json.tool outputs/sac_successor_refresh_comparison1000_20261121/policy-diagnostics/status.json
+```
