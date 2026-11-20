@@ -4875,3 +4875,31 @@ continuation 도구를 준비한 뒤 실행한다. stable 정책·전체 개발�
 `8a1f4b5aad2c7fae8af4abf556051350efa8b6655d4a50aa7f854995c259342d`;
 검토 `expected-bellman64-review.json` SHA
 `1823cd275973128fa6cad892002b49c6625905df9ec0f7a473fe39d3a015c4e8`.
+
+### 2026-11-20 14:46 KST — 고정 정책 continuation 구현·승계 경계 검증
+
+기준 HEAD `cfe64a87b4e8ffd5069d3bc38c3a46e96bfb41d5`. 이 절과 다음 신규 파일은 작성 시점
+미커밋이다. 기존 완료 진단·코어·동결 소스를 변경하지 않고 별도 진단 도구를 추가했다.
+
+- `scripts/sac_fixed_policy_continuation.py`: 완료1000 진단만 허용하고 총1100/2000/5000,
+  실제/보정 카운터·정책 고정 증거·replay 버전/RNG/cursor·no-wrap을 검증한다.
+  마지막 실제 terminal과 예산 중단을 구분하며 예산 중단 bootstrap을 보존한다.
+- `scripts/continue_sac_fixed_policy_critic.py`: 기존 state/optimizer/learner RNG와 replay7000/RNG를
+  복원해 새 실제 전이당 canonical Q1회를 수행한다. actor/alpha는 그대로 유지한다.
+  원래 tick/update1000개를 byte prefix로 보존하고 새 rollout22/seed20261142부터 수집한다.
+  100회마다 고정 평균 Q와 정책 불변을 검사하고1000회마다 진단 state를 저장한다.
+  simulator 중간 resume나 동시 SAC 학습 후보로 분류하지 않는다.
+- `scripts/audit_sac_fixed_policy_continuation.py`: 완료 부모 감사와 함께 원본17배열/prefix,
+  Q/actor/alpha/optimizer 카운터·snapshot·새 raw/reward/관측/종료·모든 새 batch/RNG와
+  중간1000 경계의 bootstrap 보존을 읽기 전용으로 검토한다. 실제 sim 재실행은 아니다.
+
+`tests/training/test_sac_fixed_policy_continuation.py`의17 CPU회귀 통과(0.02s): 경계보존·진짜
+terminal 구분·seed 중복 방지·메타데이터 불변·예산/RNG/cursor/정책변경/가짜종료 거절.
+compile/CLI/diff 통과. 실제 부모 데이터를 CPU에서 다시 감사하고 두 예산의 계획을 확인했다.
+저장 state의 전체/Q update2000·actor update1000·BC0도 확인했다. 실제 GPU 복원은 아직 미실행.
+로컬 `outputs/sac_fixed_policy_critic_continuation_20261120/preflight.json`에 보존했다.
+
+긴 실행 전에 총1100(새100 실제 전이)의 별도 통합 시험을 한다. 이것은 저장 경계/복원/수집/감사
+검증이며 정책 개선 평가가 아니다. 통과한 뒤 본 진단 총5000은 원래 완료1000 state/replay에서
+시작해 새4000을 수집한다. 시험100개를 본 실행의 독립 경험으로 중복 합산하거나 그 결과를
+원래1000에 덧붙여 본 실행을 시작했다고 기록하지 않는다. 이 시점 실제 시험/본 실행은 미실행이다.
