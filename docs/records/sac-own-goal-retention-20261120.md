@@ -3552,3 +3552,81 @@ decision SHAf7bbd7f61c5bfb7428ef855508a32a5a3736c7b06c5a01e216cbd2d5b13d6017.
 
 새1,000의 완료·FOLLOW 수집효과·주행성능·채택은 아직 미검증이다. 추가예산/seed를
 자동연장하지 않고 결과를 검토한다. 전체목표와 다른seed/최종비교/별도성능평가는 미완료다.
+
+### 2026-11-21 04:57 KST: 명령별 보존1,000 수집·실제 재현 완료, 전체 평가 진입
+
+같은 `outputs/sac_provider_protected_comparison1000_20261121/`의 학습은04:43:37,
+저장감사는04:43:40, 실제재현과 학습검토는04:54:29에 exit0으로 완료됐다.
+train3111226·verify3125234·review3127747의 실제 종료도 확인했다.
+실행코드b2a3789·검토시점HEAD4f3d829이며 학습 소스/조건을 바꾸지 않았다.
+실제신규전이·actor·critic각1,000, 동일초기learner·자기warmup5,000의17배열 보존을
+검산했다. BC/teacher0·보상·안전검사·공통PD·원래Gaussian·loss/lr/tau·실제전이당
+fullSAC1회와 승인된별도B평균 비교조건을 유지한다.
+
+| 같은1,000개 실제경험 | 이전 실제후속 | 명령별 보존 |
+| --- | --- | --- |
+| main/branch/refresh | 415/385/200 | 438/362/200 |
+| 비종료source 후속 | 103 | 103 |
+| 비종료후속 KEEP/FOLLOW | 103/0 | 98/5 |
+| 이동prestate/경로수락 | 58/13 | 51/22 |
+| 비종료후속 고유root | 4 | 6 |
+| 종료source 후속 | 97 | 97 |
+
+새 FOLLOW두경로는source669/671에서각3/2step이며 모두속도0·경로거절 뒤충돌했다.
+이동FOLLOW후속은0이다. 새KEEP경로4개 중 마지막source726의26step에서는22개가
+수락됐고, 예산말bootstrap=true를 유지했다. 충돌5경로와 예산말계속1경로를 구분한다.
+**FOLLOW 경험은 생겼지만 정지 실패에 한정됐고 전체이동후속은58→51로 줄었다.
+수락13→22는 학습 중 수집 지표이며 고정정책의 주행 개선을 입증하지 않는다.**
+
+첫400/700/1,000개 양쪽 원본prefix를 보존하고 현재source와 바이트/SHA·전이순서·
+policy update 카운트를 대조했다. 첫400개에는 FOLLOW후속이 없었다. 첫700개에서
+비종료eligible FOLLOW이동145/정지95개가 있었지만, 실제 새root선택665/695에는
+FOLLOW후보가 모두정지상태였다. 마지막이동후보629는 남지 않았다. 이 수치는 전체
+1,000개에도 같았다. 명령보존과 명령내이동상태보존은 다른 문제다.
+
+#### 실제 Waymax 재현과 검사 범위
+
+사전규칙으로 선택된16사례를16reset/861실제step으로 재현했다.
+prefix729·원래source16·refresh116step이며, 관측/마스크·보상·경로검사·실제제어·
+종료/잘림·bootstrap·저장root보존을 기존 허용치로 확인했다.
+KEEP비종료source는main/branch각4사례, FOLLOW비종료source는branch4사례다.
+종료source는KEEP/FOLLOW×main/branch각1사례다. 관찰되지 않은 조합은 미검증이며,
+FOLLOW이동source나 전체주행성능을 검증한 것으로 확대하지 않는다.
+
+`execution1000.json`의 모든입력SHA와 `training-review.json`의 근거SHA를 재대조하고,
+각사례의원본source/scene/provider·후속단계·실제종료·prefix길이를 별도로 검산했다.
+`execution-review.json`에 검증모델과 평가모델SHA일치·seed0·updated평균정책·선택16쌍을
+확인했다. 재현16사례와 다음개발16주행은 다른 분모다.
+
+#### 보완안은 아직 설계 제안
+
+같은700개 도착순서에서 기존bank를73개비종료슬롯 모두 재현한 뒤, 초과명령 내부의
+이동/정지 두종류가있으면 중복종류의가장오래된후보를제거하는안을 읽기전용재생했다.
+같은4칸에서665에는KEEP이동271/정지299·FOLLOW이동629/정지664가남고695에도
+FOLLOW이동629가남았다. 하지만255의KEEP후보구성도정지241을포함하도록달라졌다.
+과거도착순서/선택시점을고정한 저장가능성 검토이며 새선택·학습·주행효과 예측은아니다.
+현재collector에는 구현/채택하지 않았다. 전체주행/Q결과와대조한뒤 보완여부를 결정한다.
+
+로컬읽기전용 `review_motion_availability.py --count 700` 및 `--count 1000`,
+`review_motion_retention_proposal.py`를 실행했다. 이분석의 추가정책실행/pytest는0이다.
+현재코드 관련55pytest는앞선구현당시 결과이며 이번에 재실행하지 않았다.
+
+#### 원본 식별자와 현재 실행
+
+- 모델: `37ee41e3a3cd086ed018be4169bb6ee9f5313fe677b6db77571a63be666f40aa`
+- replay: `fd2ccbefa7a37f63bf576d6a7c45476ab0c5209661b365f1d5601245fba82d3b`
+- `audit1000.json`: `18050a645b2dbfa2948dd1d58423aae13faec63e91cfb9ddd4903616376589ad`
+- `execution1000.json`: `2dbf39298dfa4c77edf3b77d4896c86ae2fb4da2702677a4961bf24e84ad99fa`
+- `training-review.json`: `e8cbeb52a5a03a3f182888b9d4cb652f0ecd6c4fd2d7b6621c70fca389c41451`
+- `execution-review.json`: `d24b70a15ee2cc007a91b85fb2fa12100cdd8ec68a4c8a30e1177b538bf2d425`
+- `collection-review.json`: `95a61c6a8fb183e35f554586b7288337eb243b4c827a9b29bb5324e56968027a`
+- `chain-prefix1000/motion-availability-review.json`:
+  `7fdc7995ff50c46da62683ee3436157eff2ecc7da32e1e786d2022f32874068b`
+- `chain-prefix700/motion-retention-proposal-review.json`:
+  `496251727212b6a19bcc06f00b57e7931aab5cfb635318d901ce6677cd4255e7`
+
+전체 개발평가3127754/start_ticks76473930은04:54:30 시작했고04:56:29 실제생존을확인했다.
+같은8고유개발장면×KEEP/FOLLOW16회·seed0평균정책이며 독립test가아니다.
+main3111218/start_ticks76155010이전체원본검산까지연결한다. Q3111403·실패분석3115024·
+GIF3115025는main성공종료후실행한다. 완료후각원본검산·시각검토가필요하다.
+**안정정책·기본채택·다른seed·최종Rule비교·별도성능평가는 아직미완료다.**
