@@ -1172,3 +1172,32 @@ Gaussian 유지. 이전 재수집 전 엄격 수치 동일성 실패는 그대�
 이번 결과도 동일 설정의 기술적 비교이지 완전히 동일한 학습 경로의 인과적 효과 증명이 아니다.
 현재100 모델 미채택·안정 정책 미확보. 이 결과를 검토한 뒤 FOLLOW까지 실제 재수집되는
 더 긴 동일 예산 비교를 결정한다. 전체 개발 validation/다른 seed/최종 Rule-based/별도 평가 미완료.
+
+## 21:11 — 다음 대조를 위한 실제 초기 learner 기록 준비
+
+이전 fresh100에서는 실제 초기 learner 바이트를 저장하지 않아 초기화 차이를
+배제할 수 없었다. 다음 실행에 사용할 별도 진입점
+`scripts/run_sac_initial_capture.py`와 기록 함수 `scripts/sac_initial_state_capture.py`를
+추가했다. 기존 두 fresh driver/source는 변경하지 않는다.
+
+wrapper는 첫 실제 전이가 수집된 후 **첫 full SAC update에 전달되는 state**를
+직렬화해 `initial-learner.msgpack`과 `initial-state-audit.json`으로 기록한다.
+원래 update 함수에 같은 state/batch/인자를 전달하고 반환값도 그대로 돌려준다.
+옵션 `--expect-initial`이 있으면 원본 바이트를 직접 비교하고 불일치 시 첫 update 전에
+실패한다. BC 또는 이미 업데이트된 learner는 거절한다. 모델 복원이나 초기화 변경은 없다.
+이 기록은 이후 GPU 연산/학습 경로의 동일성 보장이 아니며 과거 prefix 실패를 해소하지 않는다.
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_initial_state_capture.py
+python scripts/run_sac_initial_capture.py --driver retention -- --checkpoint ... --output ...
+python scripts/run_sac_initial_capture.py --driver refresh \
+  --expect-initial CONTROL/initial-learner.msgpack -- --checkpoint ... --output ...
+```
+
+새 테스트4개 통과: 입력/출력 정체성, 최초 1회만 기록, 바이트 불일치 시 update 차단과
+실패 원본 보존, nonfresh/BC 거절. py_compile/CLI help 통과. 위 실행 예시는 필수 driver
+인자를 생략한 사용 형식이며 실제 학습 실행 명령이 아니다.
+**GPU 실제 초기 상태 기록 및 두 실행 바이트 비교는 아직 미실행**이다.
+현재 read-only 진단 runner2944744/candidate-branch-Q2948776은21:11:11 실제 생존했다.
+다음 학습 예산/실행은 아직 결정하지 않았으며 원래 전체 목표는 미완료다.
