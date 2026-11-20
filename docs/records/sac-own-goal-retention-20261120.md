@@ -2014,3 +2014,69 @@ train/audit/verify/review4jobs가23:29:00에 모두exit0로 완료됐다.
 python -m json.tool outputs/sac_rejection_refresh_comparison1000_20261120/status.json
 python -m json.tool outputs/sac_rejection_refresh_comparison1000_20261120/candidate1000/report.json
 ```
+
+## 23:41 — 새 이력의 Q/미래보상 진단 연결·첫200전이 분포 검토
+
+직전 goal turn은 pilot 완료 검토·새1,000 비교 실행·노션 반영으로 실질 진전이었다.
+이번에는 runner3008213와 train3008214의 실제 생존을 다시 확인했고 조건을 유지했다.
+실행 중 동결한94source/83input SHA를 재검사했으며 모두 그대로였다.
+
+기존 정책 진단은 rejection scope를 지원하지 않으므로 별도
+`sac_rejection_diagnostic_audit.py`와 `diagnose_sac_rejection_branch_q.py`,
+`diagnose_sac_rejection_soft_returns.py`, `audit_sac_rejection_coverage.py`를 연결했다.
+새 scope는 전용 실제 lineage 감사, 기존 scope는 원래 감사기를 통과해야 한다.
+계약 누락/혼합/위장·미완료 감사는 거절한다. Q와 return 진입점은 원래 파일에서
+감사 import/hash만 바꿨고, coverage는 lineage종류/감사/결과 contract만 바꿨다.
+학습·보상·Gaussian·물리검사·PD·할인/entropy 계산은 바꾸지 않았다.
+기존 파일이 진행 중 비교에 동결돼 있어 별도 진입점으로 두었으며 src 변경0이다.
+
+검증: 관련CPU pytest30개 통과(0.38초, 신규adapter8+기존adapter8+bank8+복원6).
+세 새CLI --help, AST, diff검사 통과. 새adapter를 실제 pilot100·이전terminalrefresh1000·
+이전control1000 저장 이력에 CPU로 실행해 모두 COMPLETE를 확인했다. 새 GPU 정책
+진단 자체는 아직 미실행이며 테스트/저장감사를 주행 성능으로 확대하지 않는다.
+코드 `a99f463a514b52aa7515e870a60aa41d50a79d41` push/원격SHA 확인.
+
+### 후속 진단 실행 연결
+
+로컬 `sac_rejection_refresh_comparison1000_20261120/policy-diagnostics/`에
+runner3012859/session69685를23:39:52에 시작했고 실제 생존 확인했다.
+현재 WAITING_FOR_COMPARISON이며 부모 PID3008213/start_ticks74453793과 성공 종료를
+확인한 뒤에만 실행한다. 시간 만료로 재시작하지 않으며 부모 실패 시 그 상태를 남긴다.
+
+- source101/input149 SHA와 source복사본 동결. decision SHA
+  `4f48731e5fa0b99665164dfce8f6bc0baac50a0ae573f6d742c0be8668d1cc5e`.
+- 완료된 terminal-only 대조군의 coverage/branch-Q/soft-return 산출물을 바이트 그대로
+  복사해 재사용한다. 독립 평가 횟수나 장면 수를 늘리지 않는다.
+- 부모의 전체 개발평가/저장감사가 성공하면 새모델/replay/로그/초기learner와 완료
+  보고서 hash를 추가 동결하고 candidate-coverage → candidate-branch-q →
+  candidate-soft-returns → review를 순서대로 실행한다. 학습GPU와 겹치지 않는다.
+- coverage는6,000행·256,000배치추출, branch-Q는 같은 사전선택train 종료상태
+  KEEP77ae tick28/FOLLOWbaac tick59에서 기록/평균/원래Gaussian4표본을 실제 실행한다.
+  새행동이 실제 종료된 경우만 Q−reward를 종료오차로 해석한다.
+- soft-return은 같은 선행train상태KEEP tick0/FOLLOW tick4에서 평균첫행동 이후
+  원래Gaussian을4seed로 실제 종료까지 실행한다. 원래discount/entropy합과 모델/
+  replay/상태원본hash, 동일한 상태/명령/seed를 검산한다. 소표본이고 독립test가 아니다.
+- 이 진단은 가중치/경험을 수정하지 않으며 별도 수집·학습 예산을 추가하지 않는다.
+
+### 첫200 실제전이 기술통계: 이동 경험 증가로 단정할 수 없음
+
+로컬 `review_prefix.py`는 두 모델의 첫200개 완전한 JSONL행을 고정해 순서/업데이트/
+source연결을 확인하고 `collection-prefix200.json`을 생성했다. 이는 부분 수집 분포이며
+최종 replay 감사나 주행평가를 대체하지 않는다. 중간 상태 분포가 다르다.
+결과 SHA `087adeff928f784094e2f0e60d39b17908b8a1489bed24adb7f36b5abfced25e`.
+
+| 첫200전이 | terminal-only 대조군 | 비종료거절 후보 |
+| --- | ---: | ---: |
+| 이동 / 정지 | 86 / 114 | 81 / 119 |
+| 수락 경로 | 58 | 38 |
+| main / 완료경로 / refresh | 88 / 78 / 34 | 93 / 67 / 40 |
+| refresh 이동 / 정지 | 0 / 34 | 9 / 31 |
+| refresh 실제 비종료 / 충돌 | 0 / 34 | 38 / 2 |
+| 고유 refresh source 전이ID | 3 | 40 |
+
+양쪽 모두 KEEP3고유장면 범위다. 새 refresh40개의 source는 비종료거절38/실제종료2,
+새경로수락0, REUSED3/EMERGENCY37이다. 재수집의 이동 경험은 생겼지만 전체 이동 수는
+늘지 않았고, 실제 종료 실패 경험은 크게 줄었다. source를 넓히면서 terminal 노출을
+줄이는 교환이 생겼으며 이후 Q/미래보상과 전체 주행으로 검토해야 한다.
+refresh 충돌34→2는 안전성 향상이 아니라 재방문한 상태 분포의 변화일 수 있다.
+이 부분 결과를 전체1,000회나 안정성으로 외삽하지 않고 실행 조건을 유지한다.
