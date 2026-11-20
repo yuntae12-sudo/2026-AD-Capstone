@@ -1361,3 +1361,52 @@ GitHub blob SHA `22b1c3c55cad11fe6601261eea603dc7bcdf0ec2`와실제로사용하�
 공식근거/조회실패/남은확인을분리했다. 추가원본또는검증가능한매핑이확보되기전까지
 29/32·17오류·drive/시간독립성미확인상태를유지한다. 목표개수를채우려고train/dev를
 test로바꾸거나오류배열을자르거나ODD/reset/안전검사를완화하지않는다.
+
+## 21:52 — 기존1,000 완료, 두 실제 초기 learner 동일성 확인
+
+기존수집 control1,000과 저장 감사가 exit0 완료됐다. 새 전이1,000개에 actor/Q 각각
+1,000 update, BC0, 자기 warmup17배열 보존, 실제 lineage·종료pool·전체256,000 batch draw와
+RNG를 검산했다. main739/완료경로261,실제 신규목표종료1/실패종료14다.
+수집 중 목표1건은 평가 성공률이 아니며, 개발 주행 평가는 아직 실행 전이다.
+
+로컬 `outputs/sac_terminal_refresh_paired1000_20261120/`:
+
+- control1000/report SHA `83d7617463a4dfc5233f510eccb4f1cf062be8eda0da8d4624e7c94e5fc10bcf`.
+- audit-control SHA `62d4acd195f41d5fe6de85a046a454d928c523fcc3de7ca3110849adcb0245a0`.
+- 완료 learner SHA `8f2684693274526393030eb529b3879fa94df682ac220d4419f660d0a61b233d`.
+- 완료 replay SHA `c4c9a585c637e7e0409e3ef549148b489014973e56b69a340105d496edd81fef`.
+
+후보2962566이 실행됐고, 두 모델의 **첫 full SAC update 직전 전체 learner가 실제 바이트
+단위로 같음**을 확인했다. initial SHA는양쪽
+`7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c`다.
+후보 initial-state-audit SHA `d855f97b456d4c418f39b920fd461f7d2a0d97f36045a7a4d91046d616d15aab`,
+reference_bytes_equal=true. 21:52:38 후보181 update/refresh30이며,현재관찰한refresh는
+모두KEEP/실제충돌이다. FOLLOW수집·최종저장감사·주행개선으로확대하지않는다.
+
+실제 초기 파일을 읽어 mu head kernel/bias0, rho kernel0와 float32(log1.5) bias,
+actor/Q/전체update/BC카운터0을 따로 검산했다. 저장 rho에서 계산한 sigma는
+0.019999999928762665,log_alpha는−6.907755374908447이다. 기준서5절의평균head0
+초기화를유지하며임의가속bias를추가하지않았다. 로컬 `initial-control-review.json`
+SHA `c2554adfdb696121705cfd55c20a664dabf84b024d2f5c38b6f24d6fd7255b1f`.
+이는실제초기파일검사이며새모델재구성/정책성능검사가아니다.
+
+### 초기 동일성과 후속 수치 차이는 구분
+
+최초refresh는collection33이다. 실행중인후보의변하지않는첫32개완료tick/update줄만
+`prefix-observation/`에복사해대조했다. 이후계속늘어나는전체파일을동결했다고표시하지않았다.
+
+- 초기전체learner바이트일치,첫32개batch index hash일치.
+- 장면/provider/tick·판정/이유·source·종료/bootstrap의차이0.
+- 첫update의기록된scalar지표는같고,update2부터지표차이가나타났다.
+- raw_u의최대차이9.447475999039764e−8,서로다른31행.
+- 보상최대차이1.0146021175994058e−11.
+
+따라서초기화차이를배제한이번두실행도후속학습경로의완전수치동일성을주장하지않는다.
+모든숨은중간learner상태를기록한것은아니며,obs/next_obs전체prefix는후보replay저장후
+원래예정된검토에서대조한다. 재수집전의차이를재수집효과로설명하거나유일원인을
+확정하지않는다. 기존fresh100의엄격동일성실패도그대로보존한다.
+로컬prefix review SHA `3239177a968cb67cd3e2f968036e9431c37fbccd74248fa1a34e05f01b8084db`.
+
+기존 main2955496·후보2962566·후속2959705는유지한다. 실행조건/소스/예산변경0,
+후보완료→저장/실제source재현→16개발주행→후속현재행동진단의기존순서를따른다.
+안정정책과원래전체목표는아직미완료다. 추가평가원본인증에대한사용자응답은대기중이다.
