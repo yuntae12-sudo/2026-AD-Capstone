@@ -3235,3 +3235,33 @@ start_ticks75478893의성공완료·종료를기다린다. decision SHA
 2026-11-21T02:40:15.019991+09:00 현재583/1,000전이 저장과
 학습3069123/3069130, Q진단대기3070752, 분석대기3079803 생존을확인했다. 새정책의
 전체개발성능·Q검사와안정정책목표는미완료다.
+
+
+### 2026-11-21 — 608회 실행 중단 확인과 동일 조건 대체 실행
+
+02:40경 기존exec session56549가exit143을반환했다. 실제3069123/3069130도사라졌고,
+최종tick/update각608행·report608에서멈췄다. 원래status/report의RUNNING은과거값으로
+남았으며현재생존근거가아니다. 학습로그에Python예외는없고 종료를일으킨주체/원인은
+확인하지못했다. 단순관찰timeout으로간주한재시작이아니라실제프로세스소멸을확인했다.
+
+후속Q3070752와분석3079803은부모소멸을감지해FAILED로종료했다. 원본status/log/
+608행과앞선분석자료는보존하고 `interruption-review.json`에SHA와소멸근거를기록했다.
+학습후모델/replay checkpoint가없고initial learner만있어608지점의정확한복원은불가능하다.
+부분prefix검산은유효한관찰이지만최종성능이나전체감사통과로취급하지않는다.
+
+대체폴더는 로컬 `outputs/sac_successor_refresh_comparison1000_20261121_retry1/`이다.
+동일학습코드/설정/seed0/초기자기warmup5000으로fresh1,000을다시실행했다. 기존608을
+합산한1,608회모델이아니고추가학습조건의성능비교도아니다. 과거실행디렉터리를덮어쓰지않았다.
+원래jobs/models/cohorts/seed/budget은출력경로치환후동일,모든동결source/inputSHA도유지했다.
+초기learner SHA `7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c`가reference와바이트동일했다.
+
+runner3080418(start_ticks75640081)은02:42:10에별도session/process group으로시작했고
+학습child3080425는02:42:13 시작했다. stdin DEVNULL, stdout/stderr파일·start_new_session=True로
+호출세션과분리했다. 이변경이알수없는최초종료원인을해결했다고단정하지않는다.
+Q진단3080445와분석3080446도별도session이며부모3080418/start_ticks75640081에연결했다.
+decision SHA `d15bf4a2ce086628c46b56b8f67032209d95fdd0fe22859bb652018bf40c5a6f`.
+
+2026-11-21T02:43:59.171066+09:00 실제4프로세스와새저장11/1,000전이를확인했다.
+`recovery-launch.json`·`recovery-review.json`에실제핸들/명령과비교근거를저장했다. 새실행은
+학습→감사→실제후속재현→전체개발16회→원본검산후Q/실제미래보상·실패분석으로이어진다.
+현재전체평가/새성능/기본채택/안정정책은미완료다. 보상/검사/PD/BCteacher0변경없음.
