@@ -4619,3 +4619,56 @@ ellipsoid포함률44.6%(기존46.2%),sigma RMS거리중앙값1.51306(1.28893).
 기본4의2목표회복과정지4의전부실패·Q악화를함께유지한다. 전체미래보상8회·value/종료선호·
 최종hash검토후다음개입을결정한다. 지금시점새예산/새seed/독립test/기본채택없음,
 안정정책미확보·전체목표계속진행이다.
+
+
+### 2026-11-20 13:48 KST — 완료경로13job 최종 미달·고정정책 Q 진단 준비
+
+전체13job exit0·실제runner/child종료·39소스/원본증거/결과hash확인. 최종검토의첫실행은
+보고서dictionary key를tuple로잘못넣은KeyError로출력작성전실패했다. 실패한검토기를
+`finalize_review-before-key-fix.py`로보존하고개별key를명시해수정한뒤재실행exit0.
+학습/평가원본·동결소스·모델·replay는변경하지않았다. 최종검토SHA
+`6424aa2a40778af87b478a1f306d9fc9f7e8bfeb091c61acdc843f421a304c0d`.
+과거uniform/현재의8개원시frame에서도보고서횟수·reward합을독립재계산해확인했다.
+
+같은2train초기상태×4seed의실제미래보상8회는모두충돌이다.
+KEEP Q−실제soft-return평균12.43961→13.14753(현재Q−0.4295455,실제평균−13.57708,
+표본std1.73639), FOLLOW10.10064→10.39273(현재Q−0.2958649,실제평균−10.68860,
+std0.331456). KEEP실제return평균차이−0.342549,FOLLOW+0.006704.
+작은표본의조건부정책return추정이며정확한Q정답이나새독립평가가아니다.
+같은실제terminal전이를만드는평균을저장행동보다좋게평가하는오류도고정/branch4상태모두남았다.
+기본4는과거수준2목표회복,정지4는전부실패,Q도악화해 **미채택·추가학습예산없음**이다.
+
+다음은정책/alpha를고정한 **가치함수원인분리진단**이다. 현재모델의복사본에서
+같은2개사전선정train root를번갈아현재원래Gaussian으로실제주행하고,새1,000전이마다
+기존SAC수식의Q/target만1회보정한다. 자기replay6000/RNG를복사하고half_recent256유지.
+actor/alpha갱신은보존하지않아진단중정책과비교할soft-return목표를고정한다.
+보상/검사/PD/원래Gaussian/critic optimizer/lr/tau/BCteacher0 유지,가짜terminal없음.
+원본모델/replay를수정하거나이복사본을정책후보/production checkpoint로채택하지않는다.
+
+이진단은 **규약에맞는동시SAC학습후보가아니며학습규칙개정채택도아니다**.
+정책이안바뀌어도Q가실제비용을배울수있는지점검한다. 개선만으로정책변동이유일원인이라고
+결론내리지않고,1,000회내미개선도학습불가능의증명으로쓰지않는다. 새seed비교/전체개발/
+독립test확대없음. 이기록시점구현/실행전이며결정은로컬 `policy-decision.json`에보존했다.
+안정정책미확보·전체목표계속진행이다.
+
+
+### 2026-11-20 13:52 KST — 고정정책 critic 진단 구현·CPU 검증
+
+`scripts/sac_fixed_policy_critic.py`는원래canonical SAC update를복사learner에계산한뒤
+actor/log_alpha/alpha optimizer를원래값으로보존한다. Q/target/critic optimizer/RNG는
+canonical과같다. actor/temperature에대한지표는버린가상update값임을명시한다.
+BC state/teacher표본은거절한다. 핵심회귀3tests CPU통과(14.20s): 두연속update의
+Q/target/RNG byte동일·actor/alpha/그optimizer byte불변·원본불변·BC/teacher거절.
+
+`scripts/diagnose_sac_fixed_policy_critic.py`는완료모델/자기replay6000과RNG를복사하고,
+이전에선정된2train root를원래main raw행동prefix로복원해관측전체hash를대조한다.
+root를번갈아원래Gaussian으로새실제전이를수집한다(첫행동도확률표본).
+원본정책/alpha를고정하고새전이당Q1회보정,100회마다고정된MC첫평균행동의Q/targetQ를측정.
+MC평균4표본은정확정답이아니며첫평균재계산수치차이상한1e−9raw와첫Q1e−3허용을사전명시한다.
+
+원본17배열prefix·모델/replay/source hash·actor/alpha byte불변,1step/실제종료bootstrap,
+train root·branch부모불변을검증한다. actor보정0/temperature보정0을별도기록하며
+산출물은 `critic-evaluation-state.msgpack`/`diagnostic-replay.npz`로명명해정책checkpoint와구분한다.
+canonical update가계산한actor/temperature변경은폐기되므로동시SAC학습규약준수후보라고
+분류하지않는다. 기본SAC코드·보상·검사·PD·분포·기존후보가중치는변경하지않았다.
+compile/CLI/diff검사통과. 이시점실제새진단은미실행이며준비중이다.
