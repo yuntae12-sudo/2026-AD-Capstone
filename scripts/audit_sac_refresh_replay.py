@@ -1,0 +1,163 @@
+"""Audit actual terminal-refresh scheduling, source states and branch histories."""
+import json
+import hashlib
+from collections import Counter
+from pathlib import Path
+
+import numpy as np
+
+
+def audit(directory, manifest):
+    from scripts.sac_terminal_refresh import refresh_spec
+    from scripts.sac_branch_reconstruction import branch_history_indices
+    from src.training.sac.checkpoint import file_hash
+
+    read = lambda p: json.loads(p.read_text())
+    report = read(directory / "report.json")
+    assert report["status"] == "COMPLETE" and report["terminal_refresh"] == refresh_spec()
+    assert report["scope"] == "OWN_TERMINAL_REFRESH_SAC_COMPARISON"
+    assert not report.get("continuation_history")
+    assert file_hash(directory / "replay.npz") == report["saved_replay"]["sha256"]
+    assert file_hash(manifest) == report["versions"]["manifest_sha256"]
+    allowed = {(r["scene_id"], r["provider"]) for r in read(manifest)["rows"]
+               if r["split"] == "train" and r["status"] == "RESET_ACCEPTED"}
+    rows = [json.loads(x) for x in (directory / "ticks.jsonl").read_text().splitlines()]
+    logs = [json.loads(x) for x in (directory / "updates.jsonl").read_text().splitlines()]
+    assert len(rows) == len(logs) == report["updates"] == report["new_transitions"]
+    with np.load(directory / "replay.npz", allow_pickle=False) as archive:
+        arrays = {k: archive[k].copy() for k in archive.files if k != "metadata"}
+        meta = json.loads(str(archive["metadata"]))
+    assert meta["size"] == meta["cursor"] == 5000 + len(rows)
+    assert meta["versions"] == report["versions"] and not arrays["teacher_accepted"].any()
+    assert set(arrays["scene_id"]) <= {s for s, _ in allowed}
+    for key, field in [("raw_u", None), ("reward", "reward"), ("bootstrap", "bootstrap"),
+                       ("terminated", "terminated"), ("truncated", "truncated"),
+                       ("tick", "pre_tick"), ("episode_uid", "episode_uid"), ("scene_id", "scene_id")]:
+        values = [r[field] if field else r["raw_proposal"]["raw_u"] for r in rows]
+        np.testing.assert_array_equal(arrays[key][5000:], values)
+
+    def same_observation(i, j, previous_next=False):
+        for key in ("obs", "fields", "items"):
+            np.testing.assert_array_equal(arrays[key][5000+i],
+                arrays[("next_" if previous_next else "")+key][5000+j])
+
+    bank, cursor, bases, refreshes, expected_refresh = [], 0, 0, 0, False
+    parents, main_last, path_last = {}, {}, {}
+    counts = Counter()
+    config = report["collection"]
+    assert config["complete_path"] and config["samples"] == 1 and config["window"] == 6
+    assert config["selection"] == "moving_predecessors" and config["rollout_horizon"] == 200
+    assert not config["restart_terminal"] and not config["extend_selected"]
+    assert config["rollout_script_sha256"] == file_hash(Path("scripts/sac_failure_complete_path.py"))
+    assert config["branch_script_sha256"] == file_hash(Path("scripts/sac_failure_branches.py"))
+    assert config["fork_script_sha256"] == file_hash(Path("scripts/diagnose_sac_q_values.py"))
+    for i, (row, log) in enumerate(zip(rows, logs)):
+        assert row["collection_id"] == row["update"] == log["update"] == i+1
+        assert row["policy_updates_before"] == i
+        assert (row["scene_id"], row["provider"]) in allowed
+        assert row["tick"] == row["pre_tick"]+1 and row["delta_ticks"] == 1
+        assert row["bootstrap"] == (not (row["terminated"] or row["truncated"]))
+        lineage = row["lineage"]; kind = lineage["kind"]; counts[kind] += 1
+        assert (kind == "terminal_refresh") == expected_refresh
+        if kind == "terminal_refresh":
+            source_id = bank[cursor % len(bank)]
+            cursor = (cursor+1) % len(bank)
+            refreshes += 1; expected_refresh = False
+            assert lineage["bank_collection_ids"] == bank
+            assert lineage["source_collection_id"] == source_id
+            assert lineage["base_steps"] == bases and lineage["refresh_index"] == refreshes
+            source = rows[source_id-1]
+            assert source["lineage"]["kind"] in ("main", "failure_branch")
+            assert not source["bootstrap"] and source["terminal_reason"] in ("COLLISION", "OFFROAD")
+            assert lineage["source_outcome"] == source["terminal_reason"]
+            for field in ("scene_id", "provider", "pre_tick", "episode_uid"):
+                assert row[field] == source[field]
+            assert lineage["scene_id"] == row["scene_id"] and lineage["provider"] == row["provider"]
+            same_observation(i, source_id-1)
+            fingerprint = hashlib.sha256()
+            for field in ("obs", "fields", "items"):
+                value = arrays[field][5000+source_id-1]
+                fingerprint.update(str((value.dtype.str, value.shape)).encode())
+                fingerprint.update(value.tobytes())
+            assert lineage["source_observation_sha256"] == fingerprint.hexdigest()
+            continue
+        assert kind in ("main", "failure_branch")
+        if kind == "main":
+            key = row["episode_uid"], row["pre_tick"]
+            assert key not in parents; parents[key] = i
+            previous = main_last.get(row["episode_uid"])
+            if previous is None:
+                assert row["pre_tick"] == 0
+            else:
+                assert rows[previous]["bootstrap"] and rows[previous]["pre_tick"]+1 == row["pre_tick"]
+                same_observation(i, previous, True)
+            main_last[row["episode_uid"]] = i
+        else:
+            history = branch_history_indices(rows, i)
+            assert [rows[j]["pre_tick"] for j in history] == list(range(row["pre_tick"]+1))
+            root = lineage["parent_episode_uid"], lineage["parent_tick"]
+            trigger = lineage["parent_episode_uid"], lineage["trigger_tick"]
+            assert trigger in parents and parents[trigger] < i
+            assert not rows[parents[trigger]]["bootstrap"]
+            assert lineage["trigger_outcome"] == rows[parents[trigger]]["terminal_reason"]
+            assert lineage["trigger_outcome"] in ("COLLISION", "OFFROAD")
+            assert lineage["branch_sample"] == 0 and 0 <= lineage["branch_step"] < 200
+            assert lineage["root_selection_rule"] == "earliest_predecessor_then_rejection_then_recent"
+            if lineage["branch_step"] == 0:
+                same_observation(i, parents[root])
+                assert lineage["state_selection"] == "moving_predecessors"
+                role = lineage["selection_role"]
+                assert role in ("moving_predecessor", "moving_rejection", "recent", "terminal")
+                parent = rows[parents[root]]
+                if role in ("moving_predecessor", "moving_rejection"):
+                    assert arrays["obs"][5000+parents[root], 5]*30 >= .1-1e-6
+                if role == "moving_predecessor":
+                    assert parent["check_valid"]
+                    rejected = (root[0], lineage["predecessor_rejection_tick"])
+                    assert rejected in parents and not rows[parents[rejected]]["check_valid"]
+                    assert 0 < rejected[1]-root[1] < 6
+                elif role == "moving_rejection":
+                    assert not parent["check_valid"]
+                elif role == "terminal":
+                    assert root == trigger
+            else:
+                same_observation(i, lineage["previous_collection_id"]-1, True)
+            previous_path = path_last.get(trigger)
+            if previous_path is not None:
+                assert lineage["previous_collection_id"] == previous_path+1
+            else:
+                assert lineage["branch_step"] == 0
+            path_last[trigger] = i
+        bases += 1
+        if not row["bootstrap"] and row["terminal_reason"] in ("COLLISION", "OFFROAD"):
+            if len(bank) == 8:
+                bank.pop(0); cursor = max(0, cursor-1)
+            bank.append(i+1)
+        expected_refresh = bool(bank) and bases % 4 == 0
+    for i in path_last.values():
+        assert not rows[i]["bootstrap"] or all(r["lineage"]["kind"] == "terminal_refresh" for r in rows[i+1:])
+    assert counts["main"] == config["main_transitions"]
+    assert counts["failure_branch"] == config["branch_transitions"]
+    assert counts["terminal_refresh"] == report["refresh_transitions"] == refreshes
+    assert refreshes <= bases // 4
+    assert report["refresh_terminal_transitions"] == sum(
+        not r["bootstrap"] for r in rows if r["lineage"]["kind"] == "terminal_refresh")
+    assert config["branch_terminal_transitions"] == sum(
+        not r["bootstrap"] for r in rows if r["lineage"]["kind"] == "failure_branch")
+    episode_groups = {}
+    for row in rows:
+        if row["lineage"]["kind"] == "main":
+            episode_groups.setdefault(row["episode_uid"], []).append(row)
+    assert len(episode_groups) == len(report["episodes"])
+    for recorded, actual in zip(report["episodes"], episode_groups.values()):
+        assert recorded["scene_id"] == actual[0]["scene_id"] and recorded["provider"] == actual[0]["provider"]
+        assert recorded["ticks"] == len(actual) and recorded["accepted"] == sum(r["check_valid"] for r in actual)
+        assert recorded["outcome"] == (actual[-1]["terminal_reason"] or "DIAGNOSTIC_BUDGET")
+        np.testing.assert_allclose(recorded["return_training"], sum(r["reward"] for r in actual), rtol=0, atol=1e-10)
+    return dict(status="COMPLETE", qualified=False, counts=dict(counts), base_steps=bases,
+        refresh_steps=refreshes, exact_refresh_parent_observations=refreshes,
+        unique_refresh_sources=len({r["lineage"]["source_collection_id"] for r in rows
+                                    if r["lineage"]["kind"] == "terminal_refresh"}),
+        refresh_outcomes=dict(Counter(r["terminal_reason"] or "NONTERMINAL" for r in rows
+                                     if r["lineage"]["kind"] == "terminal_refresh")),
+        note="Exact train lineage, actual flags, refresh schedule/FIFO, source and successor arrays; no invented terminal.")

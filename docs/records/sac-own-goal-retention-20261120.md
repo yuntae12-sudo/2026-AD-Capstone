@@ -991,3 +991,53 @@ KEEP는 현재 행동 오차도 개선됐다. 모든 실패 상태의 같은 현
 이 제안은 기본 설정 채택이나 성능 입증이 아니다. 아직 코드 구현/새 학습 실행0이며
 구체적인 비중·비교 예산은 구현 검토 후 고정한다. 최종 주행 개선·전체 개발 validation·
 다른 seed·동일 조건 Rule-based·별도 평가는 계속 미완료다.
+
+## 20:37 실패 직전 상태 재수집 구현과 fresh100 실제 검사 시작
+
+앞선 FOLLOW 현재 행동의 실제 종료 Q 오차를 겨냥한 별도 수집 옵션을 구현했다.
+`scripts/sac_terminal_refresh.py`는 실제 main/완료 경로의 충돌·이탈 직전 상태를
+FIFO8개까지 보존하고, 기존 수집 전이4개마다 최대1개를 순환 선택한다.
+현재 actor의 원래 Gaussian으로 실제 실행하며 재수집 실패는 bank에 재투입하지 않는다.
+행동을 골라 버리거나 과거 보상을 복사하지 않는다. 현재 정책의 실제 대안이 비종료면
+원래 bootstrap과 next_obs를 그대로 보존한다. 최대 재수집 비중은 새 전이의20%다.
+
+`scripts/diagnose_sac_terminal_refresh.py`는 기존 fresh terminal-retention driver와
+분리했다. 기존 complete-path와 목표8+실패8 sampler,모델·초기화·배율·원래Gaussian·
+보상·검사·PD·전이당전체SAC update1·BCteacher0 유지. 원래 경로의 collection_id를
+중간 재수집 ID와 분리해 successor를 실제 이전 경로 전이에 연결한다.
+continuation은 거절하고 최초 자기warmup5,000만 재사용한다.
+
+`scripts/audit_sac_refresh_replay.py`와 `scripts/audit_sac_terminal_refresh.py`는
+실제 parent/next_obs 배열·실패source와관측fingerprint·FIFO/주기/순환·train분할·
+원본warmup17배열·종료pool·전배치hash/RNG·전체actor/Q/BC카운터를 검산한다.
+`scripts/verify_sac_terminal_refresh_execution.py`는 명령/source종류별 첫 재수집을
+선택해 실제 원본 경로를 재현한 뒤 저장 행동과 재수집 행동을 각각 실행하고
+관측·보상·검사·제어·종료·다음관측 및 부모 불변성을 대조한다.
+
+실행한 사전 검사:
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=. python -m pytest -q \
+  tests/training/test_sac_terminal_refresh.py \
+  tests/training/test_sac_failure_complete_path.py \
+  tests/training/test_sac_terminal_retention_sampling.py
+git diff --check
+```
+
+33passed. 새 bank7개와 기존 경로/배치 검사를 포함하며 실제 GPU/Waymax·주행 성능은
+아직 대체하지 않는다. 새 파일 문법 검사도 통과했다. 과거 동결 소스와 src/*는 수정하지 않았다.
+
+로컬 `outputs/sac_terminal_refresh_pilot100_20261120/`에 seed0·fresh100회씩의
+후보/기존 수집 대조를 연결했다. 같은 자기warmup5,000, B-float64/raw mean gain0.0001,
+physical_whitened Q/zero-action init, 목표8+실패8배치, samples1/window6/
+moving_predecessors/horizon200/complete_path다. 기존1,000/3,000/critic-only 가중치를
+가져오지 않고 같은 초기 learner에서 각각 시작한다. 다른 맥락 파일의 해시가 입력
+목록에 포함돼 있으나 학습 초기화에는 checkpoint의 자기warmup prefix만 사용한다.
+
+runner2929909(session39768),학습child2929929 실제생존 확인. 최초 새 실제전이3개와
+update3개가 기록됐다. 61소스/22입력 및61소스복사본 동결,
+decision SHA `7e07134a4ab05404d75b29ec2c5738e4a58ad75ff91567b46dc683f03f3a3594`.
+7jobs: 후보100→저장감사→실제재현→기존100→저장감사→기존4주행→후보4주행.
+주행은 같은2개 개발장면8b4c1e7e09f5f4c3/8a4fba3463c6c62d×KEEP/FOLLOW이며
+독립test가 아니다. 예산/입력/소스 실패 시 중단하고1000회나 채택으로 자동 확대하지 않는다.
+현재 실제 재수집·완료 저장·재현·주행 결과는 미완료이고 전체 목표도 미완료다.

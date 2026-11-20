@@ -176,3 +176,31 @@ SAC seed별 차이와 그 평균·표본 표준편차를 보고한다. BC-only/B
 이 진단의 평균 행동을 학습 replay에 넣거나 확률 수집 정책을 변경하지 않는다.
 관련28pytest와 기존 실제1,000회의 배치/RNG 재구성 검증을 마쳤다. 새 GPU 거리/분기
 실행은 현재3,000 학습과 주행/미래보상 평가의 성공 종료 뒤 수행하도록 연결했다.
+
+### 실제 실패 직전 상태의 현재 정책 재수집 비교
+
+`scripts/diagnose_sac_terminal_refresh.py`는 별도 fresh 실험 진입점이다.
+기존 complete-path 수집과 `own_goal8_failure8` 배치를 보존하면서 실제 main 또는
+failure_branch에서 충돌/이탈한 직전 상태를 최근8개까지 보존한다. 기존 수집 전이
+4개마다 최대1개를 FIFO 퇴출·순환 선택해 최신 actor의 원래 Gaussian으로 다시 실행한다.
+재수집이 만든 실패는 bank에 다시 넣지 않는다. 따라서 새 전이 중 재수집 비중은
+최대20%이며 초반 bank가 비었거나 예산이 끝나면 더 작다.
+
+이 옵션은 행동 선택·평균 출력·잡음·보상·안전검사·PD를 바꾸지 않는다. 실제 결과가
+과거와 같다고 가정하지 않고 원래 collector가 계산한 보상·종료·next_obs를 저장한다.
+비종료 대안의 bootstrap은 유지한다. teacher/BC0, 자기 전이당 전체SAC update1,
+batch256·손실·lr·tau도 유지한다. 규약5절의 확률 행동과10절의 전이당 update 조건을
+유지하는 상태 수집 분포 비교이며, 균등 상태 방문이나 기본 설정 채택을 뜻하지 않는다.
+
+`scripts/sac_terminal_refresh.py`가 bank와 비중을 관리한다. 원래 경로의 전이 ID를
+재수집 ID와 분리해 실제 successor 연결을 유지한다. 별도
+`scripts/audit_sac_terminal_refresh.py` 및 `scripts/audit_sac_refresh_replay.py`는
+원본warmup17배열·실제 종료·main/branch/refresh 이력·FIFO/순환/주기·동일 source
+관측·배치hash/RNG·actor/Q/BC 카운터를 검산한다.
+`scripts/verify_sac_terminal_refresh_execution.py`는 명령/source종류별 첫 재수집을
+선택해 실제 원본 경로와 저장 행동·재수집 행동을 Waymax에서 재실행한다.
+
+관련33pytest를 통과했고 seed0·동일 자기warmup5,000·동일 모델 설정의 fresh100회
+후보/기존 수집 비교를 시작했다. 학습·저장·실제재현·같은 두 개발장면×KEEP/FOLLOW
+평가를 순서대로 연결했다. 실제 실행 결과와 성능은 별도 기록하며 테스트 통과를
+주행 개선으로 해석하지 않는다. continuation과 다음 예산은 아직 지원/선택하지 않는다.
