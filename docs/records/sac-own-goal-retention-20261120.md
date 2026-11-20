@@ -3265,3 +3265,29 @@ decision SHA `d15bf4a2ce086628c46b56b8f67032209d95fdd0fe22859bb652018bf40c5a6f`.
 `recovery-launch.json`·`recovery-review.json`에실제핸들/명령과비교근거를저장했다. 새실행은
 학습→감사→실제후속재현→전체개발16회→원본검산후Q/실제미래보상·실패분석으로이어진다.
 현재전체평가/새성능/기본채택/안정정책은미완료다. 보상/검사/PD/BCteacher0변경없음.
+
+
+### 2026-11-21 — 현재후보와 Rule-based의4개 GIF 생성 연결
+
+대체실행폴더의 `render_reviewed_pairs.py`와 `visualization/decision.json`에
+고속8b4c1e7e09f5f4c3·정지출발8dd5939855c15b3f 각각 KEEP/FOLLOW,2고유장면·4쌍을
+현재최종결과가나오기전에지정했다. 과거회귀/정지출발을근거로고른설명용사례이며
+무작위/대표표본이아니다. 전체개발8장면16회결과를대체하지않는다.
+
+실제부모3080418/start_ticks75640081의성공완료·종료뒤원본full-review를검산하고
+동일seed/초기frame/map·최종model/report SHA가일치하는 Rule/SAC trace만읽는다.
+새정책실행/episode/학습은0,기존renderer를사용해공통축·물리시간1x·마지막1.5초hold로
+4GIF/최종PNG/evidence를만든다. 출력은 `visualization/high-speed-keep.gif`,
+`high-speed-follow.gif`, `stopped-start-keep.gif`, `stopped-start-follow.gif`다. 현재미생성이다.
+
+과거완료종류별1,000의4쌍으로evidence조립만검증했고새그림/주행을생성하지않았다.
+최초preflight는Rule 보상합의엄격float동일성검사에서5.551115123125783e−17 차이로
+실패했다. 기존full-review와같은return절대1e−10허용으로맞추고이산개수는정확히대조해
+4쌍통과했다. 물리검사/학습조건의허용오차는변경하지않았다.
+
+renderer3085826은02:49:27 별도session으로시작·현재실제생존확인. decision SHA
+969dd4e3d6e57a0fb62ffbccde0a1eea8a864f9fc6f887ef979cec979821b648, preflight SHA
+9240100deb0c9de45c86d94d22dde86f2109f59344518404fcc52fa1bf81b5f7.
+완료상태는 `COMPLETE_PENDING_VISUAL_INSPECTION`이며프레임수/크기/총시간/원본SHA
+검산뒤직접그림검토는남긴다. 2026-11-21T02:50:03.601193+09:00 학습은
+168/1,000 진행중이고모든동결학습/진단source/inputSHA는유지했다.
