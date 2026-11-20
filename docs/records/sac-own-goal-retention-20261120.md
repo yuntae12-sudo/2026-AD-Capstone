@@ -71,3 +71,25 @@ py_compile/CLI/help/diff검사통과. 실제학습·저장감사·주행비교�
    기본채택·확대평가·추가예산을자동승인하는gate가아니다.
 
 안정정책→전체개발validation→다른seed→같은조건Rule-based·별도test는여전히미완료다.
+
+## 17:25 실행 시작·17:31 중간 확인
+
+구현 코드 `1c86e9f5eb1587cc86bfbd29dc2a7214766e1d47` push/원격 SHA 동일 확인.
+17:25:37 KST `outputs/sac_own_goal_retention_20261120/run_pilot.py`가 실제 실행을 시작했다.
+runner2847542, 첫control100 child2847555였다. 17:31 대조군100전이와저장감사(exit0)를
+완료했고 후보child2851200은29/100전이 실행중이었다. 이것은중간관측이며최종성능결과가아니다.
+
+`decision.json` SHA `243a29b46a8ab874c92dba7c593a046e3b93453644536daa46e3cd0bb024fcb4`에
+동일조건·정확한8job명령과56개동결소스/입력해시를기록했다. 과거source53개와신규3개
+sampler/driver/auditor를보존했다. `sources/`는로컬실행소스사본이다.
+진행은`status.json`의jobs와각job별log, 각arm의`report.json`에서확인한다.
+
+17:30:35 후속CPU검토runner2853566도시작했다. 두저장감사완료후
+`review_training.py`가warmup17배열/모든추출hash/RNG와성공6·실패44·기타12의
+동일실제종료행 Q를대조한다. 전체8job/실제runner종료후`review_pilot.py`가16주행의
+원시frame에서지표를재계산하고두모델의초기frame/map/장면쌍을대조한다.
+두검토기는compile만통과했고실제완료산출물검토는아직미실행이다.
+상태는`reviews-status.json`이며실패하면기록하고추가예산을자동실행하지않는다.
+
+노션Home/02/03의68절/04에이전30주행실패·자기성공가치악화·새구현/실행시작을반영했고
+4페이지를재조회해핵심상태/수치/커밋링크와기존67절보존을확인했다.
