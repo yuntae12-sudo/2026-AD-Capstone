@@ -84,6 +84,20 @@ def test_precision_change_is_not_silent_continuation(completed, key, value):
         check(completed)
 
 
+def test_replay_sampling_cannot_change_silently_on_resume(completed):
+    from scripts.sac_diagnostic_sampling import sampling_spec
+    path, source, arm, collection = completed
+    recent = sampling_spec("half_recent256")
+    with pytest.raises(ValueError, match="replay sampling"):
+        validate_source(path, source["versions"], arm, collection, 3, replay_sampling=recent)
+    source["replay_sampling"] = recent
+    (path / "report.json").write_text(json.dumps(source))
+    assert validate_source(path, source["versions"], arm, collection, 3,
+                           replay_sampling=recent) == source
+    with pytest.raises(ValueError, match="replay sampling"):
+        check(completed)
+
+
 def test_rejects_corrupted_artifact_or_missing_history(completed):
     path = completed[0]
     p = path/"replay.npz"

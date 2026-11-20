@@ -22,10 +22,14 @@ ARM_FIELDS = (
 )
 
 
-def validate_source(directory, version, variant, collection, total_budget):
+def validate_source(directory, version, variant, collection, total_budget, replay_sampling=None):
     """Check lineage before restoring optimizer/target/RNG and actual replay."""
     directory = Path(directory)
     source = json.loads((directory / "report.json").read_text())
+    from scripts.sac_diagnostic_sampling import report_sampling_mode, sampling_spec
+    mode = report_sampling_mode(source)
+    if sampling_spec(mode) != (replay_sampling or sampling_spec()):
+        raise ValueError("continuation cannot change replay sampling")
     arm = source.get("arms", {}).get("online", {})
     updates = source.get("updates", 0)
     if (source.get("status") != "COMPLETE" or arm.get("status") != "COMPLETE"
@@ -71,7 +75,7 @@ def continuation_lineage(directory, source, collection_seed):
             "report.json", "online-learner.msgpack", "replay.npz", "ticks.jsonl", "updates.jsonl")},
         inherited_online_updates=source["updates"],
         collection_seed=collection_seed,
-        note="Learner/optimizer/targets/learner RNG and uniform replay RNG continue. "
+        note="Learner/optimizer/targets/learner RNG and declared replay sampling RNG continue. "
              "Collection environment and scene/policy RNG restart explicitly; not exact rollout resume. "
              "No artificial terminal is inserted for the inherited budget boundary.",
     )

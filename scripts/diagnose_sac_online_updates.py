@@ -21,6 +21,8 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--updates", type=int, default=100)
+    parser.add_argument("--replay-sampling", choices=("uniform", "half_recent256"),
+                        default="uniform", help="Separate opt-in replay weighting comparison")
     parser.add_argument("--continue-from", type=Path,
                         help="Completed same-configuration diagnostic; --updates is the total target")
     parser.add_argument("--collection-seed", type=int,
@@ -125,6 +127,7 @@ def main():
     from scripts.sac_experiment_runtime import model_proposer
     from scripts.sac_diagnostic_critic import diagnostic_critic, critic_factory_hash
     from scripts.sac_diagnostic_actor import diagnostic_actor, actor_factory_hash
+    from scripts.sac_diagnostic_sampling import sampling_spec, sample_recent
 
     config = json.loads((args.configuration / "report.json").read_text())
     variant = dict(config["arms"][args.variant])
@@ -212,6 +215,7 @@ def main():
         new_transitions=0,
         updates=0,
         budget=args.updates,
+        replay_sampling=sampling_spec(args.replay_sampling),
         note="Fresh learner; first 5000 old own-policy warmup only. Scene/policy RNG restart: a new diagnostic branch, not exact continuation. Each new transition is inserted before one update. Validation never enters replay. Mid-episode budget endings are not successful episodes.",
         collection=dict(
             mode="actual_failure_branches" if args.failure_branch_samples else "sequential",
@@ -231,7 +235,7 @@ def main():
             main_transitions=0, branch_transitions=0, branch_terminal_transitions=0,
             branch_script_sha256=file_hash(Path(__file__).with_name("sac_failure_branches.py")),
             fork_script_sha256=file_hash(Path(__file__).with_name("diagnose_sac_q_values.py")),
-            note="Uniform replay. Branches retain parent episode UID/tick; collection_id identifies independent actual steps. Branches are not full evaluation episodes. Nonterminal branch steps retain bootstrap; no artificial truncation.",
+            note="Replay weighting is declared separately in replay_sampling. Branches retain parent episode UID/tick; collection_id identifies independent actual steps. Branches are not full evaluation episodes. Nonterminal branch steps retain bootstrap; no artificial truncation.",
         ),
         episodes=[],
         arms={},
@@ -251,7 +255,8 @@ def main():
             mean_basis_precision=variant.get("mean_basis_precision", "default"),
             actor_factory_sha256=(actor_factory_hash() if variant.get("mean_basis_precision", "default") != "default" else None),
         )
-        source = validate_source(args.continue_from, version, expected_arm, report["collection"], args.updates)
+        source = validate_source(args.continue_from, version, expected_arm, report["collection"], args.updates,
+                                 replay_sampling=report["replay_sampling"])
         if (source["seed"] != seed
                 or source["source_checkpoint_sha256"] != report["source_checkpoint_sha256"]
                 or source["configuration_sha256"] != report["configuration_sha256"]):
@@ -305,8 +310,14 @@ def main():
         result = step.result
         if step.transition is None:
             raise RuntimeError("invalid diagnostic transition; stop")
+        sampling_trace = {}
+        if args.replay_sampling == "uniform":
+            batch = replay.sample(256)
+        else:
+            batch, digest = sample_recent(replay)
+            sampling_trace = dict(replay_indices_sha256=digest, replay_size=replay.size)
         with jax.default_device(gpu):
-            state, metrics = update(state, replay.sample(256), replay.size)
+            state, metrics = update(state, batch, replay.size)
         kind = lineage["kind"]
         report["collection"]["branch_transitions" if kind == "failure_branch" else "main_transitions"] += 1
         if kind == "failure_branch":
@@ -350,6 +361,7 @@ def main():
                     dict(
                         update=int(state.updates),
                         **{k: float(v) for k, v in metrics.items()},
+                        **sampling_trace,
                     ),
                     allow_nan=False,
                 )

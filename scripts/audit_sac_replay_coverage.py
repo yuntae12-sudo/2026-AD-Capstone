@@ -15,15 +15,26 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-def sampling_exposure(seed, updates, warmup=5000):
-    """Replay.sample's exact index RNG, provided one draw follows each insertion."""
+def sampling_exposure(seed, updates, warmup=5000, mode="uniform", draw_log=None):
+    """Reconstruct declared index RNG and verify recorded mixed-batch hashes."""
     import numpy as np
+    from scripts.sac_diagnostic_sampling import draw_indices, indices_hash, MODES
+
+    if mode not in MODES:
+        raise ValueError("unknown replay sampling mode")
+    if mode != "uniform" and (draw_log is None or len(draw_log) != updates):
+        raise ValueError("recent replay requires complete draw history")
 
     rng = np.random.default_rng(seed)
     counts = np.zeros(warmup + updates, np.int64)
     fresh = 0
     for step in range(1, updates + 1):
-        indices = rng.choice(np.arange(warmup + step), 256, replace=True)
+        indices = draw_indices(rng, warmup + step, mode)
+        if mode != "uniform":
+            row = draw_log[step - 1]
+            if (row.get("update") != step or row.get("replay_size") != warmup + step
+                    or row.get("replay_indices_sha256") != indices_hash(indices)):
+                raise ValueError(f"replay draw history mismatch at update {step}")
         counts += np.bincount(indices, minlength=len(counts))
         fresh += int(np.count_nonzero(indices >= max(warmup, warmup + step - 100)))
     return counts, rng.bit_generator.state, fresh
@@ -113,7 +124,14 @@ def main():
                 raise ValueError("invalid branch collection lineage")
         np.testing.assert_array_equal(online.arrays["raw_u"][offset:online.size],
                                       np.asarray([r["raw_proposal"]["raw_u"] for r in lineage]))
-    counts, rng_state, fresh = sampling_exposure(source["seed"], source["updates"])
+    from scripts.sac_diagnostic_sampling import report_sampling_mode
+    sampling_mode = report_sampling_mode(source)
+    draw_log = None
+    if sampling_mode != "uniform":
+        draw_log = [json.loads(line) for line in
+                    (args.diagnostic / "updates.jsonl").read_text().splitlines()]
+    counts, rng_state, fresh = sampling_exposure(source["seed"], source["updates"],
+                                                mode=sampling_mode, draw_log=draw_log)
     if not args.reconstructed:
         assert online.rng.bit_generator.state == rng_state
     weights = args.diagnostic / "online-learner.msgpack"
@@ -260,6 +278,8 @@ def main():
         rms_95pct_cutoff=cutoff,
         groups=summary,
         sampling=dict(
+            mode=sampling_mode,
+            draw_hashes_verified=sampling_mode != "uniform",
             total_draws=int(counts.sum()),
             warmup_draws=int(counts[:5000].sum()),
             online_draws=int(counts[5000:].sum()),
