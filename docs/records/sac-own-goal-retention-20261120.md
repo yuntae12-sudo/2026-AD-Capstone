@@ -4131,3 +4131,40 @@ python scripts/monitor_sac_continuation.py --output outputs/sac_refresh_matched1
 다음은실제수집·업데이트를관찰하며고정예산을마친뒤다중주행지표/Q/실패분석/영상을
 함께검토하는것이다. 보상/검사/PD/원래Gaussian/순수SAC조건유지. 안정정책·다른seed·
 최종Rule비교·별도평가목표는계속미완료다.
+
+#### 2026-11-21 07:45 KST 재개 FOLLOW 경로의 실제 충돌·학습 노출 확인
+
+읽기 전용 진단/모니터 구현은 `4d9fdc0227a0a8dea5e02e844028563a716011bd`에
+commit/push됐으며 이번에 원격 SHA를 재확인했다. 본 학습의 실행 코드는 f0a21c4 그대로다.
+07:44에 원래 decision의 동결595파일을 모두 재해시했고 변경0이었다. main runner와
+학습 PID/start_ticks, 대기 중인 실패분석/GIF/Q worker 세 개의 실제 생존을 확인했다.
+07:45:38 후보 누적1,236/10,000(새236/9,000), 대조군은 기존1,000에서 대기 중이다.
+
+첫100개 신규 원본 전이/업데이트의 고정 prefix를 검산했다. 기존1,000행 보존과
+부모 replay RNG에서 이어지는100개 batch 해시가 일치했다. 새 경험은 main80/refresh20,
+그중 이어진 FOLLOW10개는 수락0이며 tick39의 행동 전 속도가0.1m/s 미만이었다.
+로컬 `outputs/sac_refresh_matched10000_20261121/first-hundred/review.json` SHA
+`8186cb6b30ddcbe229f574497d9b65692f970b4109559d4982870c025f35a05b`.
+
+이후 source533/path145의 FOLLOW가 실제 충돌까지 이어졌다. collection1215까지의
+고정 원본 prefix를 따로 저장하고 신규215전이/215전체SAC 및215개 batch 해시를 검산했다.
+기존28개와 새22개로 총50step, 환경 pre tick2부터51/종료tick52다. path_step0..49,
+같은 episode UUID, 이전 collection 연결, 중간 비종료/bootstrap=true 및 마지막
+COLLISION/bootstrap=false를 대조했다. 섞여 있는 main/다른 refresh 행은 경로에서 제외했다.
+
+새22개는 모두거절·EMERGENCY이며 KINEMATIC_LIMIT10개/PREDICTED_COLLISION12개다.
+총50개중수락5개는모두기존구간이고새수락0이다. 첫정지pre tick39→실제충돌tick52이며
+마지막보상은−20.017이다. 마지막실제경험의 replay index6214가 update1215의재구성한
+배치에1회포함됐음을확인했다. 기록에존재하는것과실제로학습배치에노출된것을구분한다.
+
+로컬 `follow-terminal-prefix/review.json` SHA
+`286f5ca3394e8515e565d50a53eb80cc703ecabacaaca35a58f7d6d354a45d30`,
+`review_follow_terminal.py`와 `follow-terminal-review.log`에 재현/검산 근거가 있다.
+새215개 전체는main172/refresh43이며새failure branch0이다. 최종replay/learner는아직
+저장전이므로이번검토는원본prefix/복원정보/샘플링RNG와기록된업데이트의연결에한정한다.
+가중치가계속바뀌는동안수집한한train경로이며고정최종정책평가나주행개선은아니다.
+
+충돌위치의접촉방향은이번로그검토로확인하지않았으므로뒤차충돌로단정하지않는다.
+학습조건/예산/보상/안전검사/PD/BCteacher0를변경하지않았고추가PR/병합없음.
+다음은고정총10,000의양쪽완료후전체개발16회/Q/실패분석/영상을함께평가하는것이다.
+안정정책·다른seed·최종Rule비교·별도평가목표는계속미완료다.
