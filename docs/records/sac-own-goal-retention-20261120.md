@@ -2644,3 +2644,63 @@ python outputs/sac_stratified_refresh_comparison1000_20261121/review_bank_prefix
 
 이 작업은 읽기 전용 분석이며 실행 중 학습 소스/설정/보상/검사/PD·BC/teacher0을
 변경하지 않았다. 새로운 학습/정책 평가/pytest를 추가로 실행한 결과가 아니다.
+
+## 2026-11-21 01:12 — 완료된 대조군의 실제 학습 장면·명령·초기속도 노출
+
+진행 중인 종류별1,000회가 끝나기 전에 이전 두 완료 대조군의 입력 분포를 검산했다.
+새로운 정책 평가가 아니라 저장 replay와 실제 배치 추출 이력에 대한 읽기 전용 분석이다.
+현재 후보의 최종 범위나 성능을 이전 결과로 대체하지 않는다.
+
+`review_dataset_exposure.py`에서 실제 replay 해시·warmup provenance/6개 메타배열·
+episode/scene/tick 연결·관측의 명령 one-hot와 mask·배치 indices SHA/RNG를 대조했다.
+manifest의 train59장면/110쌍에만 속하는지 확인하고 실제 main episode 순서가 seed0
+permutation과 일치하는지 확인했다. 관측 명령 검사는 warmup과 신규를 합친6,000행이다.
+
+두 대조군 모두 자기warmup5,000은63개의 episode에서 온47고유장면/63쌍이며,
+신규1,000은8고유장면/8쌍이다. 신규8쌍은 이미 warmup에 포함되어 전체 replay도
+47장면/63쌍이다. 이는 저장/추출 범위이지 현재 정책의 성공 경험 또는 행동 coverage가 아니다.
+
+| 실제 배치 사용 범위 | 비종료 수집1,000(주 대조군) | terminal-only1,000(보조 참조) |
+| --- | ---: | ---: |
+| 전체 배치 추출 | 256,000 | 256,000 |
+| 과거 자기warmup5,000 추출 | 145,285(56.752%) | 141,963(55.454%) |
+| 신규1,000 추출 | 110,715 | 114,037 |
+| 신규 KEEP/FOLLOW 전이 | 609 / 391 | 676 / 324 |
+| 신규 KEEP/FOLLOW 배치 추출 | 62,240 / 48,475 | 75,137 / 38,900 |
+| 정지 출발 장면의 신규 전이 / 추출 | 0 / 0 | 0 / 0 |
+| 정지 출발 장면의 warmup 전이 / 추출 | 687 / 22,189 | 687 / 21,578 |
+
+여기서 정지 출발은 manifest reset 초기속도<0.1m/s다. 이동 장면에서 제동 후 정지한
+전이를 이 그룹에 포함하지 않으므로 기존 전체 정지 전이3,347개라는 수치와 다르다.
+warmup의 정지 출발 경험은5고유장면/7쌍을 포함한다. **정지 출발 학습 데이터 전체가
+없다는 뜻이 아니라, 이 두 짧은 비교에서는 현재 정책의 신규 경험이 없다는 뜻이다.**
+
+train에는 KEEP/FOLLOW 각각 정지 출발5쌍·저속4쌍, 중속27/23쌍·고속23/19쌍이 있다.
+seed0 순서의 첫 정지 출발은9번째1bedf33cd20c1e7b/FOLLOW이며 두 완료 대조군은
+8번째 장면 진행 중1,000전이 예산을 소진했다. 분기/재수집도 실제 학습 예산을 쓴다.
+짧은 fresh 실험을 같은 seed에서 반복하는 것만으로 전체 train 경험이 늘지는 않는다.
+
+이 분포는 초기속도별 평가를 해석할 때 고려해야 할 한계다. 분포 편중을 주행 실패의
+유일 원인으로 단정하거나, 장면 순서 변경만으로 정지 출발 문제가 해결된다고 주장하지
+않는다. 현재 후보 완료 후 동일 검산과 정지 출발4개 개발 평가·Q 결과를 함께 검토한다.
+이전부터 확인된 정지 상태의 매우 작은 행동 탐색/평균 변화 문제도 별도 원인으로 유지한다.
+이 분석 때문에 현재 실행의 장면 순서·전이 예산·배치·보상·안전검사·PD를 바꾸지 않았다.
+
+로컬 `outputs/sac_stratified_refresh_comparison1000_20261121/`:
+
+- `JAX_PLATFORMS=cpu python …/review_dataset_exposure.py --arm control`,
+  `--arm terminal_reference` 실행 완료. `--arm candidate`는 학습 미완료라 아직 미실행이다.
+- `dataset-exposure-control.json` SHA `3950ffa1663b6651462ee2ac45dcb3a2f338890cab4954a1de8df2e02614e547`.
+- `dataset-exposure-terminal_reference.json` SHA `6369ca6bf33fc8c767b00fec380746517360c96ce146f2dcb1c0a564b8dc1dfb`.
+- `dataset-order-review.json` SHA `20916b481f686a617e31e9b94d1bb376c4152a59b57dc8fef58e9b5434b816e5`.
+- 분석 소스 SHA `982ad7f7491e02370aec1fc47d7cbcc1f7d00711faa6f1d82514630ac7b54e74`와
+  사용한 source7개 복사본은 `dataset-review-sources/manifest.json`에 보존했다.
+
+분석기 최초 실행은 command_id를 행동 종류 번호로 간주한 잘못된 검증에서 실패했다.
+규약의 command_id는 episode 내 명령 식별자이므로 해당 가정을 제거하고 실제 관측의
+maneuver one-hot/mask로 바꾼 후 두 완료 replay의6,000행씩을 검증했다. 학습/환경 오류나
+명령 규약 변경이 아니다. 보고서는 수정 후 통과한 실행에서만 생성했다.
+
+01:12:03 KST 실제 `/proc` command로 runner3037500·train3037519·후속3039851을
+재확인했고663/1,000update RUNNING이었다. 후속 전체개발/Q 검증은 계속 대기 중이다.
+안정 정책·다른seed·최종 동일조건 Rule-based 비교·별도 성능 평가는 아직 미완료다.
