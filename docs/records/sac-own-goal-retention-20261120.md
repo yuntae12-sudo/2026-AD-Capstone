@@ -414,3 +414,42 @@ python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/reviews-sta
 나머지 모든 필드를 따로 검증한 `review_live_prefix.py`는exit0이다. 학습은 변경/재시작하지 않았다.
 `live-prefix-review.json` SHA `6d40c505846fa8a31096a05487b2c380c7884090e82722275b93ea898326c707`.
 이는 실행 중 prefix 확인이며 최종 저장 감사나 주행 성능 검증을 대신하지 않는다.
+
+## 18:58 현재 정책 행동의 실제 미래 보상 검토 연결
+
+저장된 과거 종료 행동의 Q 적합만으로 현재 정책의 Q 과대평가가 해결됐다고 볼 수 없다.
+현재1,000 비교의 설정/소스/decision을 변경하지 않고, 완료 후 두 모델을 고정해 실제 종료까지
+주행시키는 추가 읽기 전용 검토를 연결했다. train 상태2곳에서 평균 첫 행동을 실행한 뒤
+원래 Gaussian으로 종료까지 주행한다. 각 상태×4개 동일 seed, 모델당8회이며 학습/replay에
+넣지 않는다. 조건부 표본평균은 정확한 기대 Q나 독립 test가 아니다.
+
+상태는 이전부터 고정한 KEEP `77ae312df21e80b9` tick0와 FOLLOW `baac7893b025167a` tick4다.
+`outputs/sac_physical_q_20261119/branch1000`의 실제 관측/과거 행동으로 재구성하고
+`outputs/sac_physical_q_20261119/predecessor-actions1000.json`의 선택을 유지한다.
+새 모델의 Q나 결과를 보고 상태를 다시 고르지 않는다. 기존
+`scripts/diagnose_sac_soft_returns.py`를 그대로 실행한다. 새 검토기는 실제 trace의 매 tick
+보상·discount·entropy·종료를 재계산하고 두 모델의 시작 관측 동일성을 확인한다.
+
+로컬 새 루트의 `post-decision.json` SHA
+`d4718382297d4c09ef1db9737724317e999e828a97680d6832e34ca7a892f0df`.
+69소스/29입력을 고정했다. `run_post_review.py`는 main 평가와 검토의 실제 PID 종료 및
+성공 상태를 기다린 뒤 모델/replay/report SHA를 고정한다. 순차 GPU 검토는 대조군→후보,
+그 뒤 `review_current_actions.py` 검산과 `render_terminal_comparison.py`의 실제 저장
+고속KEEP 나란히 GIF를 연결했다. 새 학습·새 Rule-based 비교는 아니다.
+
+검토기 사전 실행은 과거 `sac_recent_full_path_20261120/soft-returns1000`을 양쪽 참조로 둔
+계산 검증이며 새 모델 결과가 아니다. exit0, 원래 KEEP/FOLLOW Q−표본평균 차이
+13.147532/10.392730을 재현했다. 로컬
+`current-action-review-preflight/current-action-review.json` SHA
+`b85c6d7769f521bdf24a461c85295dbe78f2701c9259c9b178912a317ab5e802`.
+최초 준비 명령의 닫는 괄호 누락은 Python 실행 전 SyntaxError로 종료했고 그 사실을
+post-decision에 보존했다. 준비 전 파일 변경/학습 재시작은 없고 수정 후 사전 검증했다.
+
+18:58:23 추가 runner2890300(session19010)을 시작했다. 19:00:18 실제확인에서
+main2885167/학습child2885178/reviewer2885246/post2890300 모두 생존했다.
+학습407/1,000, 기존 검토는 WAITING_FOR_TRAINING, 추가 검토는 WAITING_FOR_MAIN_REVIEW다.
+현재 새 모델의 주행/Q/미래 보상 결과는 아직 미완료이며 기본 채택/추가 예산은 결정하지 않았다.
+
+```bash
+python -m json.tool outputs/sac_own_terminal_retention_1000_20261120/post-status.json
+```
