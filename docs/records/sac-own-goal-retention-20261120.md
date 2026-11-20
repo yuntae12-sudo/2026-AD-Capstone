@@ -4056,3 +4056,78 @@ python -m json.tool outputs/sac_refresh_matched10000_20261121/status.json
 python -m json.tool outputs/sac_refresh_matched10000_20261121/candidate10000/report.json
 python -m json.tool outputs/sac_refresh_matched10000_20261121/candidate10000/restoration-progress.json
 ```
+
+#### 2026-11-21 07:36 KST 첫 실제 재개·이동 FOLLOW 연결과 후속 진단 준비
+
+총10,000 비교의 동결된 학습 코드는 변경하지 않았다.07:34:13에 후보의 부모learner/
+optimizer/target/RNG 바이트동일과원래main tick73→74의update1001을확인했다.
+실행runner3186163/start_ticks77350549·학습3186182/start_ticks77351217은계속생존중이다.
+첫새10전이/update의원본prefix를별도로보존해과거1,000행불변과부모replay RNG에서이어지는
+10개batch해시를검산했다. 최종replay/learner checkpoint는아직없으므로부분원본검토로한정한다.
+
+새collection1005는진행중FOLLOW source533/path145/step28/이전collection995에서
+tick30→31로이어졌다. episode UUID와이전next관측/field/item mask의정확한fingerprint가
+일치했고,실제pre속도4.984438m/s였다. 제안은KINEMATIC_LIMIT로거절되고EMERGENCY가
+적용됐으며비종료/bootstrap=true로저장됐다. 연결검증통과가주행성능개선은아니다.
+근거는로컬 `outputs/sac_refresh_matched10000_20261121/first-update-review.json`과
+`first-ten/review.json`,동일디렉터리의고정1010행ticks/updates prefix다.
+
+새읽기전용진단진입점은재개계약의실제부모provenance·누적lineage를검사한뒤기존
+Q/확률행동/할인보상/coverage 계산을그대로실행한다.
+
+- `scripts/sac_refresh_context_diagnostic_audit.py`:재개/과거수집을각원래감사로분기,
+  혼합계약및실패감사를거절한다. 과거기록을재개기록으로재표기하지않는다.
+- `scripts/audit_sac_refresh_context_coverage.py`:전체재개감사와warmup/누적replay·
+  batch해시/RNG를검사한뒤최종정책의조건부경험분포/Q를계산한다.
+- `scripts/diagnose_sac_refresh_context_branch_q.py`·
+  `scripts/diagnose_sac_refresh_context_soft_returns.py`:고정실제train상태에서검사한다.
+  기존진단과의AST비교로감사경로·기록메타데이터외계산변경없음을검증했다.
+
+관련33pytest(새10+기존23),4ASTparse·3CLI help를통과했다. 완료된양쪽120모델로
+coverage를실행해각5,120행/30,720batch추출과모든6group의집계·Q차이·sigma범위·
+95%조건부타원체판정·부모/모델SHA를별도검산했다. 후보120의고정branch2상태에서는
+저장/평균/확률1개씩총6행동을실제로검사했다. 고정KEEP tick0·FOLLOW tick4에서
+확률seed88019의실제종료rollout을1개씩실행해각29/51tick에충돌했다.
+Q−실제soft-return은14.289721/11.135958점이다. 이는120모델의도구통합검증이며
+진행중10,000의성능,평균기대값,독립평가또는주행개선으로세지않는다.
+
+원본2trace의첫평균행동·tick·entropy·할인보상·실제종료·합계/Q차이와632개동결파일을
+검산했다. reviewer가처음확률행동label을current_sample_0으로가정해실패했고,
+원래진단코드의실제계약sample0으로수정했다. 최초reviewer/실패이유를보존했고실험원본은
+수정하지않았다. 로컬 `outputs/sac_refresh_context_diagnostics_pilot_20261121/`
+`integration-review.json` SHA
+`beb68b648bf3bbab639fd58f7c2c24d4f60f3495db56d229bfb7e200f7b2836f`.
+새학습update/replay삽입은0이며모든진단입력은불변이다.
+
+긴비교가완료된뒤실행할읽기전용작업3개를원래parent PID/start_ticks에연결했다.
+학습의decision/7작업/예산은변경하지않았다. parent가없거나실패하면후속작업도멈추고,
+원래parent 성공종료와full-validation-review 완료후에만실제결과를읽는다.
+
+| 후속작업 | 실제대기PID/start_ticks | 동결decision SHA |
+| --- | --- | --- |
+| 실패분석 | 3193234 / 77432319 | 123e0e4cbc7d091a17572110f72a78d2fc0be016149357b2c7cde6f61bad6c35 |
+| GIF | 3193242 / 77432435 | 7e6c52ac6558aebb50240a4f7eb3d178065e75b98564fb2e9ffb438131e761ba |
+| Q/coverage/MC | 3194305 / 77464465 | 4093b077fe6cb5b25836c909bfa7ae76c8b3b8a8859be8d33d7c5cf2fa463003 |
+
+실패분석은같은개발16회에서초기이동/정지와명령별지표·충돌전거절/제동/정지·접촉방향을
+구분한다. GIF는최종결과를보기전에정한고속8b4c/정지8dd/중속83c의3장면×2명령×
+2SAC모델을각Rule과비교하는12개다. 이전완료1,000원본으로12pair증거구성preflight를
+통과했으며이는새주행0/새영상0이다. 실제생성뒤직접시각검토는남아있다.
+
+Q후속은양쪽최종모델을동결한뒤각coverage→고정branchQ→같은train2상태×4seed
+(88019..88022)를실행한다. 전체16rollout이며16독립장면이아니다. 할인보상/entropy·
+sample mean/std·Q차이와입력불변검토를연결했다. 아직최종모델의진단은실행되지않았다.
+후속worker와입력준비당시HEAD는059971e이고새진단파일의SHA를별도동결했다.
+
+읽기전용 `scripts/monitor_sac_continuation.py`도추가했다. 실제실행으로수집상태복원과
+추가학습을분리하고,기존1,000을새9,000진행률에포함하지않음을확인했다. 전체새학습목표는
+18,000이며평가시간은진행률에서제외한다. PID/start_ticks와새update로그를조회할뿐
+학습을시작/종료/재시작하지않는다. 별도단위테스트는추가하지않고현재실행에서확인했다.
+
+```bash
+python scripts/monitor_sac_continuation.py --output outputs/sac_refresh_matched10000_20261121
+```
+
+다음은실제수집·업데이트를관찰하며고정예산을마친뒤다중주행지표/Q/실패분석/영상을
+함께검토하는것이다. 보상/검사/PD/원래Gaussian/순수SAC조건유지. 안정정책·다른seed·
+최종Rule비교·별도평가목표는계속미완료다.
