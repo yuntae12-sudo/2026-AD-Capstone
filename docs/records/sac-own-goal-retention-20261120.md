@@ -2360,3 +2360,55 @@ source388/468도 재방문0회였다. 종료 상태 소실을 확인했으나 �
 Rule-based 재평가가 끝난 뒤 실행하도록 준비한다. 아직 새 학습 실행 확인은 없다.
 100회는 구현/저장/관측된 source 조합의 실제 재현을 확인하는 예산이며, 같은1,000회
 성능 비교·다른 seed·최종 Rule-based 비교·별도 평가로 자동 승격하지 않는다.
+
+## 2026-11-21 00:25 — 실제 미래 보상 진단 완료·후속 pilot 대기
+
+진단 runner3012859/session69685는 00:23:18에 coverage/branch-Q/soft-return/검산
+4jobs 모두 exit0로 완료했고 실제 PID 종료를 확인했다. 모델/입력/source 해시,
+같은 train 상태의 식별자, 각 trace의 실제 종료와 보상·entropy 할인합을 검산했다.
+`policy-diagnostics/diagnostic-review.json` SHA
+`031ff39d96f493d2920b0326341c7dacdc4b610e4c53a191bdcce699f318aff3`.
+
+| 고정 train 선행상태 × 원래 Gaussian4seed | terminal-only 대조군 | 비종료 거절 후보 |
+| --- | ---: | ---: |
+| KEEP tick0 실제 soft-return 평균 | -13.649697 | -12.748185 |
+| KEEP Q−실제 평균 | 11.597606 | 11.454919 |
+| FOLLOW tick4 실제 soft-return 평균 | -10.635522 | -10.475469 |
+| FOLLOW Q−실제 평균 | 9.117351 | 9.383596 |
+| 실제 종료 결과 / 모델 | 충돌8/8 | 충돌8/8 |
+
+같은2개 train 상태의 소표본 진단이며 대조군 완료 결과는 재사용했다. 새 후보의
+KEEP return이 조금 높아도 전부 충돌했고, FOLLOW의 Q 차이는 커졌다. 이 결과는
+개발16회 실패와 함께 미채택 판단을 유지한다. 보상 증가를 안전한 주행으로 해석하지
+않는다. 학습/가중치/replay 수정0인 진단이다.
+
+현재 버전 Rule-based 평가 runner3015652/session33463은 00:23:34에 formal 평가
+child3026743을 시작했다. 두 PID의 실제 생존을 확인했다. 같은16쌍의 평가 후 실제
+capture와 원본 검산이 이어진다. 이 시점 새 Rule-based 결과는 미완료다.
+
+새 구현 `c1e1f03470875ee9d1f9b5d2f12665dac06b7c5d`를 같은 브랜치에 push하고
+원격 SHA 일치를 확인했다. 추가 PR/병합은 하지 않았다. 로컬
+`outputs/sac_stratified_refresh_pilot100_20261121/`에 fresh100 검증을 준비하고
+00:24:06 runner3027013/session33870의 실제 생존과 WAITING_FOR_RULE_BASELINE을
+확인했다. 부모3015652/start_ticks74564168의 성공 완료·실제 종료를 확인한 뒤
+train100 → audit100 → verify100 → review100을 실행한다. 부모 실패 시 근거를
+남기고 pilot을 시작하지 않는다.
+
+source97/input73의 SHA·복사본을 동결했다. decision SHA
+`3b29ec1b5abc91f9e71e49d157e65551c0cfb129f259fdf954c7757e2d03a161`.
+seed0·같은 자기warmup5,000·최초 learner 바이트 대조·별도허용B-f64/rawgain0.0001/
+physicalQ/complete-path/goal8+failure8 조건을 유지한다. 바뀌는 것은 상태의 종류별
+보존과 선택이다. 검사/보상/PD/원래Gaussian/전체SAC1·BC/teacher0은 동일하다.
+실제100전이와 source 두 종류의 관측·재현을 모두 요구하는 검토를 연결했지만,
+현재 새 학습은 아직 시작하지 않았다. 이후 예산은 결과 검토 뒤 정한다.
+
+재개 명령:
+
+```bash
+python -m json.tool outputs/sac_rule_baseline_current_20261120/status.json
+python -m json.tool outputs/sac_stratified_refresh_pilot100_20261121/status.json
+```
+
+안정 정책·다른 seed·동일 조건 최종 Rule-based 비교·별도 평가는 아직 미완료다.
+별도 평가 후보29/32와 원본 데이터 오류17, GCS 재인증 대기 및 drive/시간 독립성
+미확인도 그대로 남아 있다. 현재 새 수집을 기본 설정으로 채택하지 않았다.
