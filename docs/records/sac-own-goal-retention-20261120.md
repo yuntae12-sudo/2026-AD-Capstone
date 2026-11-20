@@ -1548,3 +1548,60 @@ hash를 대조**했다. 원본/복사 입력 SHA를 종료 시 다시 확인했�
 생성하는 행동과의 거리 및 그 행동의 Q 적합**은 아직 후속 검사 대상이다. 반복 노출만으로
 현재 정책의 행동을 충분히 학습했다고 보지 않는다. 현재 기존 모델 primary 주행 평가가
 진행 중이며 후보·정지 출발·최종16주행 검산은 미완료다. 정책 채택/추가 예산은 없다.
+
+## 22:27 — 기존8회 실패 검산, 이동 출발4회 대조와 GIF
+
+기존 모델의4고유 개발장면×KEEP/FOLLOW,8회 평가를 완료했다.
+`driving-details/review.py --arm control`로 완료 모델/보고서 해시와 원본 프레임의
+연속 tick·sample_valid·종료·거절/제동/정지 수·보상 합을 검산했다.
+로컬 paired1000 `driving-details/control-review.json` SHA
+`ad8665c369a76423564a2755d06dabde889ce7a2c4dab30905dc3f3995118278`.
+
+기존은 **목표0/8·충돌8/8**,614tick 중거절314·제동240·정지376,
+평균 return−20.494750736216602였다. 정지 출발4회는328/328tick 정지 상태였다.
+고속 장면은 KEEP/FOLLOW 둘다55tick부터 연속 거절,57tick 제동,80tick 정지,
+97tick 충돌이었다. 중속 장면은37tick부터 연속 거절/제동,41tick 정지,46tick 충돌이었다.
+8회 모두 마지막 기록 충돌 상대의 중심이 ego 종방향 뒤쪽에 있었지만, 이는 접촉 시점의
+위치·시간 순서이며 책임·불가피성·유일 원인을 판정한 결과가 아니다.
+
+후보의 이동 출발 primary4회도 완료했다. `driving-details/review_primary.py`로
+두 모델의 같은2장면×KEEP/FOLLOW4쌍에 대해 초기 프레임/지도 일치, 실제 저장 프레임,
+집계/보상 합과 입력 SHA를 검산했다. 이는 전체 개발8장면 평가가 아니다.
+`primary-paired-review.json` SHA
+`808da946692298aafababdeed42ec8677f3aa65ac17d892477797365119a0496`.
+
+| 같은 primary4회 | 기존 | 후보 |
+| --- | ---: | ---: |
+| ROUTE_GOAL / COLLISION | 0 / 4 | 2 / 2 |
+| 실제 tick | 286 | 236 |
+| 거절 | 110 (38.46%) | 44 (18.64%) |
+| 제동 | 102 (35.66%) | 36 (15.25%) |
+| 정지 | 48 (16.78%) | 12 (5.08%) |
+| 평균 return | -20.249332356470862 | -9.981296819481493 |
+
+후보의 성공2건은 고속 `8b4c1e7e09f5f4c3`의KEEP/FOLLOW로 모두72tick ROUTE_GOAL이다.
+다만63tick부터 연속 거절,65tick부터 제동하며 목표에 도달했고 각거절11/제동8tick이다.
+규약의 목표 성공으로 계산하되, 목표 이후의 주행이나 안정적인 전구간 경로를 입증한 것으로
+확대하지 않는다. 중속 `8a4fba3463c6c62d`의두명령은 후보도46tick 충돌·거절11·제동10·
+정지6으로 기존과 같았다. 현재 대조에서 고속 성공 유지와 지표 차이는 확인됐지만,
+안정 정책 채택·전체개발/다른seed/독립평가 성능 확인은 아니다.
+
+### 같은 고속 KEEP 기록의 나란한 GIF
+
+첫 사전 지정 primary장면/KEEP의 이미 완료된 두 trace를 복사하고 표시 label만
+`Pure SAC | existing collection` / `Pure SAC | terminal refresh`로 구분했다.
+**양쪽 모두 순수SAC 수집 방식 비교이며 Rule-based 비교가 아니다.** 원본 정책이나
+시뮬레이션을 다시 실행하지 않고 초기 프레임/지도가 같은 실제 기록만 사용했다.
+
+기존 `scripts/visualize_sac_waymax.py render`를 stride2로 실행했다. 로컬 산출물은
+`outputs/sac_terminal_refresh_paired1000_20261120/visualization/high-speed-keep.gif`.
+PIL로50frame·1440×900·총11,200ms(실제9.7초+마지막1.5초hold)를 확인했고,
+마지막PNG를 열어 두label·실제 궤적·거절/제동·충돌과종료 후hold표시를 시각 확인했다.
+
+- GIF SHA `773ffc51710028cb7858ec5c1a94cfb6e3cb56b89f9792422d519c0c1b07847a`.
+- evidence JSON SHA `07bd3a52995d8d5942ae8c9e72db12d5a9153a82a9a72b27bba25651473c100a`.
+- 마지막 PNG SHA `8b5075861353492c6c85d090f0be7c631f9da81546974c9dfb1094753e4a1c10`.
+
+후보 정지 출발 평가2981404가 이어 실행 중이다. 그 결과와 양쪽 총16주행 원본 검산,
+대기 중인 현재 정책 행동 coverage/Q/실제 미래보상 진단을 마친 뒤 다음 보완을 결정한다.
+실행 중 조건 변경이나 추가 학습 예산은 없고 전체 목표는 계속 미완료다.
