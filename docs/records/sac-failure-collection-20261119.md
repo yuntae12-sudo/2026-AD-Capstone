@@ -4519,3 +4519,50 @@ update지표최대차이는Q1loss0.00462694,Q1gradnorm0.04488003,actorloss0.0014
 추가GPU작업은시작하지않았으며독립test/다른seed/최종Rule-based비교는미실행이다.
 노션02/03/04/Home에는완료Bellman·감사오류수정46tests·현재실행을갱신하고다시읽어확인했다.
 이초기수치차이후속기록도다음갱신에포함한다.
+
+
+### 2026-11-20 13:29 KST — 완료경로1,000 수집·기본4주행 검토
+
+로컬 `outputs/sac_recent_full_path_20261120/`, 실행코드a41deb7·기록기준66412dd.
+학습1,000/저장감사/독립root선택검토/기본4평가/원시frame검토 exit0, 실제해당PID종료확인.
+13:28:27현재runner2763938/정지평가child2772209생존, 전체13job은미완료다.
+모델 SHA `2a912dedb2857d440ef274c320f6074e70c988e9c09c6810d57570d57e2053bc`,
+replay6000 SHA `c0181207b4948d9a392f915edb9b8031c1da26a6de624f8f6640f49e9c8c0f62`.
+자기warmup5000의17배열byte동일·teacher0·새1actual step=1update 확인.
+
+신규main615/branch385,9고유train장면이다. 과거main결과만으로root선택을독립재구성했고
+branch7개는29/31/47/64/86/55/73step 모두실제충돌종료했다. 가짜terminal없음.
+기존최근quota는main712/branch288,9장면. 새경로수락368(기존477),사전정지482(443),
+실제종료15(56),그중reward≤−10종료14(54)다. 학습경로가달라져동일정책성능비교는아니다.
+
+CPU `review_training.py`는1,000개batch indexhash·최종replay RNG를재현하고모든update유한성확인.
+256,000draw중신규123,110/초기132,890는동일하다. 실제충돌종료학습노출은전체8,846→3,265,
+신규7,595→2,014로줄었다. 정지draw는133,789→140,956(52.26→55.06%)로증가했다.
+두실험모두마지막신규100개는모두정지·총2,604draw·2개미추출이다. 긴경로수집이편중을
+자동해결하거나종료학습을늘린것으로쓰지않는다. 검토SHA
+`c7f9ba24f0d93b257388b63f6ef3ec517f0dc9a0d09543252e7d8d9e82f521b1`.
+root검토SHA `b1e7d567e123ea89a121a6fa777a4fa89298e8ba3dd32ced5bfcbb25c309e357`.
+
+기본2장면×KEEP/FOLLOW4평가에서기존최근quota0목표/4충돌→후보2목표/2충돌이다.
+256→236tick,거절98→44(38.28→18.64%),제동90→36(35.16→15.25%),
+정지36→12(14.06→5.08%),평균return−20.2268249→−9.9813130.
+원시frame/map/seed의초기동일성4쌍확인. 성공2건은고속8b4c의KEEP/FOLLOW로,
+post72목표종료당시둘다BRAKE/PREDICTED_COLLISION이며마지막5step도BRAKE다.
+실패8a4f두건은46tick충돌,마지막EMERGENCY·정지중후방접촉이며귀책판정은아니다.
+평가검토SHA `160028bbdaa3cd6cd90b547aa47aeabc9347bca3c25b446257a25f0af5ff5615`.
+
+같은초기관측첫제안경로차이는기존최근quota대비최대약9.35mm다. 고속장면실행범주첫차이는
+post46/proposal45에서기존OFFROAD거절/REUSED→후보OK/NEW다. 직전ego위치도이미약7.67cm
+다르므로그제안하나의인과효과로단정하지않는다. 나머지장면실행범주이력은같다.
+`regression-review.json` SHA `51b527b26f9d446c49160e3291f86f2d39dfd7ba12574c76976e7f1451378594`.
+
+더이전f64 uniform1,000과별도원시frame대조도했다.4건모두성공/충돌·tick·거절/제동/정지수와
+매tick실행범주가같다. 실제위치최대차이는4.70~5.51cm이며return은각4.64e−5~9.38e−5작다.
+즉직전후보의퇴행은회복했지만이전최고기본4결과를넘은것은아니다. 반복개발평가이며새독립
+증거로세지않는다. `historical-uniform-comparison.json` SHA
+`624eccc8f9d781d5b802c6e7ea5feb62a27819fe8aa1a7b18464c03730981fb4`.
+
+정지4/Q/coverage/실제branch평균/같은train미래보상8회/최종검토는진행중또는미실행이다.
+기존Bellman피크에대한정확관측hash와scene/provider/tick경험대조,실제batch시간분포,
+위치추종사후복원검토를준비했다. 현재실행소스/보상/검사/PD/순수SAC변경없음.
+안정정책미확보·기본채택없음·추가예산/다른seed/독립test확대는전체검토뒤결정한다.
