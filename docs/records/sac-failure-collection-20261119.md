@@ -4420,3 +4420,48 @@ post46/proposal45부터 기존NEW/OK와후보REUSED/PREDICTED_OFFROAD로 분류�
 **후보 미채택·안정 정책 미확보.** 경험 노출 증가는 달성했지만 주행 개선은 없었다.
 Q·최종 정책의 조건부 경험 겹침·실제branchQ·미래보상·terminal평균선호 검토가 남았다.
 전체12job검토 전 다음예산/수집방식/다른seed/독립test를 정하지 않는다.
+
+
+### 2026-11-20 12:46 KST — 최근 replay 검토 종료, 구간별 Q 오차 추적으로 진행
+
+12개 job exit0·실제 PID 종료·36소스와 모든 결과 hash를 확인한 최종검토 exit0.
+`scientific-review.json` SHA `ac43885b418e558dc65c7d01ad1346a57e6c0eadddb925a93a3b850fcc042d87`,
+미채택/추가예산없음 결정 SHA `e78d3afc9f33407a89b794f83aacc0895d21351bc091f3b27bb0b434fa0178c7`.
+기본4/정지4와 실제train미래보상8회 모두충돌이다. 동일2train상태×4seed에서
+Q−실제soft-return평균은KEEP13.03894→12.43961, FOLLOW10.47807→10.10064로 조금 감소했으나
+여전히크다. 현재 실제평균 KEEP−13.23453(std2.00981),FOLLOW−10.69530(std0.72199).
+KEEP soft-return증가0.27646 중0.25325는충돌보상의할인차이이며 비할인reward는0.00841악화했다.
+FOLLOW 증가는0.06329,그중할인된종료보상차이0.04656이다. 성공으로해석하지않는다.
+
+고정종료44개 Q MAE5.39711→4.78517,신규종료표본 Q MAE2.61044(82개)→0.97849(54개)다.
+후자는같은상태집합이아니므로동일표본오차비교가아니다. 현재평균을실제로실행해같은충돌전이를
+확인한Q오차는고정KEEP7.53772/FOLLOW4.14435,branch KEEP2.30574/FOLLOW1.46057이다.
+branch FOLLOW의선택tick은기존64/현재68이라정확히같은상태의비교로쓰지않는다.
+
+전체256,000실제batch추출에서정지비중은64.13→52.26%로줄었다. 그러나마지막100update에서는
+64.07→69.59%다. 신규마지막100개경험은모두정지,최종정책의조건부95%ellipsoid포함률3%,
+행동거리sigma RMS중앙값26.196이다. 전체신규1,000포함률46.2%(기존45.3%)와구분한다.
+이는Gaussian support/신뢰구간/성공률이아니다. 전체평균·마지막구간·실제주행분모를섞지않는다.
+CPU `review_draw_distribution.py`, `review_draw_timecourse.py` 모두exit0.
+
+현재 수집은 충돌직전 상태만 쓰지 않고 앞선 수락상태도 일부 재실행한다.
+CPU `review_probe_exposure.py`로feature/field mask/item mask를모두hash대조했다.
+고정KEEP초기관측과정확히같은행은warmup1+online2=3개,실제추출137→354회다.
+그상태현재평균Q는batch평가−0.794983인데실제미래보상평균−13.23453이다.
+입력상태부재만으로설명되지않으며반복추출을다양한새행동경험으로세지않는다.
+FOLLOW검사관측은두실험모두정확일치0이나인근상태경험부재의증명은아니다.
+최초CPU분석은numpy int64 JSON직렬화오류로결과저장에실패했고,기존스크립트를보존한뒤
+index를Python int로명시해재실행exit0. 학습/평가소스·가중치·replay변경은없었다.
+
+다음은 **저장된 실제 주행의 어느구간에서Q낙관이누적되는지분리**하는읽기전용진단이다.
+`diagnose_sac_bellman_trace.py`는같은2train상태·각4개기존주행의raw행동을그대로재실행하고
+모든reward/검사/종료/next관측hash를검증한다. 새정책표본·학습·replay삽입은없다.
+`sac_bellman_trace.py`는Q0−실제soft-return을할인된1-step잔차합으로정확히분해하고,
+각잔차를target Q기준잔차와target/online Q차이로구분한다. terminal다음값과첫평균행동의
+entropy항은없다. 같은raw후속표본에조건을둔계산이며기대Bellman오차나정확한Q정답이아니다.
+
+target지연항이존재해도tau변경의성능효과를입증하는것은아니다. 진단뒤다음수집/학습개입을
+선택하며단순배율·보상·안전검사·PD·원래Gaussian·SAC손실변경은하지않는다.
+관련pytest8개통과(새분해7개+기존target검사1개),compile/CLI/diff검사통과.
+이기록시점실제8경로재실행진단은미실행,기준HEAD ac68c73 이후새진단코드는미커밋이다.
+안정정책·새seed·최종Rule-based비교·독립test는미완료로목표를계속진행한다.
