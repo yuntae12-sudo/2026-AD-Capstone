@@ -5126,3 +5126,45 @@ runner SHA `e7f4bcd4086b06bc8be0840d8ccc4f8e817d7353a8d952213fbef59d16169b2e`.
 로컬결과확인은동일continuation출력폴더의 `all-experience-status.json`,
 `all-experience-values.log`, 완료후 `all-experience-values.json`/`all-experience-review.json`.
 현재안정정책목표는미완료이며본5000진단과기존947비교를끝낸후전체경험검토까지함께해석한다.
+
+### 2026-11-20 15:44 KST — 누적3000 저장본 검증과 명령별 Q 경과
+
+15:28~15:43에는 본critic2805375와기존후속2805376/추가후속2815256의실제생존 및
+진행카운터 증가를 확인하며 같은 실행을 기다렸다. 관찰시간 경과로 재시작하지 않았다.
+15:43:42 `review_milestone.py --count 3000` CPU검토 exit0, 당시 본report3003/5000이다.
+2000 검토와같은 소스SHA `dbdb1074631c378e8c1c5c2c2283126cdce5804423e83d113fd4f0f22de03a1a`
+를사용했다. Q step은parent2000→4000, actor step1000 고정, BC0이다.
+정책/온도/각optimizer byte불변·learner RNG2000회 split·상속1000로그 byteprefix·
+신규2000개 batchhash/관측chain/종료/seed·본실행51소스불변을검증했다.
+3000 snapshot SHA `523e55d05bf04754560bc0f151b31f84513919bea038699b512bd7923995a35c`.
+
+부모1000 이후새2000전이/Q 갱신의512000배치추출 중 상속행241312/새행270688이다.
+새 terminal39행은5102회추출, 새행1개는아직미추출이다. 경로수락435/2000,
+NEW435/REUSED220/EMERGENCY1107/BRAKE238. 검사거절은도로이탈492/충돌예측759/
+운동한계306/sweep8이다. step 전 anchor속도<0.1행811/그행추출109895이며
+평가규약의step 후정지율로바꾸어쓰지않는다. 원본2000행에서수락·종료집계를다시확인했다.
+
+신규완료39회는KEEP20충돌, FOLLOW3목표·16충돌이다. FOLLOW22tick은snapshot시점진행중으로
+분리했다. 새세번째목표는rollout57/seed20261177,115tick/88수락/return0.0200786,
+마지막실행REUSED이다. 앞선2목표의BRAKE/REUSED 종료도같다. 같은두TRAIN root의고정정책
+확률표본이며 독립39장면·학습개선·validation성공률로주장하지않는다.
+
+아래는본실행의고정root 평균행동Q와과거root당4개mean-first실제return 평균의차이다.
+1000은부모완료시점값이고2000/3000은본실행값이다. 정확한기대Q나동일947행동의평균오차가아니다.
+
+| frozen-Q 횟수 | KEEP Q | KEEP 기존표본과차이 | FOLLOW Q | FOLLOW 기존표본과차이 |
+| --- | --- | --- | --- | --- |
+| 1000 | −0.712616 | 12.864462 | −0.557047 | 10.131548 |
+| 2000 | −2.379609 | 11.197469 | −0.972106 | 9.716489 |
+| 3000 | −5.351509 | 8.225569 | −1.518630 | 9.169965 |
+
+KEEP의초기값은더많이변했지만FOLLOW는차이가크게남으며매100회수치도단조개선하지않았다.
+정책은고정돼있으므로Q하락을주행성능개선으로표현하지않는다. 동일947전이의구간별가치와
+전체완료경로의성공/실패별가치는현재5000수집종료후GPU검토에서확인한다.
+실행/검토구현기준318c9f4이며 보상/안전검사/PD/Gaussian/학습규칙변경없다.
+
+로컬continuation출력폴더의 `milestone3000-evidence/`에고정prefix와report를보존했고,
+`milestone3000-review.json` SHA는
+`c70828701a49e8cc8b5018d254672845ece010246a38c886a476ed653b42adff`다.
+본5000진단과두후속검토는계속실행/대기중이다. 안정정책/전체개발/다른seed/공정Rule-based/
+독립test 목표는미완료이며누적3000을성공판정이나예산변경의근거로쓰지않는다.
