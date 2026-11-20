@@ -4192,3 +4192,40 @@ ego축기준종방향−4.769262m·횡방향0.444712m로뒤쪽위치접촉을확
 SHA `1b640e9002d62448b2af062bedc7fb285251f38a61bf34f28626903e84ec91d7`,
 `steps.json` SHA `00f7751a92d4136bb0b6d17ed4f99053b80e96559313a3ef4711d78d09a914dc`.
 검산실행기는같은root의 `replay_follow_terminal.py`다. 실제실패학습경험검증이며정책개선은미입증이다.
+
+#### 2026-11-21 08:03 KST 실행 비용 측정·미채택 투영 연산 시안
+
+고정된 FOLLOW52step을 별도 CPU 프로세스에서 cProfile로 측정했다. 원래52행의
+관측fingerprint/보상/검사/제어/종료와새프로파일재현의모든저장행이동일했다.
+계측된 collect_step52회 누적37.422초 중 check_trajectory97회가32.582초였다.
+하위시간은 contains_many711회12.680초, project_many2,237회11.462초다.
+하위함수의누적시간은중복되므로서로합산하지않는다. 이실험에는SAC update가없으며
+학습전체의프로파일이나독립적인처리량벤치마크로해석하지않는다.
+
+로컬 `probe_projection_runtime.py`의시안은원래64점chunk·모든선분·argmin첫동률선택·
+float64계산을유지하고XY축배열을분리해중간3차원배열/축reduction비용을줄였다.
+같은52step에서호출된2,237회/821,693질의점에원래/시안계산을둘다실행했고,
+거리좌표/최근접점/접선세출력의dtype·shape·전체바이트가모두일치했다.
+실제제어에는항상원래결과를반환했다. 시안은현재환경/학습에채택하지않았다.
+측정순서를번갈아바꿔합산한투영시간은원래11.3575초/시안2.70135초(이함수4.204배)다.
+전체주행·학습4배가속이나모든입력에서의동등성을입증한것은아니다.
+
+끝점·중점·nextafter·교차/폐곡선·2/5/65점곡선·여러scale/offset·float32/64·
+비연속view를포함한22개합성route/88호출/13,812질의점도세출력바이트가동일했다.
+seed20261121, `probe_projection_edges.py --output <새 결과경로>`로재현가능하다.
+별도장면확장검증·실제시안결과사용·전체회귀·production반영은미실행이다.
+
+저장상태보존검사비용도기존완료pilot100을원래helper로복원해측정했다.
+terminal2/nonterminal4·활성경로1상태에서원래verify_preserved10회는총3.89050초,
+평균0.38905초였고, build_observation80회가3.87773초였다.
+검사항목/빈도를바꾸지않았으며관측재계산캐시등의보완은미구현이다.
+계측오버헤드·동시학습·한상태한계가있어현재전체학습의시간비중으로외삽하지않는다.
+
+로컬산출물은 `outputs/sac_refresh_matched10000_20261121/`의
+`follow-terminal-runtime.pstats`, `follow-terminal-projection-probe/review.json`,
+`projection-edge-repro.json`, `preservation-check-profile/review.json`,
+`runtime-probe-review.json`에있다. 원래595파일해시유지·원본52행동일·측정합계·입력SHA를
+검산했다. 새정책호출/학습update/replay삽입0, 연구용로컬시안/진단만추가했다.
+08:03:25 본학습후보는누적1,731/10,000(새731/9,000),대조군대기다.
+현재동일예산실험의조건·실행코드·보상·검사·PD·순수SAC조건은그대로유지한다.
+다음은고정실험완료후성능검토이며,가속시안은추가동등성검증뒤후속실험에적용할후보다.
