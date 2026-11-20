@@ -1942,3 +1942,24 @@ FIFO/주기/최대비중/메모리격리/재귀금지/손상된종료거절을 �
 학습방식의 사전 실행 검증이며100회로 안정정책이나 성능 우위를 판정하지 않는다.
 동일 seed0·자기warmup5,000·기존 실제초기learner를 reference로 쓰고 추가 비교 예산은
 그 결과를 검토한 뒤 정한다. 현재 새옵션의 실제 실행/성능은 아직 미검증이다.
+
+## 23:25 — 새100회 실제 사전검증 시작·초기 learner 일치 확인
+
+구현 `da419dd009f277108652eec6c8fac8b2769e36a0`을 같은 브랜치로 push하고 원격 SHA를
+확인했다. 로컬 `outputs/sac_rejection_refresh_pilot100_20261120/`의 runner3003336/
+session21062, 실제 수집 child3003341이23:25:05에 시작했고 실제 생존을 확인했다.
+이전 Bellman 작업의 성공 완료와 실제 종료를 확인한 뒤 실행했으며 GPU 작업을 겹치지 않았다.
+
+- source91개/input69개 SHA·복사본·AST 검사를 완료하고 조건을 동결했다.
+- decision SHA `52d180749f64d69e8dc7c9669a695fbe187dce0b35811afd5e14a85ea204faf0`.
+- 4jobs: `train100` → `audit100` → `verify100` → `review100`.
+- 동일seed0/자기warmup5,000/B-f64/raw gain0.0001/physical Q/complete-path/
+  goal8+failure8/원래Gaussian과 실제전이당전체update1이다. source자격만 새옵션이다.
+- 첫 실제 전이 뒤 첫 update에 전달되는 초기 learner가 기존reference와 바이트 동일했다.
+  `initial-state-audit.json` COMPLETE, reference_bytes_equal=true,
+  SHA `7363d29a0c9500d58a259ba8953ff21428ede1660ee9e66be9b9f571ef014c2c`.
+  초기동일성이후의수치동일성이나주행성능을뜻하지않는다.
+
+23:25:40 기준 수집 프로세스 실행 중이며100회 완료/최종 저장감사/실제source재현은
+미완료다. 새정책의 성능 평가는 아직 없다. 실행 결과를 검토한 후 같은1,000회 예산
+대조 여부를 결정하며 추가 학습/새seed/정책채택은 자동으로 연결하지 않았다.
