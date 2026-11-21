@@ -4405,3 +4405,50 @@ SAC기록43,102호출/8,609,606점, Rule기록59,856호출/10,730,642점이다.
 관련57pytest와 한 train경로52step의 원래raw_u 재현, 이번32개 저장XY 재현은
 각 검증 범위를 구분한다. 실제 학습 update까지 포함한 전체 실행 성능 측정과
 production 반영은 아직 하지 않았다. 현재 학습은 원래 조건으로 계속한다.
+
+### 2026-11-21 09:08 KST — 첫3,000 수집·실제 배치 노출과 KEEP 목표 경로 검증
+
+본 학습의 변경 없는 첫3,000 raw tick/update prefix를 따로 보존했다.
+기존1,000행 보존, 새2,000전이/2,000원래 SAC update, 실제 tick 연속성,
+bootstrap·유한한 행동/보상/update 수치와 부모 replay RNG에서 이어진2,000개
+batch 해시를 검산했다. 총512,000추출 중 자기warmup5,000은199,545회(38.97%),
+기존online1,000은60,230회(11.76%), 새online2,000은252,225회(49.26%)였다.
+실제 배치 노출이며 독립 자료 수가 아니다. 최종 replay/learner 전체 감사는 남아 있다.
+
+새2,000개는14고유 train장면, main1,075/failure_branch525/
+비종료후속200/종료후속200이었다. 수락740, 제안시점 planning-anchor 속도>=0.1m/s
+이동633(이동 수락221), 정지1,367(68.35%)이다. 수락740개 중519개는정지 상태다.
+이는 pre-state 분포로, 평가의 post-step 정지 비중과 분모가 다르다.
+
+| 새 비종료 후속 경험 | 전이 | 이동 | 수락 | 이동 중 수락 |
+| --- | --- | --- | --- | --- |
+| KEEP | 57 | 57 | 41 | 41 |
+| FOLLOW | 143 | 53 | 72 | 16 |
+
+종료후속200개는모두정지상태의충돌재방문으로, 독립200개충돌episode가아니다.
+새전체terminal기록은COLLISION216/RECORD_END3/ROUTE_GOAL1/TASK_LOST1이다.
+학습중정책·분기·재방문을섞은분모이므로최종정책의성공률/충돌률로사용하지않는다.
+
+KEEP source911/path245는57개의연속이동전이중41개제안수락후collection1785의
+tick58에서ROUTE_GOAL/bootstrap=false였다. source533/path145 FOLLOW는앞서검증한
+50step충돌이고, 새FOLLOW source1421/path359는이prefix안에서121step/72수락,
+마지막bootstrap=true로진행중이었다. 수락된정지경로를성능개선으로해석하지않는다.
+
+KEEP목표기록은원래raw_u로main1+후속57=58실제Waymax step을재현했다.
+기존저장관측과새57개pre관측fingerprint, 토큰·경로·보상·검사·제어·종료를대조했고
+ROUTE_GOAL을확인했다. 새정책호출/update/replay삽입0, 원래투영함수사용이다.
+이는변경중정책의train경로한개검증이며, 고정최종정책의성능개선이나안정성입증은아니다.
+
+로컬 `outputs/sac_refresh_matched10000_20261121/`:
+
+- `review_collection_prefix3000.py`, `collection-prefix3000/review.json` SHA
+  `096cad8cab98a3b70a8067839afb928ef97dcf92ee5dc89fdb7bddeeee1debfa`.
+- `collection-prefix3000/ticks.jsonl` SHA
+  `a5ae9c0b7faef0c4166831e4dc8fff22cb31e347462ddc603899b2b64221ee9d`.
+- `replay_keep_goal1785.py`, `keep-goal1785-physical/steps.json` SHA
+  `df68570bfaf026422f4a376f3a3447db848e4fe8cfc83889bb8a301db870f2cc`.
+
+두 실행은 `/home/autonav/miniconda3/envs/its-merge/bin/python`으로 완료했고,
+물리 재현에는 `JAX_PLATFORMS=cpu`를 지정했다.
+현재학습·보상·안전검사·PD·BC/teacher0조건을바꾸지않았다. 최종고정정책에서
+성공/충돌/거절/제동/정지/보상과Q를함께검토하기전채택이나추가seed진행은없다.
