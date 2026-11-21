@@ -152,7 +152,7 @@ def snapshot(root, outputs):
             logs.append(dict(name=path.name, tail=tail))
         except OSError:
             continue
-    return dict(name=root.name, updated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+    return dict(name=root.name, scope=decision["scope"], updated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
                 state=status.get("status", "UNKNOWN"), process_alive=live(status),
                 seed=decision.get("seed"), arms=cards, evaluations=evaluations,
                 evaluation_target=len(decision.get("all_validation_pairs", [])),
