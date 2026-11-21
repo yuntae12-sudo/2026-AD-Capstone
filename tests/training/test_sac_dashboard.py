@@ -208,3 +208,16 @@ def test_http_is_read_only_and_restricts_files(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_closed_browser_connection_does_not_retry_error_response(tmp_path):
+    handler = Handler.__new__(Handler)
+    handler.path = "/api/runs"
+    handler.outputs = tmp_path
+    writes = []
+    def disconnected(*args):
+        writes.append(args)
+        raise BrokenPipeError("browser closed")
+    handler.respond = disconnected
+    handler.do_GET()
+    assert len(writes) == 1

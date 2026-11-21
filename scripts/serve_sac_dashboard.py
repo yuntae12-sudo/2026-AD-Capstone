@@ -56,6 +56,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
             self.respond(json.dumps(data, ensure_ascii=False, allow_nan=False).encode(), "application/json; charset=utf-8")
+        except (BrokenPipeError, ConnectionResetError):
+            # A closed tab/cancelled refresh needs no second response on the dead socket.
+            return
         except (ValueError, KeyError, TypeError, OSError) as exc:
             self.respond(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
 
