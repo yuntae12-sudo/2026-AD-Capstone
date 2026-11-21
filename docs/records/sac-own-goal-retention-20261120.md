@@ -4375,3 +4375,33 @@ outputs/sac_refresh_matched10000_20261121/replay_projection_captures.py`.
 status.json에현재항목과완료내역을저장한다. source/input해시와학습595파일을동결했다.
 첫 후보 고속 KEEP84step은 전체frame 일치로 완료했으며 원래 COLLISION도 같았다.
 나머지31개와최종해시검산은아직미완료다. 완료후원본/전체분모를검토하고기록을갱신한다.
+
+### 2026-11-21 09:03 KST — 전체32개 저장 경로 재현 완료·검산
+
+위 실행은 exit0으로 종료했고 PID3214977의 종료를 확인했다. 고정 목록32개가
+순서·scene/provider·arm까지 누락/중복 없이 완료됐으며, 8고유 개발 장면의
+총2,115step이다. 저장된 전체 frame/map을 canonical JSON bytes로 비교했고,
+매 실제 투영 호출의 세 배열 dtype/shape/bytes가 같아야 시안 값을 제어에 반환했다.
+최종 검산에서 입력47개·학습 동결595개를 다시 해시해 변경0을 확인했다.
+
+| 재사용 기록 | episode | 실제 재현 step | 원래와 같은 종료 |
+| --- | --- | --- | --- |
+| 초기 이동 SAC1,000 | 16 | 1,038 | COLLISION16 |
+| 동일 조건 Rule 참조 | 16 | 1,077 | ROUTE_GOAL7/COLLISION8/TASK_LOST1 |
+
+총102,958투영호출/19,340,248질의점에서 세 출력 바이트가 동일했다.
+SAC기록43,102호출/8,609,606점, Rule기록59,856호출/10,730,642점이다.
+독립 평가32장면 또는 새로운 성공으로 세지 않는다. 원래 raw_u와 저장되지 않은
+내부 관측 전체를 비교한 것은 아니며, 원래 world XY의 물리 재현이라는 범위를 유지한다.
+새 정책 호출·학습update·replay삽입0, production/진행 중 학습 적용0이다.
+총10,000 학습 비교의 주행 성능과 안정 정책 확보 여부는 아직 미완료다.
+
+로컬 `outputs/sac_refresh_matched10000_20261121/projection-capture-physical/`:
+
+- `status.json` SHA `b42adea5d4a6eb8688e48e2fb61bb9dc0292079a52cb6053798f768620e78fbd`.
+- `independent-review.json` SHA
+  `402e2f8590dd9b559818bcc70c0149c753eee08a8c95155f035e06abc7f5df72`.
+
+관련57pytest와 한 train경로52step의 원래raw_u 재현, 이번32개 저장XY 재현은
+각 검증 범위를 구분한다. 실제 학습 update까지 포함한 전체 실행 성능 측정과
+production 반영은 아직 하지 않았다. 현재 학습은 원래 조건으로 계속한다.
